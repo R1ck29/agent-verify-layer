@@ -20,7 +20,7 @@
 ## adapter が要るもの
 
 1. **hook の配線の違い**
-   - Codex の hook には `if` も `args`（exec 形式）も `onFailure` もない。`command` は 1 本の文字列で、シェルを通して実行される。matcher は `^Bash$` の正規表現にし、スクリプトの先頭で `git … commit` を含まないコマンドは即終了（数 ms）。Bash は失敗したコマンドでも PostToolUse が来るので、HEAD が変わったかで判定する（現行どおり）。Claude の `hooks/hooks.json` はそのままでは使えないので、Codex 用はインストーラが絶対パスで組み立てる
+   - Codex の hook には `if` も `args`（exec 形式）も `onFailure` もない。`command` は 1 本の文字列で、シェルを通して実行される。既定の timeout は 600 秒なので、`timeout: 10` を明示する。matcher は `^Bash$` の正規表現にし、スクリプトの先頭で `git … commit` を含まないコマンドは即終了（数 ms）。Bash は失敗したコマンドでも PostToolUse が来るので、HEAD が変わったかで判定する（現行どおり）。Claude の `hooks/hooks.json` はそのままでは使えないので、Codex 用はインストーラが絶対パスで組み立てる
    - Codex にはツールとしての `Skill` がない（スキルは本文を読む形で使われる）。そのため「Skill(verify) の PostToolUse」は使えない
    - Codex の非管理 hook は**信頼の確認が必要**（`/hooks` で確認するまで実行されない。定義のハッシュが変わると再確認）。インストーラは導入後に「`/hooks` で信頼してください」と案内する。信頼の状態の保存場所は文書にないので、`doctor` では検出せず、確認の手順を案内するだけにする。自動化だけは `--dangerously-bypass-hook-trust` があるが、既定では使わない
    - Windows は `commandWindows` で別コマンドを指定できる。シェルの種類は文書にないので、インストーラは導入先の OS のパスで `node "<絶対パス>/vl.js" hook commit --agent codex` の形（cmd と PowerShell のどちらでも通る形）を `command` に書く。Windows のシェルは Bash ツールとして来るので、PowerShell 用の配線は要らない
@@ -28,7 +28,7 @@
 2. **verify の起点**: Codex には「verify という名前のスキルがあればコミット前に実行する」標準の指示がない。代わりに次を組む
    - リポジトリのスキル `.agents/skills/verify/SKILL.md`（`/verify` が記録した `.claude/skills/verify/SKILL.md` の手順を参照する薄いスキル。シンボリックリンクは Claude 側の記録を Codex 用の手順で汚すので使わない）。雛形は `codex/skills/verify/` に置き、**skill-creator で作る**。Claude のプラグインのスキルにはしない（プラグインのスキルは標準の指示の対象外で、名前も衝突する）。各リポジトリへは、利用者の承認のうえで `install.js --agent codex --repo-skill` が写す（既定は確認だけ、既存は上書きしない）
    - そのスキルの最後の手順に「チェックが通ったら mark のコマンドを実行する」を入れる。`vl.js mark verify` は**チェックが終わった時点の**ツリーを記録する新しいサブコマンド。これは Claude 側の実機スモークで見つかった「Skill を編集前に読み込むと stale と出る」問題も直すので、Claude 側にも同じ手順を入れる（Claude の記録済みの SKILL.md には書かず、`Skill(verify)` の hook が返す文脈に 1 行足す）。vl.js の絶対パスは端末ごとに違うので、コミットされるスキルには書かず、端末ごとの AGENTS.md の行（下）と hook の文脈に書く。mark は、そのときの diff に当たるチェックリストの項目も出す（Codex には Skill の hook がないので、チェックリストを渡す経路はここだけになる）
-   - AGENTS.md に 2 行（1 行目「コミット前に、`verify` スキルがあれば `$verify` を使う。docs とテストだけの変更は除く」、2 行目「確認が通ったら `node "<絶対パス>/vl.js" mark verify --agent codex` を実行する」）。既定は利用者全体の `$CODEX_HOME/AGENTS.md`（Claude の標準の指示と同じく「スキルがあれば」の形なので、全リポジトリに置いてよい）。既存の AGENTS.md の末尾に追記する形で、上書きはしない。`AGENTS.override.md` があるとそちらが読まれ AGENTS.md は読まれないので、インストーラは override に書き、doctor はその旨を出す
+   - AGENTS.md に 2 行（1 行目「コミット前に、`verify` スキルがあれば `$verify` を使う。docs とテストだけの変更は除く」、2 行目「確認が通ったら `node "<絶対パス>/vl.js" mark verify --agent codex` を実行する」）。既定は利用者全体の `$CODEX_HOME/AGENTS.md`（Claude の標準の指示と同じく「スキルがあれば」の形なので、全リポジトリに置いてよい）。既存の AGENTS.md の末尾に追記する形で、上書きはしない。空でない `AGENTS.override.md` があるとそちらが読まれ AGENTS.md は読まれないので、インストーラは override に書き、doctor はその旨を出す
 3. **レビュアー**: Codex の `/review`（と `codex review`）が同梱のレビュアー。設計の「レビュアーは 1 体」は Codex では `/review` にあたる。`/review` は会話内のコマンドで hook のイベントにならないので、実行の記録は `codex review` を包む小さなコマンド（`vl.js review-run`）か、記録しない（レビューの再現率は E2 で別に測る）のどちらか。初版は記録しない
 
 ## 既存の ~/.codex ハーネスとの重なり
@@ -48,7 +48,7 @@
 
 1. `vl.js` に `--agent codex|claude`（Codex 用の hook は引数で明示。引数がなければ入力の `turn_id` の有無で判定。Codex は `CLAUDE_PLUGIN_ROOT` も設定するので環境変数では見分けない）と `mark` サブコマンド。台帳の行に `agent` を足す
 2. `scripts/install.js --agent codex`（`$CODEX_HOME/hooks.json` へのマージ・削除・`--check`、AGENTS.md の 2 行、`--repo-skill`）。プラグイン用の `codex/hooks.json` は見送る
-3. 共有の verify スキル（skill-creator で作成）と AGENTS.md / CLAUDE.md の 2 行
+3. 共有の verify スキル（skill-creator で作成）と AGENTS.md の 2 行。Claude 側は CLAUDE.md には書かず、`Skill(verify)` の hook が返す文脈で mark を案内する
 4. `doctor` に Codex の項目（版、`features.hooks`、`requirements.toml` の `allow_managed_hooks_only` と `features.hooks`、hook の配線と重複、信頼の確認手順の案内、プロジェクトの信頼、`.agents/skills/verify`、個人用の `verify`、AGENTS.md の 2 行）。Codex がなければ 1 行の案内だけにして飛ばす
 5. テスト（Codex 形式の入力の固定例、マージの冪等性）と CI
 6. `INSTALL_FOR_CLAUDE.md` を「Claude と Codex の両方」に広げる（名前は互換のため据え置き、`INSTALL_FOR_AGENTS.md` を別に置くかは実装時に判断）
@@ -71,8 +71,8 @@
 
 ### 誤り（本文を修正）
 
-1. **exec 形式がない**: Codex の handler は `type`・`command`（文字列）・`commandWindows`・`timeout`（既定 600 秒）・`statusMessage`・`additionalContextLimit`・`async` だけで、`args`・`if`・`onFailure` は文書にない（hooks.md 183-199）。「Node の exec 形式にそろえる」は誤り。Claude の `hooks/hooks.json` は使い回せない。Codex 用は、インストーラが絶対パスで組んだ `node "<path>/vl.js" hook commit --agent codex` を `command` に書き、`timeout: 10` を明示する
-2. **信頼の検出は doctor でできない**: 信頼はハッシュに対して記録される（hooks.md 67-83）が、保存場所は文書にない。`doctor` は検出せず、`/hooks` での確認を案内する。プラグインの hook は同梱スクリプトの変更でも再確認になるが、`hooks.json` の hook は定義のハッシュだけで、`vl.js` を更新しても再確認は求められない（hooks.md 415-419）
+1. **exec 形式がない**: Codex の command handler の項目は `type`・`command`（文字列）・`commandWindows`・`timeout`（既定 600 秒）・`statusMessage`・`additionalContextLimit`・`async` で（ほかに `mcp_tool` の handler がある）、`args`・`if`・`onFailure` は文書にない（hooks.md 183-199）。「Node の exec 形式にそろえる」は誤り。Claude の `hooks/hooks.json` は使い回せない。Codex 用は、インストーラが絶対パスで組んだ `node "<path>/vl.js" hook commit --agent codex` を `command` に書き、`timeout: 10` を明示する
+2. **信頼の検出は doctor でできない**: 信頼はハッシュに対して記録される（hooks.md 67-83）が、保存場所は文書にない。`doctor` は検出せず、`/hooks` での確認を案内する。プラグインの hook は同梱スクリプトの変更でも再確認になるが、`hooks.json` の hook は「定義」のハッシュに対して信頼される（hooks.md 67-72）ので、`vl.js` を更新しても再確認は求められない**と推測される**（文書には明記がない。実機で確かめる）
 3. **プラグインとマージの両方を用意すると二重に走る**: 全ての場所の hook が合算され、同じ command を 2 か所に書くと 2 回走る。同じイベントの hook は同時に起動される（hooks.md 15-19, 61-65）。「未記録か」の確認が競合しうる。初版はマージだけにし、doctor が重複を警告する。プラグインは、ローカルのマーケットプレイス（`.agents/plugins/marketplace.json`、config-reference.md の `marketplaces.*`）が要り、「ローカルのプラグインディレクトリ」だけでは入らない（本文「この環境の制約」の 1 行目も同じ）
 4. **エージェントの判定に環境変数は使えない**: Codex はプラグインの hook に `CLAUDE_PLUGIN_ROOT` も設定する（hooks.md 406-413）。Codex 用の hook は `--agent codex` を明示し、なければ入力の `turn_id`（Codex だけの項目、hooks.md 919-925）で判定する
 
@@ -81,7 +81,7 @@
 5. **置き場所**: `/etc/codex/hooks.json`、`$CODEX_HOME`（未設定なら `~/.codex`）、各層の `config.toml` の `[hooks]` が抜けていた（hooks.md 33-50）。インストーラと doctor は `CODEX_HOME` に従う
 6. **Codex でのチェックリストの渡し方**: Codex には Skill の hook がない（スキルを使ったことを示すイベントもない。hooks.md 23-29、skills.md 46）。`mark verify` が、そのときの diff に当たる項目を出力する形にする（確認が終わった時点の diff なので、編集前に verify を読んだ場合の「何も当たらない」問題も避けられる）
 7. **mark のコマンドの置き場所**: vl.js の絶対パスは端末ごとに違う。コミットされる `.agents/skills/verify/SKILL.md` には書けないので、端末ごとの AGENTS.md の 2 行目に書き、スキルは「AGENTS.md に検証レイヤーの mark の行があれば実行する。なければ飛ばす」とする。層が入っていない端末でもスキルは壊れない
-8. **AGENTS.md の読み込み**: 利用者全体は `AGENTS.override.md` があればそちらだけが読まれる。各ディレクトリで 1 ファイルだけ、合計 `project_doc_max_bytes`（既定 32 KiB）で打ち切り（guides_agents-md.md 9-15）。追記先は override を優先し、doctor は大きさを見る
+8. **AGENTS.md の読み込み**: 利用者全体は、空でない `AGENTS.override.md` があればそちらだけが読まれる。各ディレクトリで 1 ファイルだけ、合計 `project_doc_max_bytes`（既定 32 KiB）で打ち切り（guides_agents-md.md 9-15）。追記先は override を優先し、doctor は大きさを見る
 9. **unified exec の遅延**: 長いコマンドの PostToolUse は、あとの `write_stdin` のポーリングで届くことがある（hooks.md 466-474）。コミットは数秒で終わるので、現行の「HEAD が 300 秒以内」の条件で足りる。特別な経路の一部は hook を通らない（hooks.md 476-477）。台帳と `git log` の突き合わせ（`report`）で漏れを測る
 10. **スキルの発見**: `.agents/skills` は作業ディレクトリからリポジトリの最上位まで、続いて `$HOME/.agents/skills`、`/etc/codex/skills`（skills.md 138-147）。名前が同じスキルは統合されず両方が出る。個人用の `~/.agents/skills/verify` は置かない（doctor が警告）。`agents/openai.yaml` の `allow_implicit_invocation: false` は付けない。スキルの一覧には文脈の約 2% の上限があり、スキルが多いと `verify` が一覧から落ちうる（skills.md 37-41）。AGENTS.md の行で名前を明示するのはその対策も兼ねる
 11. **使わないイベント（理由つき）**: `UserPromptSubmit` は `$verify` を打った利用者の操作を拾える（hooks.md 1024-1049）が、matcher が効かず毎回のプロンプトで起動し、記録は「始めた時点」のツリーで stale の誤判定を再現する。mark で足りるので使わない。`SessionStart` での指示の注入と `Stop` での続行の強制は、毎セッション・毎ターンの費用になるか、観察モードを外れるので使わない（設計書「採らなかった案」と同じ理由）
