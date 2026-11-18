@@ -36,7 +36,8 @@ Claude ──git commit──▶ PostToolUse(Bash|PowerShell, if: git commit *) 
   - `verified`: 差がない（検証した内容のままコミットされた）
   - `stale`: 差がある（verify のあとに変えた。差のあるファイルの数を残す）
   - `none`: 前のコミットのあとに verify の記録がない
-  - `skipped`: ドキュメントとテストだけの変更（`skipGlobs`。標準の指示の対象外）。`none` より優先する
+  - `skipped`: ドキュメントとテストだけの変更（`skipGlobs`。標準の指示の対象外）。`none` より優先する。空のコミットも `skipped`
+  - 記録したツリーが git から消えていて比べられないときは `stale`（`stale_files` が `null`、`warn: tree-unreachable`）
 - 同じ `session_id` で verify / code-review があったか（`session_verify` / `session_code_review`）も残します。ツリー単位の判定とセッション単位の判定を並べて見るためです。
 - `.claude/skills/verify/SKILL.md` は `/verify` 自身が書き換えるため、コミットに含まれなければ判定に影響しません。
 
@@ -117,5 +118,5 @@ scripts/install.js   プラグインが使えない環境向けの settings.json
 rules/verification.md  Rules の 2 行
 examples/checklist.json  チェックリストの雛形
 tests/               node:test
-docs/                設計書の原本、レビューノート、実機確認の記録
+docs/                設計書の原本、レビューノート、実機確認の記録（SMOKE.md）
 ```

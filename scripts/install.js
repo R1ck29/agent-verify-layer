@@ -22,7 +22,8 @@ const RULES_SRC = path.join(ROOT, 'rules', 'verification.md');
 // Groups from hooks/hooks.json with ${CLAUDE_PLUGIN_ROOT} replaced by this checkout's absolute path.
 function buildOwnGroups(nodeCmd) {
   const tpl = JSON.parse(fs.readFileSync(path.join(ROOT, 'hooks', 'hooks.json'), 'utf8'));
-  const sub = (s) => (typeof s === 'string' ? s.split('${CLAUDE_PLUGIN_ROOT}').join(ROOT) : s);
+  // path.normalize gives native separators (the template uses "/"), so Windows paths are not mixed.
+  const sub = (s) => (typeof s === 'string' && s.includes('${CLAUDE_PLUGIN_ROOT}') ? path.normalize(s.split('${CLAUDE_PLUGIN_ROOT}').join(ROOT)) : s);
   const out = [];
   for (const [event, groups] of Object.entries(tpl.hooks)) {
     for (const g of groups) {
