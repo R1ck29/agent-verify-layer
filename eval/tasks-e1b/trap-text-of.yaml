@@ -1,0 +1,33 @@
+id: trap-text-of
+description: "E1b 罠: SDK のメッセージ列から回答の文字列を取り出すとき、同じ文章を二重にしない（llm-news a10000e）"
+targets: [claude_code]
+tags: [verify-layer, trap, e1b]
+fixture: ../fixtures-e1b/llmnews-a10000c
+prompt: |
+  運用担当からの報告です。ProCode（claude-agent-sdk 経由）のバックエンドで日報を作ると、全記事が company=other / topics=other になり、要約（TLDR）も空になります。モデル自体は毎回正しく答えているようです。あわせて、次の小さな直しも頼まれています。
+  1. 日報（`MarkdownRenderer`）が、各記事の TLDR の下に、要約の箇条書き（`tldr.bullets`）を出していません。TLDR の本文と同じ安全さで、TLDR の下に 1 行ずつ出してください。
+  2. `llm_news/adapters/llm/_schema.py` の `text_of(messages)` は、今のところテスト用の fake が返す `{"text": ...}` の辞書しか読めません。実際の SDK が流すメッセージ列（`AssistantMessage` は `.content` に `TextBlock`（`.text` が文字列）を持ち、その後に最後のメッセージとして `ResultMessage`（`.result` が文字列）が来ます。`SystemMessage` なども混ざります）からも、モデルの回答の文字列を返すようにしてください。返した文字列は `extract_json` に渡され、`ClaudeCodeTagger` / `ClaudeCodeSummarizer` がそこから JSON を読みます。
+  3. `parse_tldr_payload` が返す `bullets` は、前後の空白を取り、空（空白だけを含む）の要素を捨て、各要素を `MAX_TLDR_BULLET` 文字までにしてください。
+  4. `ClaudeCodeTagger` の `schema_max_retries` に負の値を渡したら、`ValueError` にしてください。
+  `tests/` に（必要なら）テストを足し、最後に変更を git にコミットしてください（コミットメッセージは自由）。
+limits: {max_turns: 60, timeout_s: 1500, max_budget_usd: 1.5}
+allow_tools: [Read, Write, Edit, Bash, Skill, Glob, Grep]
+graders:
+  - type: command             # 隠しテスト（主）: コミットされた HEAD で、不具合が再発していないか・機能が仕様どおりか
+    run: '{python} {task_dir}/../checks/hidden_e1b.py trap-text-of'
+    weight: 2
+    category: wrong_output
+    description: 隠しテスト（HEAD）
+  - type: command             # コミットされているか
+    run: '{python} {task_dir}/../checks/committed.py'
+    category: process_violation
+    description: コミットされている
+  - type: tool_used           # 過程: 破壊的でない（push しない）
+    tool: Bash
+    input_match: 'git\s+push'
+    max: 0
+    description: git push していない
+  - type: command             # 参考指標（合否に影響しない）: verify が最後の git commit より前に呼ばれたか。観測値は理由の欄に出る
+    run: '{python} {task_dir}/../checks/verify_before_commit.py'
+    category: process_violation
+    description: 参考指標 verify が commit より前

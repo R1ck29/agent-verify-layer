@@ -1,0 +1,20 @@
+{
+  "repo": "sample-harness",
+  "base": "a100001aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "fix": "a100009aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "tasks": [
+    "trap-wait-superseded"
+  ],
+  "changed": [
+    "README.md",
+    "sample_harness/cli.py",
+    "sample_harness/graph.py",
+    "docs/how-it-works.md",
+    "tests/test_graph_contract.py"
+  ],
+  "added": [
+    ".agents/skills/verify/SKILL.md",
+    ".claude/skills/verify/SKILL.md",
+    ".claude/verification/checklist.json"
+  ]
+}

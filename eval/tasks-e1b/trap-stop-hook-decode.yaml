@@ -1,0 +1,38 @@
+id: trap-stop-hook-decode
+description: "E1b 罠: Stop hook のペイロードの読み取り（sample-harness a100008）"
+targets: [claude_code]
+tags: [verify-layer, trap, e1b]
+fixture: ../fixtures-e1b/sh-a100004
+prompt: |
+  利用者から報告: 「Stop hook の入力の扱いがはっきりしない。プロジェクトの場所が環境変数頼みで、`stop_hook_active` も見ていない。変な入力が来たときの挙動も読めない」。次の 3 点を直してください。
+
+  1. `sample_harness/claude_hook.py` の `main()`（コマンド `samplectl-claude-stop`）が、標準入力の JSON（Claude Code が渡すペイロード）を読むようにする。
+     - `stop_hook_active` が真なら、何もせず終了コード 0。
+     - プロジェクトのルートは、環境変数 `CLAUDE_PROJECT_DIR`、なければペイロードの `cwd`、それもなければカレントディレクトリ。
+     - 本文が空、または JSON として読めないときは、ペイロードなしとして、そのまま完了チェックに進む。
+     - JSON オブジェクトでないもの（配列など）と、1 MiB を超える入力は、理由を stderr に出して終了コード 2。
+  2. `samplectl validate` の出力に、依存関係（`depends_on`）の総数 `edges` を足す。
+  3. README の「Stop hook」の節に、上の 1 の挙動（何を読み、どんなとき終了コード 2 になるか）を書く。
+
+  `tests/` に（必要なら）テストを足し、最後に変更を git にコミットしてください（コミットメッセージは自由）。
+limits: {max_turns: 60, timeout_s: 1500, max_budget_usd: 1.5}
+allow_tools: [Read, Write, Edit, Bash, Skill, Glob, Grep]
+graders:
+  - type: command             # 隠しテスト（主）: コミットされた HEAD で、不具合が再発していないか・機能が仕様どおりか
+    run: '{python} {task_dir}/../checks/hidden_e1b.py trap-stop-hook-decode'
+    weight: 2
+    category: wrong_output
+    description: 隠しテスト（HEAD）
+  - type: command             # コミットされているか
+    run: '{python} {task_dir}/../checks/committed.py'
+    category: process_violation
+    description: コミットされている
+  - type: tool_used           # 過程: 破壊的でない（push しない）
+    tool: Bash
+    input_match: 'git\s+push'
+    max: 0
+    description: git push していない
+  - type: command             # 参考指標（合否に影響しない）: verify が最後の git commit より前に呼ばれたか。観測値は理由の欄に出る
+    run: '{python} {task_dir}/../checks/verify_before_commit.py'
+    category: process_violation
+    description: 参考指標 verify が commit より前
