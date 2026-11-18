@@ -5,7 +5,7 @@
 ## 環境
 
 - Claude Code 2.1.325（`claude --version`）、Linux 6.12、Node 24.22.1、git 2.47.3
-- 対象: このリポジトリの feat/v0.1（コミット 25aece9 の時点）
+- 対象: このリポジトリの feat/v0.1（コミット 9748243 の時点）
 - 計画: 使い捨てリポジトリに `.claude/skills/verify/SKILL.md`（`node check.js` を実行するだけの記録）を置き、`--plugin-dir` でプラグインを読み込み、haiku に「`a.js` の挨拶を変えてコミットして」と 1 回だけ頼む。台帳 `.git/claude-verify/ledger.jsonl` に run / commit の行が出るかを見る。
 
 ## 試したことと結果
@@ -23,7 +23,7 @@ ECC_GATEGUARD=off claude -p "In a.js change the greeting from hello to hi, then 
 
 - 結果: 1 ターンで終了（終了コード 1、費用 0 USD）。応答は `Not logged in · Please run /login`。使い捨てリポジトリにコミットは増えず、`.git/claude-verify/` もできていません。
 - 原因の切り分け: `claude auth status` が `loggedIn: false`、`authMethod: none`。最小の呼び出し（「ok と答えるだけ」）でも同じ応答でした。`--setting-sources` を付けても付けなくても同じです。
-- 試行は 2 回です。1 回目は `--setting-sources project,local` で利用者の既存 hook を除いた条件、2 回目は利用者設定も読み込んだ条件（上のコマンド）。どちらも未ログインで 1 秒前後で終了し、費用は 0 USD でした。ほかに、ログイン状態の確認のための最小の呼び出しを 1 回行い、同じ応答でした。
+- `claude -p` の呼び出しは合計 3 回です（モデルの応答は 1 度も得られていません）。(a) `--setting-sources project,local` で利用者の既存 hook を除いた条件、(b) 利用者設定も読み込んだ条件（上のコマンド）、(c) ログイン状態の確認のための最小の呼び出し（「ok と答えるだけ」）。いずれも `Not logged in` で 1 秒前後で終了し、費用は 0 USD でした。保存してある stream-json は (b) のものだけです。
 - 対応: ログインや認証情報の探索は、利用者の認証に関わるため、この作業では行いませんでした。
 - 2 回目の実行では、利用者の既存環境の hook（SessionStart・UserPromptSubmit に数件）が同じセッションで走っていることが、`--include-hook-events` の出力で確認できました。この層の hook はそれらと並列に載る設計です（PostToolUse と UserPromptExpansion だけ）。ただし、モデルが動かなかったため、PostToolUse が実際に発火したかは見られていません。
 
