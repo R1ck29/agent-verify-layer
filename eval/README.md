@@ -1,4 +1,4 @@
-# claude-verify-layer の評価（E1 縮小版）
+# agent-verify-layer の評価（Claude 側）（E1 縮小版）
 
 [agent-harness-eval](https://github.com/R1ck29/agent-harness-eval)（AHE 0.8.0）で、この層の「あり／なし」を比べるための一式です。ルール: 新しい部品は AHE で比べ、有用と示せたときだけ配備する。結果は [RESULTS.md](RESULTS.md)（**判定基準は結果を見る前に固定して**そこにあります）。AHE 本体は変更していません。
 

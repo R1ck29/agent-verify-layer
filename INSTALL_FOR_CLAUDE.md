@@ -1,10 +1,10 @@
-# INSTALL_FOR_CLAUDE.md — claude-verify-layer の導入手順（Claude Code 向け）
+# INSTALL_FOR_CLAUDE.md — agent-verify-layer の導入手順（Claude Code 向け）
 
 この文書は、ZIP を展開した利用者のマシンで動いている Claude Code（あなた）が読み、実行するための手順書です。順番どおりに進めてください。**書き込みは、利用者の承認を得てからです。** それまでは読むだけにします。
 
 ## 0. これは何か（先に利用者へ 1 段落で伝える）
 
-claude-verify-layer は、コミットが「verify を実行したあとの状態」でされたかを、各リポジトリの `.git/claude-verify/ledger.jsonl` に**記録するだけ**の仕組みです（観察モード）。作業は止めません。プロンプト、コマンド、ファイル名は記録しません。台帳はその端末の中にしか残らず、外には送りません。もう 1 つの機能は、HEAD にコミット済みの `.claude/verification/checklist.json` を今回の diff に照合し、当たった項目だけを verify の開始時に Claude へ渡すことです（モデルは呼びません）。
+agent-verify-layer（旧名 claude-verify-layer）は、コミットが「verify を実行したあとの状態」でされたかを、各リポジトリの `.git/claude-verify/ledger.jsonl` に**記録するだけ**の仕組みです（観察モード）。作業は止めません。プロンプト、コマンド、ファイル名は記録しません。台帳はその端末の中にしか残らず、外には送りません。もう 1 つの機能は、HEAD にコミット済みの `.claude/verification/checklist.json` を今回の diff に照合し、当たった項目だけを verify の開始時に Claude へ渡すことです（モデルは呼びません）。
 
 役割の違い: wikiskill は「業務の例からスキルを育てる」仕組み、agent eval は「ハーネスの変更が効いたかを with / without で採点する」仕組みです。この検証レイヤーは、日々のコミットで verify が実際に行われたかを**測る**ための記録係で、どちらとも置き換えにはなりません。agent eval は、この層を配ってよいかを後で採点するときに使います（v0.1 には含みません）。
 

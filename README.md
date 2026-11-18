@@ -1,4 +1,6 @@
-# claude-verify-layer
+# agent-verify-layer
+
+（旧名 claude-verify-layer。2026-11-18 に Codex 対応を見据えて改名。Claude Code のプラグイン名 `verify-layer` は変えていません。Codex 対応の計画は [docs/CODEX-SUPPORT-PLAN.md](docs/CODEX-SUPPORT-PLAN.md)）
 
 Claude Code の「コミット前の検証」を**測る**ための、観察だけの層です（v0.1.0）。
 

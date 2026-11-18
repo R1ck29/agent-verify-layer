@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 'use strict';
-// claude-verify-layer entry point (Node 18+, standard library only).
+// agent-verify-layer entry point (Node 18+, standard library only).
 //   vl.js hook skill | hook commit | hook expand   (Claude Code hooks; never block work)
 //   vl.js report [--json] [--days N] [--repo DIR]
 //   vl.js doctor [--json] [--repo DIR]

@@ -1,5 +1,5 @@
 #!/bin/bash
-# claude-verify-layer の評価 E1（縮小版）の実行。
+# agent-verify-layer の評価（Claude 側） E1（縮小版）の実行。
 #   ./run-eval.sh smoke   1 罠タスク × 3 プロファイル × 1 回 = 3 試行
 #   ./run-eval.sh full    8 タスク × 3 プロファイル × 2 回 = 48 試行
 #   ./run-eval.sh dry     模擬 CLI でパイプライン全体を通す（モデルを呼ばない・認証不要）。結果は捨てる
