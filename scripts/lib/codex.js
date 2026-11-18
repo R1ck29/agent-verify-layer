@@ -74,7 +74,71 @@ function agentsFile(home) {
   return path.join(home, 'AGENTS.md');
 }
 
+// Minimal TOML lookup for the few keys we read (`[features] hooks`, `allow_managed_hooks_only`,
+// `[projects."<path>"] trust_level`). Not a TOML parser: tables, dotted keys and `#` comments only.
+// Returns the raw value text (e.g. 'false', '"trusted"') or undefined.
+function tomlGet(text, dottedKey) {
+  let table = '';
+  for (const raw of String(text || '').split(/\r?\n/)) {
+    const line = raw.replace(/^\uFEFF/, '').trim();
+    if (!line || line.startsWith('#')) continue;
+    if (line.startsWith('[[')) {
+      table = null; // array of tables (e.g. [[hooks.PreToolUse]]): not looked up
+      continue;
+    }
+    const h = /^\[(.+)\]\s*(#.*)?$/.exec(line);
+    if (h) {
+      table = h[1].trim().replace(/\s*\.\s*/g, '.');
+      continue;
+    }
+    if (table === null) continue;
+    const m = /^((?:"[^"]*"|[A-Za-z0-9_-]+)(?:\s*\.\s*(?:"[^"]*"|[A-Za-z0-9_-]+))*)\s*=\s*(.*?)\s*(#[^"']*)?$/.exec(line);
+    if (!m) continue;
+    const key = m[1].replace(/\s*\.\s*/g, '.');
+    if ((table ? `${table}.${key}` : key) === dottedKey) return m[2];
+  }
+  return undefined;
+}
+
+function readText(file) {
+  try {
+    return fs.readFileSync(file, 'utf8');
+  } catch {
+    return null;
+  }
+}
+
+// Admin-enforced requirements. The doc copies do not give the location; these follow the system
+// hooks.json locations (an assumption, reported as such by doctor).
+function requirementsPaths(env = process.env) {
+  if (env.VL_CODEX_REQUIREMENTS) return [path.resolve(env.VL_CODEX_REQUIREMENTS)]; // tests
+  if (process.platform === 'win32') return [path.join(env.ProgramData || 'C:\\ProgramData', 'OpenAI', 'Codex', 'requirements.toml')];
+  return ['/etc/codex/requirements.toml'];
+}
+
+const isFalse = (v) => v !== undefined && /^false$/i.test(String(v).trim());
+const isTrue = (v) => v !== undefined && /^true$/i.test(String(v).trim());
+
+// What blocks user hooks: { hooksOff: [where], managedOnly: [where] }.
+function hookBlockers(home, env = process.env) {
+  const out = { hooksOff: [], managedOnly: [] };
+  const cfg = path.join(home, 'config.toml');
+  const t = readText(cfg);
+  if (t !== null && (isFalse(tomlGet(t, 'features.hooks')) || isFalse(tomlGet(t, 'features.codex_hooks')))) out.hooksOff.push(cfg);
+  for (const req of requirementsPaths(env)) {
+    const r = readText(req);
+    if (r === null) continue;
+    if (isFalse(tomlGet(r, 'features.hooks')) || isFalse(tomlGet(r, 'features.codex_hooks'))) out.hooksOff.push(req);
+    if (isTrue(tomlGet(r, 'allow_managed_hooks_only'))) out.managedOnly.push(req);
+  }
+  return out;
+}
+
 module.exports = {
+  tomlGet,
+  readText,
+  requirementsPaths,
+  hookBlockers,
   VL_PATH,
   MATCHER,
   HOOK_TIMEOUT_S,

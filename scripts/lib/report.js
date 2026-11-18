@@ -30,7 +30,8 @@ function summarize(rows, logShas) {
 
   const staleSizes = commits.filter((c) => c.result === 'stale' && Number.isFinite(c.stale_files)).map((c) => c.stale_files);
   const fired = {};
-  for (const r of allVerify) for (const id of r.fired || []) fired[id] = (fired[id] || 0) + 1;
+  // Counted at verify start only, as in v0.1 (a mark on the same change would count it twice).
+  for (const r of verifyRuns) for (const id of r.fired || []) fired[id] = (fired[id] || 0) + 1;
   const ms = rows.filter((r) => Number.isFinite(r.ms)).map((r) => r.ms);
 
   const recorded = new Set(commits.map((c) => c.sha));

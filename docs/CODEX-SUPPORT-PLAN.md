@@ -97,3 +97,14 @@
 
 - 手順 2 の `codex/hooks.json`（プラグイン用）は作らない（上の 3）
 - 手順 3 のスキルは、雛形を `codex/skills/verify/SKILL.md` に置き、リポジトリへの配置は利用者の承認を得てから行う（`install.js --agent codex --repo-skill`。既定は確認だけ）
+
+## 続き（2026-11-18 21:12 JST、Claude の 5 時間枠が上限に達して中断。リセット 11/19 01:30 JST）
+
+済み（push 済み）: 計画のレビュー（上の節）、`vl.js mark verify`（e251f50）、Codex adapter（360878a）。この時点で `npm test` 104/104 合格。
+WIP（このコミット）: `scripts/lib/install-codex.js`（`install.js --agent codex`、`--agents-md`、`--repo-skill`）と `install.js`・`codex.js`・`report.js` の配線。テストはまだない。
+残り（新しいセッションで、この節と上の「レビュー」を読んでから）:
+1. 共有の verify スキルの雛形 `codex/skills/verify/SKILL.md` を skill-creator で作る（install-codex.js が参照しているがまだ無い）。手順に `vl.js mark verify` を入れる
+2. install-codex.js のテスト（hooks.json へのマージの冪等性、他者の hook を変えない、AGENTS.md 2 行の追加・削除、--repo-skill は既定で確認だけ）
+3. `doctor` の Codex 項目（版、`features.hooks`、hook の信頼、プロジェクトの信頼、`.agents/skills/verify`）とテスト
+4. INSTALL 文書を Claude と Codex の両方に広げる（Codex がない環境では Codex 部分を飛ばす）。README の Codex 欄
+5. CI（.github/workflows/ci.yml）の更新、push、`gh pr checks 1` が緑になるまで確認、PR #1 の本文に Codex 対応の要約

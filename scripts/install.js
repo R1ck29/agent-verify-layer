@@ -4,6 +4,8 @@
 //   node scripts/install.js [--check] [--scope user|project] [--json]     read-only (default)
 //   node scripts/install.js --apply     [--mode observe|off] [--rules]
 //   node scripts/install.js --uninstall [--rules] [--purge]
+//   node scripts/install.js --agent codex [--check|--apply|--uninstall] [--agents-md] [--repo-skill]
+//     (Codex CLI: $CODEX_HOME/hooks.json; see scripts/lib/install-codex.js)
 // Other options: --settings-file PATH, --project-dir DIR, --node PATH, --force
 // Own hooks are recognised by the vl.js path in their args (see lib/settings.js);
 // foreign hooks are never edited, removed or reordered.
@@ -43,8 +45,9 @@ function buildOwnGroups(nodeCmd) {
   return out;
 }
 
-// Returns { settings, removed } without mutating the input.
-function removeOwn(settings) {
+// Returns { settings, removed } without mutating the input. `isOwn` recognises our handlers
+// (Claude exec form by default; the Codex installer passes its own predicate).
+function removeOwn(settings, isOwn = isOwnHandler) {
   const next = JSON.parse(JSON.stringify(settings));
   let removed = 0;
   if (!next.hooks || typeof next.hooks !== 'object') return { settings: next, removed };
@@ -57,7 +60,7 @@ function removeOwn(settings) {
         kept.push(g);
         continue;
       }
-      const handlers = g.hooks.filter((h) => !isOwnHandler(h));
+      const handlers = g.hooks.filter((h) => !isOwn(h));
       const gone = g.hooks.length - handlers.length;
       removed += gone;
       if (gone && handlers.length === 0) continue; // the group only existed for us
@@ -180,13 +183,22 @@ function parseArgs(argv) {
     else if (a === '--purge') o.purge = true;
     else if (a === '--force') o.force = true;
     else if (a === '--json') o.json = true;
+    else if (a === '--agent') o.agent = argv[++i];
+    else if (a === '--hooks-file') o.hooksFile = argv[++i];
+    else if (a === '--agents-md') o.agentsMd = true;
+    else if (a === '--repo-skill') o.repoSkill = true;
     else throw new Error(`不明なオプション: ${a}`);
   }
   if (o.mode !== undefined && !['observe', 'off'].includes(o.mode)) throw new Error('--mode は observe か off です（enforce は v0.1 にありません）');
+  if (o.agent !== undefined && !['claude', 'codex'].includes(o.agent)) throw new Error(`--agent は claude か codex です: ${o.agent}`);
+  const codexOnly = ['hooksFile', 'agentsMd', 'repoSkill'].filter((k) => o[k] !== undefined);
+  if (o.agent !== 'codex' && codexOnly.length) throw new Error('--hooks-file / --agents-md / --repo-skill は --agent codex と一緒に使います');
+  if (o.agent === 'codex' && (o.rules || o.settingsFile)) throw new Error('--rules / --settings-file は Claude 用です（Codex は --agents-md / --hooks-file）');
   return o;
 }
 
 function run(opts) {
+  if (opts.agent === 'codex') return require('./lib/install-codex').run(opts);
   const t = resolveTargets(opts);
   const report = { action: opts.action, scope: t.scope, settingsFile: t.settingsFile, changes: [], notes: [], wrote: [] };
   const read = readJsonFile(t.settingsFile);
@@ -300,10 +312,11 @@ function purgeConfig(report) {
 function printReport(r) {
   const L = [];
   const label = { check: '確認（読むだけ）', apply: '導入', uninstall: '削除' }[r.action];
-  L.push(`verify-layer install — ${label} / scope=${r.scope}`);
+  L.push(`verify-layer install — ${label} / ${r.agent === 'codex' ? 'Codex' : `scope=${r.scope}`}`);
   L.push(`対象: ${r.settingsFile}`);
   if (r.error) L.push(`エラー: ${r.error}`);
-  if (r.status) L.push(`状態: ${{ 'not-installed': '未導入', installed: '導入済み（最新）', outdated: '導入済み（パスや内容が古い）' }[r.status]}`);
+  if (r.status) L.push(`状態: ${{ 'not-installed': '未導入', installed: '導入済み（最新）', outdated: '導入済み（パスや内容が古い）', 'codex-not-found': 'Codex が見つかりません（Codex の部分は飛ばします）' }[r.status]}`);
+  (r.targets || []).forEach((x) => L.push(`  ${x}`));
   if (r.changes.length) {
     L.push(r.action === 'check' ? '--apply で行う変更:' : '変更:');
     r.changes.forEach((c) => L.push(`  + ${c}`));
@@ -330,4 +343,4 @@ function main() {
 
 if (require.main === module) main();
 
-module.exports = { buildOwnGroups, removeOwn, addOwn, run, parseArgs, VL };
+module.exports = { buildOwnGroups, removeOwn, addOwn, run, parseArgs, VL, atomicWrite, backup, isWritable, indentOf, printReport };
