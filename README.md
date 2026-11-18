@@ -99,7 +99,7 @@ Claude ──git commit──▶ PostToolUse(Bash|PowerShell, if: git commit *) 
 
 ## 評価結果
 
-（後で埋めます。agent-harness-eval での with / without 評価 E1・E2 の結果と、実機確認の要約を、ここに書きます。）
+評価 E1（縮小版: 実際のバグ由来の罠 4 件 ＋ 対照 4 件 × 3 プロファイル）の一式は [eval/](eval/README.md) にあります。**状態: 未実施**（準備と、モデルを呼ばない範囲の確認だけが済んでいる）。判定基準は結果を見る前に [eval/RESULTS.md](eval/RESULTS.md) に固定してあり、結果が出たらそこと、この欄に書きます。E2（レビュアーの再現率）は今回やりません（理由は eval/README.md）。実機スモークの記録は [docs/SMOKE.md](docs/SMOKE.md)。
 
 実機スモークの現状（[docs/SMOKE.md](docs/SMOKE.md)）: 開発環境の `claude` が未ログインでモデルを呼べず、**台帳に行が出るかの実機確認は未実施**です。プラグインの読み込みと hook の認識（`plugin details`、`plugin validate`）だけを実機で確かめました。ログイン済みの端末での確認手順を同じ文書に載せています。
 
