@@ -98,7 +98,9 @@ Claude ──git commit──▶ PostToolUse(Bash|PowerShell, if: git commit *) 
 
 ## 評価結果
 
-（後で埋めます。agent-harness-eval での with / without 評価 E1・E2 の結果と、`docs/SMOKE.md` の実機確認の要約を、ここに書きます。）
+（後で埋めます。agent-harness-eval での with / without 評価 E1・E2 の結果と、実機確認の要約を、ここに書きます。）
+
+実機スモークの現状（[docs/SMOKE.md](docs/SMOKE.md)）: 開発環境の `claude` が未ログインでモデルを呼べず、**台帳に行が出るかの実機確認は未実施**です。プラグインの読み込みと hook の認識（`plugin details`、`plugin validate`）だけを実機で確かめました。ログイン済みの端末での確認手順を同じ文書に載せています。
 
 ## 開発
 
