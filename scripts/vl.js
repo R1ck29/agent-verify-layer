@@ -35,7 +35,10 @@ function parseFlags(args) {
   for (let i = 0; i < args.length; i++) {
     const a = args[i];
     if (a === '--json') flags.json = true;
-    else if (a === '--days') flags.days = Number(args[++i]);
+    else if (a === '--days') {
+      flags.days = Number(args[++i]);
+      if (!(flags.days > 0)) flags.bad = '--days には正の数を指定してください';
+    }
     else if (a === '--repo') flags.repo = args[++i];
     else flags._.push(a);
   }
@@ -46,7 +49,13 @@ async function main(argv) {
   const [cmd, ...rest] = argv;
   if (cmd === 'hook') return runHook(rest);
   if (cmd === 'report') {
-    process.exitCode = require('./lib/report').run(parseFlags(rest));
+    const flags = parseFlags(rest);
+    if (flags.bad) {
+      process.stderr.write(flags.bad + '\n');
+      process.exitCode = 2;
+      return;
+    }
+    process.exitCode = require('./lib/report').run(flags);
     return;
   }
   if (cmd === 'doctor') {

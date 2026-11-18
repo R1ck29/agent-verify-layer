@@ -1,0 +1,10 @@
+{
+  "name": "claude-verify-layer",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Observe-mode verification layer for Claude Code (ledger + HEAD-side checklist). No npm dependencies.",
+  "engines": { "node": ">=18" },
+  "scripts": {
+    "test": "node --test"
+  }
+}

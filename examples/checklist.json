@@ -1,0 +1,68 @@
+{
+  "version": 1,
+  "items": [
+    {
+      "id": "hooks-stdout",
+      "paths": ["**/hooks/**", "**/hook-*.{js,ts,py}"],
+      "pattern": "console\\.error|process\\.stderr|>&2|file=sys\\.stderr",
+      "check": "モデルや利用者に届けたい通知が stdout（または JSON の出力）に出ているか。stderr に出した通知は、止めない hook では debug ログにしか出ない",
+      "why": "stderr に出した通知は、モデルにも利用者にも届かない",
+      "incident": "strategic-compact の通知が約 4 か月 stderr に出ていた",
+      "owner": "harness-maintainers"
+    },
+    {
+      "id": "classify-destination",
+      "paths": ["**/*.{js,ts,py}"],
+      "pattern": "classifyDestination",
+      "check": "agents・rules が黙って更新されない経路が増えていないか。振り分けの分岐ごとに、更新先が書かれるかを確かめる",
+      "why": "振り分けの誤りは、更新が黙って失敗する形で現れる",
+      "incident": "振り分けの誤りで更新が黙って失敗した",
+      "owner": "harness-maintainers"
+    },
+    {
+      "id": "manifest-unused-key",
+      "paths": ["**/manifest*.{json,yaml,yml}"],
+      "pattern": "tier|tags?\\b",
+      "check": "追加したタグやキーが、コードのどこかから参照されているか（参照がなければ書いた意味がない）",
+      "why": "参照されないタグは、効いているように見えて何も変えない",
+      "incident": "段階配布用の tier タグがどこからも参照されていなかった",
+      "owner": "harness-maintainers"
+    },
+    {
+      "id": "guidance-delivery",
+      "paths": ["**/*guidance*", "**/*oracle*", "**/hooks/**"],
+      "pattern": "additionalContext|guidance|案内",
+      "check": "追加した案内文が、モデルに届く経路（読み込み・注入）に乗っているか",
+      "why": "書いただけの案内文はモデルに届かない",
+      "incident": "F1 oracle の案内がモデルに届いていなかった",
+      "owner": "harness-maintainers"
+    },
+    {
+      "id": "git-commit-unconditional-update",
+      "paths": ["**/*.{js,ts,py}"],
+      "pattern": "git_commit",
+      "check": "git_commit の更新を、条件なしで行っていないか（修正されていないのに記録済みにならないか）",
+      "why": "条件のない更新は、未修正を修正済みに見せる",
+      "incident": "git_commit の無条件更新（記録済み・未修正）",
+      "owner": "harness-maintainers"
+    },
+    {
+      "id": "distribution-settings",
+      "paths": ["**/manifest*", "**/distribution/**", "**/settings*.json"],
+      "pattern": "includeGitInstructions|skills/verify|\"verify\"",
+      "check": "includeGitInstructions を切っていないか。verify という名前のスキルを個人用やプラグインで配っていないか",
+      "why": "切ると、コミット前に verify を実行する標準の指示が消える。個人用の verify は、リポジトリの記録を上書きする",
+      "incident": "この検証レイヤーの前提条件",
+      "owner": "harness-maintainers"
+    },
+    {
+      "id": "flaky-test-hiding",
+      "paths": ["**/*.test.*", "**/*.spec.*", "**/tests/**", "**/test_*.py"],
+      "pattern": "\\.skip\\(|\\bxit\\(|\\bsleep\\(|setTimeout\\(|retry|@pytest\\.mark\\.(skip|flaky)",
+      "check": "flaky なテストを、skip・sleep・通るまでの再試行で隠していないか。原因が分からなければ削除し、理由をコミットメッセージに書く",
+      "why": "隠した flaky は、本物の不具合を見えなくする",
+      "incident": "検証に関する記事の規則",
+      "owner": "harness-maintainers"
+    }
+  ]
+}
