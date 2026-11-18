@@ -115,7 +115,7 @@ CI は ubuntu / macos / windows × Node 18 / 22（`.github/workflows/ci.yml`）�
 ```
 .claude-plugin/      plugin.json と、ZIP を展開したディレクトリをマーケットプレイスにするための marketplace.json
 hooks/hooks.json     プラグイン形式の hook 配線（exec 形式、Bash と PowerShell を別々に）
-scripts/vl.js        入口（hook run|commit|expand / report / doctor）
+scripts/vl.js        入口（hook skill|commit|expand / report / doctor）
 scripts/lib/         git・glob・ledger・classify・checklist・hooks・report・doctor・settings（標準機能だけ）
 scripts/install.js   プラグインが使えない環境向けの settings.json マージ（--check / --apply / --uninstall）
 rules/verification.md  Rules の 2 行
