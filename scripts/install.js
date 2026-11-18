@@ -97,18 +97,49 @@ function timestamp() {
   return `${d.getFullYear()}${p(d.getMonth() + 1)}${p(d.getDate())}${p(d.getHours())}${p(d.getMinutes())}${p(d.getSeconds())}`;
 }
 
+// Writes through symlinks (dotfile managers) and keeps the original file mode.
 function atomicWrite(file, text) {
-  fs.mkdirSync(path.dirname(file), { recursive: true });
-  const tmp = `${file}.vl-tmp-${process.pid}`;
-  fs.writeFileSync(tmp, text);
-  fs.renameSync(tmp, file);
+  let target = file;
+  let mode;
+  try {
+    target = fs.realpathSync(file);
+    mode = fs.statSync(target).mode & 0o777;
+  } catch {
+    /* new file */
+  }
+  fs.mkdirSync(path.dirname(target), { recursive: true });
+  const tmp = `${target}.vl-tmp-${process.pid}`;
+  fs.writeFileSync(tmp, text, mode !== undefined ? { mode } : undefined);
+  if (mode !== undefined) fs.chmodSync(tmp, mode);
+  fs.renameSync(tmp, target);
 }
 
+// Never overwrites an earlier backup, even within the same second.
 function backup(file) {
   if (!fs.existsSync(file)) return null;
-  const dest = `${file}.verify-layer-backup-${timestamp()}`;
-  fs.copyFileSync(file, dest);
-  return dest;
+  const base = `${file}.verify-layer-backup-${timestamp()}`;
+  for (let n = 0; n < 1000; n++) {
+    const dest = n === 0 ? base : `${base}-${n}`;
+    try {
+      fs.copyFileSync(file, dest, fs.constants.COPYFILE_EXCL);
+      return dest;
+    } catch (e) {
+      if (e.code !== 'EEXIST') throw e;
+    }
+  }
+  throw new Error('バックアップの名前を決められません');
+}
+
+function isWritable(file) {
+  // A new file needs write access to its nearest existing ancestor directory.
+  let p = file;
+  while (!fs.existsSync(p) && path.dirname(p) !== p) p = path.dirname(p);
+  try {
+    fs.accessSync(p, fs.constants.W_OK);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 function resolveTargets(opts) {
@@ -198,11 +229,19 @@ function run(opts) {
   }
 
   if (!same) {
+    if (!isWritable(t.settingsFile)) {
+      report.error = `${t.settingsFile} に書き込めません（読み取り専用）。何も書いていません`;
+      return { code: 2, report };
+    }
     const b = backup(t.settingsFile);
     if (b) report.wrote.push(`バックアップ: ${b}`);
-    const text = JSON.stringify(after, null, indentOf(read.text)) + '\n';
-    atomicWrite(t.settingsFile, text);
-    report.wrote.push(`更新: ${t.settingsFile}`);
+    if (opts.action === 'uninstall' && Object.keys(after).length === 0 && !fs.lstatSync(t.settingsFile).isSymbolicLink()) {
+      fs.unlinkSync(fs.realpathSync(t.settingsFile)); // we emptied it: nothing else lived there
+      report.wrote.push(`削除: ${t.settingsFile}（空になったため。バックアップあり）`);
+    } else {
+      atomicWrite(t.settingsFile, JSON.stringify(after, null, indentOf(read.text)) + '\n');
+      report.wrote.push(`更新: ${t.settingsFile}`);
+    }
   } else {
     report.notes.push('settings は既に目的の状態です（書き込みなし）');
   }

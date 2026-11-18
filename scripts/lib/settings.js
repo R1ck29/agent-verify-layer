@@ -4,16 +4,14 @@
 const fs = require('node:fs');
 const path = require('node:path');
 
-// Our hooks are recognised by an argument whose basename is vl.js followed by "hook"
-// (exec form), or by the same words in a shell-form command. Timeouts and other fields
-// are deliberately not compared: matching on them once caused double registration elsewhere.
+// Our hooks are recognised by an exec-form arg whose basename is vl.js followed by "hook".
+// Timeouts and other fields are deliberately not compared (matching on them once caused double
+// registration elsewhere). Shell-form commands are never treated as ours: the installer only
+// writes exec form, and a foreign command that merely mentions vl.js must not be touched.
 function isOwnHandler(h) {
-  if (!h || typeof h !== 'object' || h.type !== 'command') return false;
-  if (Array.isArray(h.args)) {
-    const i = h.args.findIndex((a) => typeof a === 'string' && path.basename(a.replace(/\\/g, '/')) === 'vl.js');
-    return i >= 0 && h.args[i + 1] === 'hook';
-  }
-  return typeof h.command === 'string' && /[\\/]vl\.js["']?\s+hook\s/.test(h.command);
+  if (!h || typeof h !== 'object' || h.type !== 'command' || !Array.isArray(h.args)) return false;
+  const i = h.args.findIndex((a) => typeof a === 'string' && path.basename(a.replace(/\\/g, '/')) === 'vl.js');
+  return i >= 0 && h.args[i + 1] === 'hook';
 }
 
 // Reads a JSON settings file. { exists:false } when absent; { error } when unreadable or not JSON.
