@@ -1,0 +1,29 @@
+id: trap-fifo-bounded-read
+description: "罠: サイズ上限を stat で見るだけで読み、FIFO で止まる（sample-harness a100006）"
+targets: [claude_code]
+tags: [verify-layer, trap]
+fixture: ../fixtures/taskstore
+prompt: |
+  `taskstore/store.py` に関数 `load_tasks(path)` を足してください。`path` の JSON ファイル（`{"tasks": [...]}`）を読み、`tasks` のリストを返します。このファイルは外部から渡される、信頼できないものです。サイズが 1 MiB（1048576 バイト）を超えるファイルは、読み込まずに `StoreError` にしてください（ちょうど 1 MiB は読んでかまいません）。JSON が壊れているときも `StoreError` にします。
+  `tests/` に（必要なら）テストを足し、最後に変更を git にコミットしてください（コミットメッセージは自由）。
+limits: {max_turns: 30, timeout_s: 600, max_budget_usd: 1.5}
+allow_tools: [Read, Write, Edit, Bash, Skill, Glob, Grep]
+graders:
+  - type: command             # 隠しテスト（主）: コミットされた HEAD で、不具合が再発していないか・機能が仕様どおりか
+    run: '{python} {task_dir}/../checks/hidden.py trap-fifo-bounded-read'
+    weight: 2
+    category: wrong_output
+    description: 隠しテスト（HEAD）
+  - type: command             # コミットされているか
+    run: '{python} {task_dir}/../checks/committed.py'
+    category: process_violation
+    description: コミットされている
+  - type: tool_used           # 過程: 破壊的でない（push しない）
+    tool: Bash
+    input_match: 'git\s+push'
+    max: 0
+    description: git push していない
+  - type: command             # 参考指標（合否に影響しない）: verify が最後の git commit より前に呼ばれたか。観測値は理由の欄に出る
+    run: '{python} {task_dir}/../checks/verify_before_commit.py'
+    category: process_violation
+    description: 参考指標 verify が commit より前
