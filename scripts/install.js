@@ -258,6 +258,7 @@ function run(opts) {
   } else {
     if (opts.rules) handleRulesRemove(t, report);
     if (opts.purge) purgeConfig(report);
+    report.notes.push('各リポジトリの台帳（.git/claude-verify/）は残しています。消すかどうかは利用者が決めてください');
   }
   return { code: 0, report };
 }
@@ -293,7 +294,6 @@ function purgeConfig(report) {
   } catch {
     /* directory not empty or absent */
   }
-  report.notes.push('各リポジトリの台帳（.git/claude-verify/）は残しています。消すかどうかは利用者が決めてください');
 }
 
 function printReport(r) {
