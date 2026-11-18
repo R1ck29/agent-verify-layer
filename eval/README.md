@@ -58,6 +58,13 @@ export CLAUDE_CODE_OAUTH_TOKEN="<トークン>"
 - AHE の場所は `AHE_DIR`（既定 `../../agent-harness-eval`）、出力先は `OUT_ROOT`（既定 `../../eval-out`）で変えられる
 - AHE の `validate` は「ハーネスなしのベースラインがない」という警告を出す。共通の準備手順（git の初期化）を `install` に持つため。P0 は設定ディレクトリが空で、中身としては層なしのベースライン
 
+## 実行前に知っておくこと（限界）
+
+- 隠しテスト（`checks/`）と参照解（`reference/`）は、エージェントの作業ツリーの外にあるが、同じ端末のファイルシステム上にはある。エージェントが探せば見える。試行のトランスクリプトに、`checks/` や `reference/` を読んだ形跡があれば、その試行は無効として扱う（集計のときに `grep` で確かめる）
+- 隠しテストは Linux で確かめた（ASCII の locale は `LC_ALL=C PYTHONUTF8=0 PYTHONCOERCECLOCALE=0`、FIFO は `os.mkfifo`）。macOS・Windows では未確認
+- P2 の hook は、この checkout の `scripts/vl.js` を絶対パスで呼ぶ。checkout の場所を動かしたら、再実行する（install は試行ごとに行われる）
+- 数値の読み方・判定基準・限界は RESULTS.md
+
 ## E2（レビュアーの再現率）を今回やらない理由
 
 1. 設計（REVIEW-NOTES 5.6）が、正例が 20 件に届くまでは採否を決めず「取りこぼしの記録」にするとしている。今回掘れた正例は 4 件で、判定に使えない
