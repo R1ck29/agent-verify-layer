@@ -94,3 +94,28 @@ ECC_GATEGUARD=off claude -p "In a.js change the greeting from hello to hi, then 
 - 確認できた: Skill の記録以外の配線（`Bash(git commit *)` の `if`、commit 行の書き込み、`report` の突き合わせ）と、標準の指示が守られたこと
 - 修正後の実機での再確認は**まだ**。ログイン済みの端末で、上の手順を 1 回やり直し、run 行（`via: model`）ができて、commit 行が `verified` になるかを見る
 - 引き続き未確認: `UserPromptExpansion`（利用者が打った `/verify`）、`PowerShell` の `if`
+
+---
+
+# 追記: 修正後（f381cc6）の実機スモーク再実行（2026-11-18 16:35 JST）
+
+上の記録は書き換えず、この節で足します。利用者が外側のシェル（ログイン済み）で 2 回実行しました。生ログは `vl-smoke2.jsonl` と `vl-smoke3.jsonl`（このリポジトリの外）、台帳は `/tmp/vl-smoke/.git/claude-verify/ledger.jsonl` です。条件は前回と同じ（Claude Code 2.1.325、haiku、`--plugin-dir`、`--include-hook-events`、対象 `/tmp/vl-smoke`）。
+
+## 1 回目: 指示なし（vl-smoke2）
+
+- Claude は `Skill` を呼ばず、`node check.js` を Bash で直接実行してからコミットした（8 ターン、0.010 USD）。
+- 台帳の commit 行は `result: none`、`session_verify: false`。
+- 判定: Skill を経由していないので、この層からは verify と見なせない。前回は `Skill(verify)` を呼んだが、今回は呼ばなかった。**「標準の指示どおり verify を呼ぶか」は 1 回ごとにぶれる**（n=2 での観察）。同じ検証を Bash で済ませたかどうかは、この層の記録からは区別できない。
+
+## 2 回目: 「verify スキルを使ってからコミット」と明示（vl-smoke3）
+
+- `Skill(verify)` の run 行が `via: model` で書かれた（hook は 24 ms）。**修正した if なしの Skill hook は、実機で当たった**。
+- ただし Claude は Skill を Edit の**前**に読み込み、実際の check（`node check.js`）は Edit の**後**に Bash で実行した。台帳の run 行のツリーハッシュは Edit 前のもの。
+- そのため commit 行は `result: stale`、`stale_files: 1`、`since_run_s: 10`、`session_verify: true`。実態は「編集後に check を走らせて通った」なのに、台帳は「verify のあとで変えた」と判定した。
+- これは REVIEW-NOTES 5.1 の「verify の記録は**始めた時点**のツリーで、検証が走った時点ではない」による系統的な誤判定の実例（偽の stale）。逆向き（verify は呼んだが check を走らせていない）の誤判定は、この層では起きても区別できない。
+
+## 影響と扱い
+
+- 判定ロジックは v0.1 のまま変えない（この作業の範囲外）。改善案は eval/RESULTS.md の「次の版」に書く。
+- 評価（eval/）では、合格率とは別に「台帳の結果（verified / stale / none）が実態と合う割合」を報告する。実態は、隠しテストの結果と、トランスクリプトから読む「編集後に check を走らせたか」で決める。
+- 実機での確認状況: 確認できた — Skill hook の記録（修正後）、commit 行、`stale` の出方。未確認のまま — `UserPromptExpansion`（利用者が打った `/verify`）、`PowerShell` の `if`。
