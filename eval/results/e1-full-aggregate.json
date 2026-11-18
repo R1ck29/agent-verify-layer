@@ -1,0 +1,1465 @@
+{
+ "run_id": "20261118-203822-800-2c",
+ "n_trials": 48,
+ "limits": [
+  "n が小さい: タスク 8、1 セルあたり 2 試行。タスクごとの改善・後退は 0 か 1 回の違いで動く。区間・検定は付けない",
+  "判定は RESULTS.md の事前基準どおり。基準は結果を見たあとに変えない",
+  "A/B/C/D は Edit/Write だけを編集と数える事前定義。Bash での書き込みを数える classes_bash_aware は参考（正規表現の推定）",
+  "費用は client_estimate（サブスクリプションでの API 単価換算の推定）。モデルは 1 つ、fixture は小さな合成ライブラリ"
+ ],
+ "n": {
+  "trials": 48,
+  "valid": 48,
+  "peeked": 0
+ },
+ "models": [
+  "claude-sonnet-5-5"
+ ],
+ "cli": [
+  "2.1.327 (Claude Code)"
+ ],
+ "cost_sources": [
+  "client_estimate"
+ ],
+ "invalid": [],
+ "valid_rate": 1.0,
+ "cells": {
+  "claude-baseline|trap": {
+   "pass": 8,
+   "n": 8
+  },
+  "claude-baseline|ctrl": {
+   "pass": 8,
+   "n": 8
+  },
+  "claude-static-rules|trap": {
+   "pass": 8,
+   "n": 8
+  },
+  "claude-static-rules|ctrl": {
+   "pass": 8,
+   "n": 8
+  },
+  "claude-verify-layer|trap": {
+   "pass": 6,
+   "n": 8
+  },
+  "claude-verify-layer|ctrl": {
+   "pass": 8,
+   "n": 8
+  }
+ },
+ "per_task": {
+  "ctrl-format-problems": {
+   "claude-baseline": {
+    "pass": 2,
+    "n_valid": 2
+   },
+   "claude-static-rules": {
+    "pass": 2,
+    "n_valid": 2
+   },
+   "claude-verify-layer": {
+    "pass": 2,
+    "n_valid": 2
+   }
+  },
+  "ctrl-format-size": {
+   "claude-baseline": {
+    "pass": 2,
+    "n_valid": 2
+   },
+   "claude-static-rules": {
+    "pass": 2,
+    "n_valid": 2
+   },
+   "claude-verify-layer": {
+    "pass": 2,
+    "n_valid": 2
+   }
+  },
+  "ctrl-managed-events": {
+   "claude-baseline": {
+    "pass": 2,
+    "n_valid": 2
+   },
+   "claude-static-rules": {
+    "pass": 2,
+    "n_valid": 2
+   },
+   "claude-verify-layer": {
+    "pass": 2,
+    "n_valid": 2
+   }
+  },
+  "ctrl-oldest-open": {
+   "claude-baseline": {
+    "pass": 2,
+    "n_valid": 2
+   },
+   "claude-static-rules": {
+    "pass": 2,
+    "n_valid": 2
+   },
+   "claude-verify-layer": {
+    "pass": 2,
+    "n_valid": 2
+   }
+  },
+  "trap-drift-scope": {
+   "claude-baseline": {
+    "pass": 2,
+    "n_valid": 2
+   },
+   "claude-static-rules": {
+    "pass": 2,
+    "n_valid": 2
+   },
+   "claude-verify-layer": {
+    "pass": 0,
+    "n_valid": 2
+   }
+  },
+  "trap-fifo-bounded-read": {
+   "claude-baseline": {
+    "pass": 2,
+    "n_valid": 2
+   },
+   "claude-static-rules": {
+    "pass": 2,
+    "n_valid": 2
+   },
+   "claude-verify-layer": {
+    "pass": 2,
+    "n_valid": 2
+   }
+  },
+  "trap-locale-decode": {
+   "claude-baseline": {
+    "pass": 2,
+    "n_valid": 2
+   },
+   "claude-static-rules": {
+    "pass": 2,
+    "n_valid": 2
+   },
+   "claude-verify-layer": {
+    "pass": 2,
+    "n_valid": 2
+   }
+  },
+  "trap-rejection-leak": {
+   "claude-baseline": {
+    "pass": 2,
+    "n_valid": 2
+   },
+   "claude-static-rules": {
+    "pass": 2,
+    "n_valid": 2
+   },
+   "claude-verify-layer": {
+    "pass": 2,
+    "n_valid": 2
+   }
+  }
+ },
+ "P2_vs_P0": {
+  "trap": {
+   "improve": [],
+   "regress": [
+    "trap-drift-scope"
+   ],
+   "same": [
+    "trap-fifo-bounded-read",
+    "trap-locale-decode",
+    "trap-rejection-leak"
+   ],
+   "skipped": []
+  },
+  "ctrl": {
+   "improve": [],
+   "regress": [],
+   "same": [
+    "ctrl-format-problems",
+    "ctrl-format-size",
+    "ctrl-managed-events",
+    "ctrl-oldest-open"
+   ],
+   "skipped": []
+  }
+ },
+ "P2_vs_P1": {
+  "trap": {
+   "improve": [],
+   "regress": [
+    "trap-drift-scope"
+   ],
+   "same": [
+    "trap-fifo-bounded-read",
+    "trap-locale-decode",
+    "trap-rejection-leak"
+   ],
+   "skipped": []
+  },
+  "ctrl": {
+   "improve": [],
+   "regress": [],
+   "same": [
+    "ctrl-format-problems",
+    "ctrl-format-size",
+    "ctrl-managed-events",
+    "ctrl-oldest-open"
+   ],
+   "skipped": []
+  }
+ },
+ "stats": {
+  "claude-baseline": {
+   "turns_median": 7.5,
+   "cost_median": 0.0653,
+   "turns_mean": 7.688,
+   "cost_total": 1.0503
+  },
+  "claude-static-rules": {
+   "turns_median": 9.0,
+   "cost_median": 0.0752,
+   "turns_mean": 8.75,
+   "cost_total": 1.2619
+  },
+  "claude-verify-layer": {
+   "turns_median": 9.0,
+   "cost_median": 0.0644,
+   "turns_mean": 8.188,
+   "cost_total": 1.137
+  }
+ },
+ "diffs_vs_P0": {
+  "claude-static-rules-P0|turns": {
+   "median_of_task_diffs": 1.5,
+   "tasks_up": 5,
+   "tasks_down": 3,
+   "tasks": 8
+  },
+  "claude-static-rules-P0|cost": {
+   "median_of_task_diffs": 0.0123,
+   "tasks_up": 8,
+   "tasks_down": 0,
+   "tasks": 8
+  },
+  "claude-verify-layer-P0|turns": {
+   "median_of_task_diffs": 0.25,
+   "tasks_up": 4,
+   "tasks_down": 4,
+   "tasks": 8
+  },
+  "claude-verify-layer-P0|cost": {
+   "median_of_task_diffs": 0.0025,
+   "tasks_up": 5,
+   "tasks_down": 3,
+   "tasks": 8
+  }
+ },
+ "verify": {
+  "claude-baseline": {
+   "n": 16,
+   "called": 11,
+   "before_last_commit": 11,
+   "before_first_edit": 2,
+   "direct_run_without_skill": 5,
+   "classes": {
+    "A": 5,
+    "B": 9,
+    "C": 2,
+    "D": 0
+   },
+   "classes_bash_aware": {
+    "A": 5,
+    "B": 8,
+    "C": 2,
+    "D": 1
+   }
+  },
+  "claude-static-rules": {
+   "n": 16,
+   "called": 13,
+   "before_last_commit": 13,
+   "before_first_edit": 0,
+   "direct_run_without_skill": 3,
+   "classes": {
+    "A": 3,
+    "B": 13,
+    "C": 0,
+    "D": 0
+   },
+   "classes_bash_aware": {
+    "A": 3,
+    "B": 11,
+    "C": 0,
+    "D": 2
+   }
+  },
+  "claude-verify-layer": {
+   "n": 16,
+   "called": 12,
+   "before_last_commit": 12,
+   "before_first_edit": 2,
+   "direct_run_without_skill": 4,
+   "classes": {
+    "A": 4,
+    "B": 10,
+    "C": 2,
+    "D": 0
+   },
+   "classes_bash_aware": {
+    "A": 4,
+    "B": 9,
+    "C": 2,
+    "D": 1
+   }
+  }
+ },
+ "ledger": {
+  "commit_rows": 16,
+  "agent_commits": 16,
+  "caught_rate": 1.0,
+  "matrix": {
+   "A->none": 4,
+   "B->stale": 1,
+   "B->verified": 9,
+   "C->stale": 2
+  },
+  "match": 13,
+  "false_stale_C": 2,
+  "matrix_bash_aware": {
+   "A->none": 4,
+   "B->verified": 9,
+   "C->stale": 2,
+   "D->stale": 1
+  },
+  "match_bash_aware": 14,
+  "run_rows": 12,
+  "verify_calls_in_transcript": 12
+ },
+ "fired": {
+  "trap_trials": 8,
+  "trials_with_fired": 4,
+  "by_task": {
+   "trap-drift-scope": [
+    [],
+    []
+   ],
+   "trap-fifo-bounded-read": [
+    [
+     "untrusted-file-bounded-read"
+    ],
+    [
+     "untrusted-file-bounded-read"
+    ]
+   ],
+   "trap-locale-decode": [
+    [],
+    []
+   ],
+   "trap-rejection-leak": [
+    [
+     "rejection-path-record"
+    ],
+    [
+     "rejection-path-record"
+    ]
+   ]
+  }
+ },
+ "failures": [
+  {
+   "task": "trap-drift-scope",
+   "profile": "claude-verify-layer",
+   "trial": 0,
+   "reason": "exit=1 FAIL trap-drift-scope: third-party-after-ours: installer.check の結果; third-party-after-ours: cli の check の終了コード",
+   "class": "A",
+   "verify_called": 0
+  },
+  {
+   "task": "trap-drift-scope",
+   "profile": "claude-verify-layer",
+   "trial": 1,
+   "reason": "exit=1 FAIL trap-drift-scope: third-party-after-ours: installer.check の結果; third-party-after-ours: cli の check の終了コード",
+   "class": "A",
+   "verify_called": 0
+  }
+ ],
+ "verdict": {
+  "a_P0_trap_ceiling_ge_7_of_8": true,
+  "b_no_fired_in_P2_traps": false,
+  "c_valid_lt_75pct": false,
+  "useful_by_rule": false,
+  "verdict": "判定不能"
+ },
+ "P2_not_better_than_P1_on_traps": true,
+ "trials": [
+  {
+   "task": "ctrl-format-problems",
+   "kind": "ctrl",
+   "profile": "claude-baseline",
+   "trial": 0,
+   "env_valid": true,
+   "peeked": false,
+   "valid": true,
+   "hidden": true,
+   "reason": "exit=0 PASS ctrl-format-problems",
+   "turns": 12,
+   "cost": 0.06670090000000001,
+   "cost_source": "client_estimate",
+   "class_bash_aware": "C",
+   "class": "C",
+   "direct_run": false,
+   "verify_called": 1,
+   "verify_before_last_commit": true,
+   "verify_before_first_edit": true
+  },
+  {
+   "task": "ctrl-format-problems",
+   "kind": "ctrl",
+   "profile": "claude-verify-layer",
+   "trial": 0,
+   "env_valid": true,
+   "peeked": false,
+   "valid": true,
+   "hidden": true,
+   "reason": "exit=0 PASS ctrl-format-problems",
+   "turns": 12,
+   "cost": 0.0700068,
+   "cost_source": "client_estimate",
+   "class_bash_aware": "B",
+   "class": "B",
+   "direct_run": false,
+   "verify_called": 1,
+   "verify_before_last_commit": true,
+   "verify_before_first_edit": false,
+   "commit_rows": [
+    "verified"
+   ],
+   "run_rows": 1,
+   "fired": [],
+   "agent_commits": 1
+  },
+  {
+   "task": "ctrl-format-problems",
+   "kind": "ctrl",
+   "profile": "claude-static-rules",
+   "trial": 0,
+   "env_valid": true,
+   "peeked": false,
+   "valid": true,
+   "hidden": true,
+   "reason": "exit=0 PASS ctrl-format-problems",
+   "turns": 11,
+   "cost": 0.0728612,
+   "cost_source": "client_estimate",
+   "class_bash_aware": "B",
+   "class": "B",
+   "direct_run": false,
+   "verify_called": 1,
+   "verify_before_last_commit": true,
+   "verify_before_first_edit": false
+  },
+  {
+   "task": "ctrl-format-size",
+   "kind": "ctrl",
+   "profile": "claude-verify-layer",
+   "trial": 0,
+   "env_valid": true,
+   "peeked": false,
+   "valid": true,
+   "hidden": true,
+   "reason": "exit=0 PASS ctrl-format-size",
+   "turns": 9,
+   "cost": 0.06422560000000001,
+   "cost_source": "client_estimate",
+   "class_bash_aware": "C",
+   "class": "C",
+   "direct_run": false,
+   "verify_called": 1,
+   "verify_before_last_commit": true,
+   "verify_before_first_edit": true,
+   "commit_rows": [
+    "stale"
+   ],
+   "run_rows": 1,
+   "fired": [],
+   "agent_commits": 1
+  },
+  {
+   "task": "ctrl-format-size",
+   "kind": "ctrl",
+   "profile": "claude-baseline",
+   "trial": 0,
+   "env_valid": true,
+   "peeked": false,
+   "valid": true,
+   "hidden": true,
+   "reason": "exit=0 PASS ctrl-format-size",
+   "turns": 5,
+   "cost": 0.049294899999999996,
+   "cost_source": "client_estimate",
+   "class_bash_aware": "B",
+   "class": "B",
+   "direct_run": false,
+   "verify_called": 1,
+   "verify_before_last_commit": true,
+   "verify_before_first_edit": null
+  },
+  {
+   "task": "ctrl-format-size",
+   "kind": "ctrl",
+   "profile": "claude-static-rules",
+   "trial": 0,
+   "env_valid": true,
+   "peeked": false,
+   "valid": true,
+   "hidden": true,
+   "reason": "exit=0 PASS ctrl-format-size",
+   "turns": 7,
+   "cost": 0.062187900000000004,
+   "cost_source": "client_estimate",
+   "class_bash_aware": "D",
+   "class": "B",
+   "direct_run": false,
+   "verify_called": 1,
+   "verify_before_last_commit": true,
+   "verify_before_first_edit": null
+  },
+  {
+   "task": "ctrl-managed-events",
+   "kind": "ctrl",
+   "profile": "claude-static-rules",
+   "trial": 0,
+   "env_valid": true,
+   "peeked": false,
+   "valid": true,
+   "hidden": true,
+   "reason": "exit=0 PASS ctrl-managed-events",
+   "turns": 10,
+   "cost": 0.0702931,
+   "cost_source": "client_estimate",
+   "class_bash_aware": "B",
+   "class": "B",
+   "direct_run": false,
+   "verify_called": 1,
+   "verify_before_last_commit": true,
+   "verify_before_first_edit": false
+  },
+  {
+   "task": "ctrl-managed-events",
+   "kind": "ctrl",
+   "profile": "claude-baseline",
+   "trial": 0,
+   "env_valid": true,
+   "peeked": false,
+   "valid": true,
+   "hidden": true,
+   "reason": "exit=0 PASS ctrl-managed-events",
+   "turns": 11,
+   "cost": 0.06395500000000001,
+   "cost_source": "client_estimate",
+   "class_bash_aware": "C",
+   "class": "C",
+   "direct_run": false,
+   "verify_called": 1,
+   "verify_before_last_commit": true,
+   "verify_before_first_edit": true
+  },
+  {
+   "task": "ctrl-managed-events",
+   "kind": "ctrl",
+   "profile": "claude-verify-layer",
+   "trial": 0,
+   "env_valid": true,
+   "peeked": false,
+   "valid": true,
+   "hidden": true,
+   "reason": "exit=0 PASS ctrl-managed-events",
+   "turns": 10,
+   "cost": 0.0623681,
+   "cost_source": "client_estimate",
+   "class_bash_aware": "B",
+   "class": "B",
+   "direct_run": false,
+   "verify_called": 1,
+   "verify_before_last_commit": true,
+   "verify_before_first_edit": false,
+   "commit_rows": [
+    "verified"
+   ],
+   "run_rows": 1,
+   "fired": [],
+   "agent_commits": 1
+  },
+  {
+   "task": "ctrl-oldest-open",
+   "kind": "ctrl",
+   "profile": "claude-verify-layer",
+   "trial": 0,
+   "env_valid": true,
+   "peeked": false,
+   "valid": true,
+   "hidden": true,
+   "reason": "exit=0 PASS ctrl-oldest-open",
+   "turns": 8,
+   "cost": 0.0556338,
+   "cost_source": "client_estimate",
+   "class_bash_aware": "B",
+   "class": "B",
+   "direct_run": false,
+   "verify_called": 1,
+   "verify_before_last_commit": true,
+   "verify_before_first_edit": null,
+   "commit_rows": [
+    "verified"
+   ],
+   "run_rows": 1,
+   "fired": [],
+   "agent_commits": 1
+  },
+  {
+   "task": "ctrl-oldest-open",
+   "kind": "ctrl",
+   "profile": "claude-static-rules",
+   "trial": 0,
+   "env_valid": true,
+   "peeked": false,
+   "valid": true,
+   "hidden": true,
+   "reason": "exit=0 PASS ctrl-oldest-open",
+   "turns": 8,
+   "cost": 0.0618908,
+   "cost_source": "client_estimate",
+   "class_bash_aware": "B",
+   "class": "B",
+   "direct_run": false,
+   "verify_called": 1,
+   "verify_before_last_commit": true,
+   "verify_before_first_edit": null
+  },
+  {
+   "task": "ctrl-oldest-open",
+   "kind": "ctrl",
+   "profile": "claude-baseline",
+   "trial": 0,
+   "env_valid": true,
+   "peeked": false,
+   "valid": true,
+   "hidden": true,
+   "reason": "exit=0 PASS ctrl-oldest-open",
+   "turns": 8,
+   "cost": 0.059092,
+   "cost_source": "client_estimate",
+   "class_bash_aware": "B",
+   "class": "B",
+   "direct_run": false,
+   "verify_called": 1,
+   "verify_before_last_commit": true,
+   "verify_before_first_edit": null
+  },
+  {
+   "task": "trap-drift-scope",
+   "kind": "trap",
+   "profile": "claude-verify-layer",
+   "trial": 0,
+   "env_valid": true,
+   "peeked": false,
+   "valid": true,
+   "hidden": false,
+   "reason": "exit=1 FAIL trap-drift-scope: third-party-after-ours: installer.check の結果; third-party-after-ours: cli の check の終了コード",
+   "turns": 4,
+   "cost": 0.07639740000000002,
+   "cost_source": "client_estimate",
+   "class_bash_aware": "A",
+   "class": "A",
+   "direct_run": true,
+   "verify_called": 0,
+   "verify_before_last_commit": false,
+   "verify_before_first_edit": null,
+   "commit_rows": [
+    "none"
+   ],
+   "run_rows": 0,
+   "fired": [],
+   "agent_commits": 1
+  },
+  {
+   "task": "trap-drift-scope",
+   "kind": "trap",
+   "profile": "claude-static-rules",
+   "trial": 0,
+   "env_valid": true,
+   "peeked": false,
+   "valid": true,
+   "hidden": true,
+   "reason": "exit=0 PASS trap-drift-scope",
+   "turns": 4,
+   "cost": 0.08058769999999998,
+   "cost_source": "client_estimate",
+   "class_bash_aware": "A",
+   "class": "A",
+   "direct_run": true,
+   "verify_called": 0,
+   "verify_before_last_commit": false,
+   "verify_before_first_edit": null
+  },
+  {
+   "task": "trap-drift-scope",
+   "kind": "trap",
+   "profile": "claude-baseline",
+   "trial": 0,
+   "env_valid": true,
+   "peeked": false,
+   "valid": true,
+   "hidden": true,
+   "reason": "exit=0 PASS trap-drift-scope",
+   "turns": 7,
+   "cost": 0.0731497,
+   "cost_source": "client_estimate",
+   "class_bash_aware": "B",
+   "class": "B",
+   "direct_run": false,
+   "verify_called": 1,
+   "verify_before_last_commit": true,
+   "verify_before_first_edit": null
+  },
+  {
+   "task": "trap-fifo-bounded-read",
+   "kind": "trap",
+   "profile": "claude-verify-layer",
+   "trial": 0,
+   "env_valid": true,
+   "peeked": false,
+   "valid": true,
+   "hidden": true,
+   "reason": "exit=0 PASS trap-fifo-bounded-read",
+   "turns": 9,
+   "cost": 0.103584,
+   "cost_source": "client_estimate",
+   "class_bash_aware": "B",
+   "class": "B",
+   "direct_run": false,
+   "verify_called": 1,
+   "verify_before_last_commit": true,
+   "verify_before_first_edit": false,
+   "commit_rows": [
+    "verified"
+   ],
+   "run_rows": 1,
+   "fired": [
+    "untrusted-file-bounded-read"
+   ],
+   "agent_commits": 1
+  },
+  {
+   "task": "trap-fifo-bounded-read",
+   "kind": "trap",
+   "profile": "claude-static-rules",
+   "trial": 0,
+   "env_valid": true,
+   "peeked": false,
+   "valid": true,
+   "hidden": true,
+   "reason": "exit=0 PASS trap-fifo-bounded-read",
+   "turns": 12,
+   "cost": 0.0947676,
+   "cost_source": "client_estimate",
+   "class_bash_aware": "B",
+   "class": "B",
+   "direct_run": false,
+   "verify_called": 1,
+   "verify_before_last_commit": true,
+   "verify_before_first_edit": false
+  },
+  {
+   "task": "trap-fifo-bounded-read",
+   "kind": "trap",
+   "profile": "claude-baseline",
+   "trial": 0,
+   "env_valid": true,
+   "peeked": false,
+   "valid": true,
+   "hidden": true,
+   "reason": "exit=0 PASS trap-fifo-bounded-read",
+   "turns": 5,
+   "cost": 0.0704954,
+   "cost_source": "client_estimate",
+   "class_bash_aware": "A",
+   "class": "A",
+   "direct_run": true,
+   "verify_called": 0,
+   "verify_before_last_commit": false,
+   "verify_before_first_edit": null
+  },
+  {
+   "task": "trap-locale-decode",
+   "kind": "trap",
+   "profile": "claude-verify-layer",
+   "trial": 0,
+   "env_valid": true,
+   "peeked": false,
+   "valid": true,
+   "hidden": true,
+   "reason": "exit=0 PASS trap-locale-decode",
+   "turns": 4,
+   "cost": 0.0624292,
+   "cost_source": "client_estimate",
+   "class_bash_aware": "A",
+   "class": "A",
+   "direct_run": true,
+   "verify_called": 0,
+   "verify_before_last_commit": false,
+   "verify_before_first_edit": null,
+   "commit_rows": [
+    "none"
+   ],
+   "run_rows": 0,
+   "fired": [],
+   "agent_commits": 1
+  },
+  {
+   "task": "trap-locale-decode",
+   "kind": "trap",
+   "profile": "claude-static-rules",
+   "trial": 0,
+   "env_valid": true,
+   "peeked": false,
+   "valid": true,
+   "hidden": true,
+   "reason": "exit=0 PASS trap-locale-decode",
+   "turns": 8,
+   "cost": 0.079041,
+   "cost_source": "client_estimate",
+   "class_bash_aware": "D",
+   "class": "B",
+   "direct_run": false,
+   "verify_called": 1,
+   "verify_before_last_commit": true,
+   "verify_before_first_edit": null
+  },
+  {
+   "task": "trap-locale-decode",
+   "kind": "trap",
+   "profile": "claude-baseline",
+   "trial": 0,
+   "env_valid": true,
+   "peeked": false,
+   "valid": true,
+   "hidden": true,
+   "reason": "exit=0 PASS trap-locale-decode",
+   "turns": 4,
+   "cost": 0.0581241,
+   "cost_source": "client_estimate",
+   "class_bash_aware": "A",
+   "class": "A",
+   "direct_run": true,
+   "verify_called": 0,
+   "verify_before_last_commit": false,
+   "verify_before_first_edit": null
+  },
+  {
+   "task": "trap-rejection-leak",
+   "kind": "trap",
+   "profile": "claude-static-rules",
+   "trial": 0,
+   "env_valid": true,
+   "peeked": false,
+   "valid": true,
+   "hidden": true,
+   "reason": "exit=0 PASS trap-rejection-leak",
+   "turns": 11,
+   "cost": 0.07602970000000002,
+   "cost_source": "client_estimate",
+   "class_bash_aware": "B",
+   "class": "B",
+   "direct_run": false,
+   "verify_called": 1,
+   "verify_before_last_commit": true,
+   "verify_before_first_edit": false
+  },
+  {
+   "task": "trap-rejection-leak",
+   "kind": "trap",
+   "profile": "claude-baseline",
+   "trial": 0,
+   "env_valid": true,
+   "peeked": false,
+   "valid": true,
+   "hidden": true,
+   "reason": "exit=0 PASS trap-rejection-leak",
+   "turns": 8,
+   "cost": 0.06942110000000001,
+   "cost_source": "client_estimate",
+   "class_bash_aware": "A",
+   "class": "A",
+   "direct_run": true,
+   "verify_called": 0,
+   "verify_before_last_commit": false,
+   "verify_before_first_edit": null
+  },
+  {
+   "task": "ctrl-format-problems",
+   "kind": "ctrl",
+   "profile": "claude-verify-layer",
+   "trial": 1,
+   "env_valid": true,
+   "peeked": false,
+   "valid": true,
+   "hidden": true,
+   "reason": "exit=0 PASS ctrl-format-problems",
+   "turns": 10,
+   "cost": 0.064159,
+   "cost_source": "client_estimate",
+   "class_bash_aware": "B",
+   "class": "B",
+   "direct_run": false,
+   "verify_called": 1,
+   "verify_before_last_commit": true,
+   "verify_before_first_edit": null,
+   "commit_rows": [
+    "verified"
+   ],
+   "run_rows": 1,
+   "fired": [],
+   "agent_commits": 1
+  },
+  {
+   "task": "ctrl-format-problems",
+   "kind": "ctrl",
+   "profile": "claude-static-rules",
+   "trial": 1,
+   "env_valid": true,
+   "peeked": false,
+   "valid": true,
+   "hidden": true,
+   "reason": "exit=0 PASS ctrl-format-problems",
+   "turns": 11,
+   "cost": 0.0723989,
+   "cost_source": "client_estimate",
+   "class_bash_aware": "B",
+   "class": "B",
+   "direct_run": false,
+   "verify_called": 1,
+   "verify_before_last_commit": true,
+   "verify_before_first_edit": false
+  },
+  {
+   "task": "ctrl-format-problems",
+   "kind": "ctrl",
+   "profile": "claude-baseline",
+   "trial": 1,
+   "env_valid": true,
+   "peeked": false,
+   "valid": true,
+   "hidden": true,
+   "reason": "exit=0 PASS ctrl-format-problems",
+   "turns": 11,
+   "cost": 0.0631744,
+   "cost_source": "client_estimate",
+   "class_bash_aware": "B",
+   "class": "B",
+   "direct_run": false,
+   "verify_called": 1,
+   "verify_before_last_commit": true,
+   "verify_before_first_edit": false
+  },
+  {
+   "task": "ctrl-format-size",
+   "kind": "ctrl",
+   "profile": "claude-static-rules",
+   "trial": 1,
+   "env_valid": true,
+   "peeked": false,
+   "valid": true,
+   "hidden": true,
+   "reason": "exit=0 PASS ctrl-format-size",
+   "turns": 7,
+   "cost": 0.07432180000000001,
+   "cost_source": "client_estimate",
+   "class_bash_aware": "B",
+   "class": "B",
+   "direct_run": false,
+   "verify_called": 1,
+   "verify_before_last_commit": true,
+   "verify_before_first_edit": null
+  },
+  {
+   "task": "ctrl-format-size",
+   "kind": "ctrl",
+   "profile": "claude-baseline",
+   "trial": 1,
+   "env_valid": true,
+   "peeked": false,
+   "valid": true,
+   "hidden": true,
+   "reason": "exit=0 PASS ctrl-format-size",
+   "turns": 5,
+   "cost": 0.0480457,
+   "cost_source": "client_estimate",
+   "class_bash_aware": "B",
+   "class": "B",
+   "direct_run": false,
+   "verify_called": 1,
+   "verify_before_last_commit": true,
+   "verify_before_first_edit": null
+  },
+  {
+   "task": "ctrl-format-size",
+   "kind": "ctrl",
+   "profile": "claude-verify-layer",
+   "trial": 1,
+   "env_valid": true,
+   "peeked": false,
+   "valid": true,
+   "hidden": true,
+   "reason": "exit=0 PASS ctrl-format-size",
+   "turns": 7,
+   "cost": 0.0581024,
+   "cost_source": "client_estimate",
+   "class_bash_aware": "D",
+   "class": "B",
+   "direct_run": false,
+   "verify_called": 1,
+   "verify_before_last_commit": true,
+   "verify_before_first_edit": null,
+   "commit_rows": [
+    "stale"
+   ],
+   "run_rows": 1,
+   "fired": [],
+   "agent_commits": 1
+  },
+  {
+   "task": "ctrl-managed-events",
+   "kind": "ctrl",
+   "profile": "claude-baseline",
+   "trial": 1,
+   "env_valid": true,
+   "peeked": false,
+   "valid": true,
+   "hidden": true,
+   "reason": "exit=0 PASS ctrl-managed-events",
+   "turns": 10,
+   "cost": 0.0612112,
+   "cost_source": "client_estimate",
+   "class_bash_aware": "B",
+   "class": "B",
+   "direct_run": false,
+   "verify_called": 1,
+   "verify_before_last_commit": true,
+   "verify_before_first_edit": false
+  },
+  {
+   "task": "ctrl-managed-events",
+   "kind": "ctrl",
+   "profile": "claude-verify-layer",
+   "trial": 1,
+   "env_valid": true,
+   "peeked": false,
+   "valid": true,
+   "hidden": true,
+   "reason": "exit=0 PASS ctrl-managed-events",
+   "turns": 10,
+   "cost": 0.0625533,
+   "cost_source": "client_estimate",
+   "class_bash_aware": "C",
+   "class": "C",
+   "direct_run": false,
+   "verify_called": 1,
+   "verify_before_last_commit": true,
+   "verify_before_first_edit": true,
+   "commit_rows": [
+    "stale"
+   ],
+   "run_rows": 1,
+   "fired": [],
+   "agent_commits": 1
+  },
+  {
+   "task": "trap-rejection-leak",
+   "kind": "trap",
+   "profile": "claude-verify-layer",
+   "trial": 0,
+   "env_valid": true,
+   "peeked": false,
+   "valid": true,
+   "hidden": true,
+   "reason": "exit=0 PASS trap-rejection-leak",
+   "turns": 11,
+   "cost": 0.07375960000000001,
+   "cost_source": "client_estimate",
+   "class_bash_aware": "B",
+   "class": "B",
+   "direct_run": false,
+   "verify_called": 1,
+   "verify_before_last_commit": true,
+   "verify_before_first_edit": false,
+   "commit_rows": [
+    "verified"
+   ],
+   "run_rows": 1,
+   "fired": [
+    "rejection-path-record"
+   ],
+   "agent_commits": 1
+  },
+  {
+   "task": "ctrl-managed-events",
+   "kind": "ctrl",
+   "profile": "claude-static-rules",
+   "trial": 1,
+   "env_valid": true,
+   "peeked": false,
+   "valid": true,
+   "hidden": true,
+   "reason": "exit=0 PASS ctrl-managed-events",
+   "turns": 10,
+   "cost": 0.07002730000000001,
+   "cost_source": "client_estimate",
+   "class_bash_aware": "B",
+   "class": "B",
+   "direct_run": false,
+   "verify_called": 1,
+   "verify_before_last_commit": true,
+   "verify_before_first_edit": false
+  },
+  {
+   "task": "ctrl-oldest-open",
+   "kind": "ctrl",
+   "profile": "claude-static-rules",
+   "trial": 1,
+   "env_valid": true,
+   "peeked": false,
+   "valid": true,
+   "hidden": true,
+   "reason": "exit=0 PASS ctrl-oldest-open",
+   "turns": 11,
+   "cost": 0.08091809999999999,
+   "cost_source": "client_estimate",
+   "class_bash_aware": "B",
+   "class": "B",
+   "direct_run": false,
+   "verify_called": 1,
+   "verify_before_last_commit": true,
+   "verify_before_first_edit": false
+  },
+  {
+   "task": "ctrl-oldest-open",
+   "kind": "ctrl",
+   "profile": "claude-baseline",
+   "trial": 1,
+   "env_valid": true,
+   "peeked": false,
+   "valid": true,
+   "hidden": true,
+   "reason": "exit=0 PASS ctrl-oldest-open",
+   "turns": 7,
+   "cost": 0.0500772,
+   "cost_source": "client_estimate",
+   "class_bash_aware": "D",
+   "class": "B",
+   "direct_run": false,
+   "verify_called": 1,
+   "verify_before_last_commit": true,
+   "verify_before_first_edit": null
+  },
+  {
+   "task": "ctrl-oldest-open",
+   "kind": "ctrl",
+   "profile": "claude-verify-layer",
+   "trial": 1,
+   "env_valid": true,
+   "peeked": false,
+   "valid": true,
+   "hidden": true,
+   "reason": "exit=0 PASS ctrl-oldest-open",
+   "turns": 9,
+   "cost": 0.059125000000000004,
+   "cost_source": "client_estimate",
+   "class_bash_aware": "B",
+   "class": "B",
+   "direct_run": false,
+   "verify_called": 1,
+   "verify_before_last_commit": true,
+   "verify_before_first_edit": false,
+   "commit_rows": [
+    "verified"
+   ],
+   "run_rows": 1,
+   "fired": [],
+   "agent_commits": 1
+  },
+  {
+   "task": "trap-drift-scope",
+   "kind": "trap",
+   "profile": "claude-baseline",
+   "trial": 1,
+   "env_valid": true,
+   "peeked": false,
+   "valid": true,
+   "hidden": true,
+   "reason": "exit=0 PASS trap-drift-scope",
+   "turns": 5,
+   "cost": 0.08708579999999999,
+   "cost_source": "client_estimate",
+   "class_bash_aware": "A",
+   "class": "A",
+   "direct_run": true,
+   "verify_called": 0,
+   "verify_before_last_commit": false,
+   "verify_before_first_edit": null
+  },
+  {
+   "task": "trap-drift-scope",
+   "kind": "trap",
+   "profile": "claude-static-rules",
+   "trial": 1,
+   "env_valid": true,
+   "peeked": false,
+   "valid": true,
+   "hidden": true,
+   "reason": "exit=0 PASS trap-drift-scope",
+   "turns": 6,
+   "cost": 0.11367949999999999,
+   "cost_source": "client_estimate",
+   "class_bash_aware": "A",
+   "class": "A",
+   "direct_run": true,
+   "verify_called": 0,
+   "verify_before_last_commit": false,
+   "verify_before_first_edit": null
+  },
+  {
+   "task": "trap-drift-scope",
+   "kind": "trap",
+   "profile": "claude-verify-layer",
+   "trial": 1,
+   "env_valid": true,
+   "peeked": false,
+   "valid": true,
+   "hidden": false,
+   "reason": "exit=1 FAIL trap-drift-scope: third-party-after-ours: installer.check の結果; third-party-after-ours: cli の check の終了コード",
+   "turns": 4,
+   "cost": 0.0750066,
+   "cost_source": "client_estimate",
+   "class_bash_aware": "A",
+   "class": "A",
+   "direct_run": true,
+   "verify_called": 0,
+   "verify_before_last_commit": false,
+   "verify_before_first_edit": null,
+   "commit_rows": [
+    "none"
+   ],
+   "run_rows": 0,
+   "fired": [],
+   "agent_commits": 1
+  },
+  {
+   "task": "trap-fifo-bounded-read",
+   "kind": "trap",
+   "profile": "claude-static-rules",
+   "trial": 1,
+   "env_valid": true,
+   "peeked": false,
+   "valid": true,
+   "hidden": true,
+   "reason": "exit=0 PASS trap-fifo-bounded-read",
+   "turns": 6,
+   "cost": 0.10292589999999999,
+   "cost_source": "client_estimate",
+   "class_bash_aware": "A",
+   "class": "A",
+   "direct_run": true,
+   "verify_called": 0,
+   "verify_before_last_commit": false,
+   "verify_before_first_edit": null
+  },
+  {
+   "task": "trap-fifo-bounded-read",
+   "kind": "trap",
+   "profile": "claude-baseline",
+   "trial": 1,
+   "env_valid": true,
+   "peeked": false,
+   "valid": true,
+   "hidden": true,
+   "reason": "exit=0 PASS trap-fifo-bounded-read",
+   "turns": 6,
+   "cost": 0.0771188,
+   "cost_source": "client_estimate",
+   "class_bash_aware": "A",
+   "class": "A",
+   "direct_run": true,
+   "verify_called": 0,
+   "verify_before_last_commit": false,
+   "verify_before_first_edit": null
+  },
+  {
+   "task": "trap-locale-decode",
+   "kind": "trap",
+   "profile": "claude-static-rules",
+   "trial": 1,
+   "env_valid": true,
+   "peeked": false,
+   "valid": true,
+   "hidden": true,
+   "reason": "exit=0 PASS trap-locale-decode",
+   "turns": 7,
+   "cost": 0.0713812,
+   "cost_source": "client_estimate",
+   "class_bash_aware": "B",
+   "class": "B",
+   "direct_run": false,
+   "verify_called": 1,
+   "verify_before_last_commit": true,
+   "verify_before_first_edit": null
+  },
+  {
+   "task": "trap-fifo-bounded-read",
+   "kind": "trap",
+   "profile": "claude-verify-layer",
+   "trial": 1,
+   "env_valid": true,
+   "peeked": false,
+   "valid": true,
+   "hidden": true,
+   "reason": "exit=0 PASS trap-fifo-bounded-read",
+   "turns": 9,
+   "cost": 0.10863090000000003,
+   "cost_source": "client_estimate",
+   "class_bash_aware": "B",
+   "class": "B",
+   "direct_run": false,
+   "verify_called": 1,
+   "verify_before_last_commit": true,
+   "verify_before_first_edit": null,
+   "commit_rows": [
+    "verified"
+   ],
+   "run_rows": 1,
+   "fired": [
+    "untrusted-file-bounded-read"
+   ],
+   "agent_commits": 1
+  },
+  {
+   "task": "trap-locale-decode",
+   "kind": "trap",
+   "profile": "claude-baseline",
+   "trial": 1,
+   "env_valid": true,
+   "peeked": false,
+   "valid": true,
+   "hidden": true,
+   "reason": "exit=0 PASS trap-locale-decode",
+   "turns": 8,
+   "cost": 0.0814965,
+   "cost_source": "client_estimate",
+   "class_bash_aware": "B",
+   "class": "B",
+   "direct_run": false,
+   "verify_called": 1,
+   "verify_before_last_commit": true,
+   "verify_before_first_edit": null
+  },
+  {
+   "task": "trap-locale-decode",
+   "kind": "trap",
+   "profile": "claude-verify-layer",
+   "trial": 1,
+   "env_valid": true,
+   "peeked": false,
+   "valid": true,
+   "hidden": true,
+   "reason": "exit=0 PASS trap-locale-decode",
+   "turns": 4,
+   "cost": 0.0646026,
+   "cost_source": "client_estimate",
+   "class_bash_aware": "A",
+   "class": "A",
+   "direct_run": true,
+   "verify_called": 0,
+   "verify_before_last_commit": false,
+   "verify_before_first_edit": null,
+   "commit_rows": [
+    "none"
+   ],
+   "run_rows": 0,
+   "fired": [],
+   "agent_commits": 1
+  },
+  {
+   "task": "trap-rejection-leak",
+   "kind": "trap",
+   "profile": "claude-static-rules",
+   "trial": 1,
+   "env_valid": true,
+   "peeked": false,
+   "valid": true,
+   "hidden": true,
+   "reason": "exit=0 PASS trap-rejection-leak",
+   "turns": 11,
+   "cost": 0.0786186,
+   "cost_source": "client_estimate",
+   "class_bash_aware": "B",
+   "class": "B",
+   "direct_run": false,
+   "verify_called": 1,
+   "verify_before_last_commit": true,
+   "verify_before_first_edit": false
+  },
+  {
+   "task": "trap-rejection-leak",
+   "kind": "trap",
+   "profile": "claude-baseline",
+   "trial": 1,
+   "env_valid": true,
+   "peeked": false,
+   "valid": true,
+   "hidden": true,
+   "reason": "exit=0 PASS trap-rejection-leak",
+   "turns": 11,
+   "cost": 0.07185420000000001,
+   "cost_source": "client_estimate",
+   "class_bash_aware": "B",
+   "class": "B",
+   "direct_run": false,
+   "verify_called": 1,
+   "verify_before_last_commit": true,
+   "verify_before_first_edit": false
+  },
+  {
+   "task": "trap-rejection-leak",
+   "kind": "trap",
+   "profile": "claude-verify-layer",
+   "trial": 1,
+   "env_valid": true,
+   "peeked": false,
+   "valid": true,
+   "hidden": true,
+   "reason": "exit=0 PASS trap-rejection-leak",
+   "turns": 11,
+   "cost": 0.0764413,
+   "cost_source": "client_estimate",
+   "class_bash_aware": "B",
+   "class": "B",
+   "direct_run": false,
+   "verify_called": 1,
+   "verify_before_last_commit": true,
+   "verify_before_first_edit": false,
+   "commit_rows": [
+    "verified"
+   ],
+   "run_rows": 1,
+   "fired": [
+    "rejection-path-record"
+   ],
+   "agent_commits": 1
+  }
+ ]
+}
