@@ -1,12 +1,12 @@
 #!/usr/bin/env node
 'use strict';
 // claude-verify-layer entry point (Node 18+, standard library only).
-//   vl.js hook run <verify|code-review> | hook commit | hook expand   (Claude Code hooks; never block work)
+//   vl.js hook skill | hook commit | hook expand   (Claude Code hooks; never block work)
 //   vl.js report [--json] [--days N] [--repo DIR]
 //   vl.js doctor [--json] [--repo DIR]
 const { readStdin, parseJsonObject, shortError } = require('./lib/io');
 
-const HOOK_USAGE = 'usage: vl.js hook run <verify|code-review> | hook commit | hook expand';
+const HOOK_USAGE = 'usage: vl.js hook skill | hook commit | hook expand';
 
 // A hook must never stop the user's work: any failure becomes exit 0 plus one short stderr line.
 async function runHook(args) {
@@ -15,11 +15,11 @@ async function runHook(args) {
       process.stderr.write(`[verify-layer] ${shortError(e)}\n`);
       process.exit(0);
     });
-    const [sub, which] = args;
+    const [sub] = args;
     const input = parseJsonObject(await readStdin());
     const hooks = require('./lib/hooks');
     let out = null;
-    if (sub === 'run' && (which === 'verify' || which === 'code-review')) out = hooks.handleSkillRun(which, input);
+    if (sub === 'skill') out = hooks.handleSkill(input);
     else if (sub === 'commit') out = hooks.handleCommit(input);
     else if (sub === 'expand') out = hooks.handleExpand(input);
     else process.stderr.write(`[verify-layer] ${HOOK_USAGE}\n`);

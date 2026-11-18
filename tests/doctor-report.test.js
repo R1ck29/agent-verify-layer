@@ -40,7 +40,7 @@ t('doctor in a clean environment: exit 0, valid JSON, every hook runs in a throw
   assert.equal(d.status, 0, d.stdout + d.stderr);
   assert.equal(d.data.ng, 0);
   const ok = msgs(d, 'ok');
-  for (const label of ['hook run verify', 'hook run code-review', 'hook expand', 'hook commit']) assert.match(ok, new RegExp(label));
+  for (const label of ['hook skill (verify)', 'hook skill (code-review)', 'hook expand', 'hook commit']) assert.ok(ok.includes(label), label);
   assert.match(msgs(d, 'warn'), /settings にもプラグインにも見つかりません/); // nothing is wired yet
 });
 

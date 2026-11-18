@@ -65,11 +65,13 @@ function handleRun(kind, input, via, event) {
   return context(event, kind === 'verify' ? checklist.formatContext(hits, selfCheck) : '');
 }
 
-function handleSkillRun(kind, input) {
+// PostToolUse(Skill). The hook has no `if` (`Skill(verify)` did not match on a real Claude Code
+// 2.1.325), so every Skill call lands here: decide from tool_input.skill, and exit at once for
+// anything that is not verify / code-review (including nested `apps/web:verify`).
+function handleSkill(input) {
   const ti = input.tool_input && typeof input.tool_input === 'object' ? input.tool_input : {};
-  const name = str(ti.skill) || str(ti.name);
-  if (name && kindFromName(name) !== kind) return null; // `if` is best-effort: re-check here
-  return handleRun(kind, input, 'model', 'PostToolUse');
+  const kind = kindFromName(str(ti.skill) || str(ti.name));
+  return kind ? handleRun(kind, input, 'model', 'PostToolUse') : null;
 }
 
 // UserPromptExpansion: the user typed /verify, /code-review or /review. `prompt` and
@@ -135,4 +137,4 @@ function handleCommit(input) {
   return selfCheck ? context('PostToolUse', checklist.formatContext([], true)) : null;
 }
 
-module.exports = { kindFromName, handleSkillRun, handleExpand, handleCommit };
+module.exports = { kindFromName, handleSkill, handleExpand, handleCommit };

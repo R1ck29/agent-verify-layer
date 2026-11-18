@@ -88,7 +88,7 @@ function checkWiring(add, files) {
   const pluginOn = files.some((f) => f.data && f.data.enabledPlugins && Object.entries(f.data.enabledPlugins).some(([k, v]) => /^verify-layer@/.test(k) && v !== false));
   if (own.length) {
     add('ok', `settings.json に verify-layer の hook があります（${[...new Set(own)].join(', ')}）`);
-    const need = ['hook run verify', 'hook run code-review', 'hook commit', 'hook expand'].filter((n) => !seen.has(n));
+    const need = ['hook skill', 'hook commit', 'hook expand'].filter((n) => !seen.has(n));
     if (need.length) add('warn', `hook が揃っていません。足りない: ${need.join(', ')}（install.js --apply で入れ直してください）`);
   }
   else if (pluginOn) add('ok', 'プラグイン verify-layer が有効です');
@@ -175,8 +175,8 @@ function checkHooksSmoke(add) {
 
     const base = { session_id: 'doctor', cwd: repo, permission_mode: 'default' };
     const samples = [
-      ['hook run verify', ['hook', 'run', 'verify'], { ...base, hook_event_name: 'PostToolUse', tool_name: 'Skill', tool_input: { skill: 'verify' }, tool_response: {} }],
-      ['hook run code-review', ['hook', 'run', 'code-review'], { ...base, hook_event_name: 'PostToolUse', tool_name: 'Skill', tool_input: { skill: 'code-review' }, tool_response: {} }],
+      ['hook skill (verify)', ['hook', 'skill'], { ...base, hook_event_name: 'PostToolUse', tool_name: 'Skill', tool_input: { skill: 'verify' }, tool_response: {} }],
+      ['hook skill (code-review)', ['hook', 'skill'], { ...base, hook_event_name: 'PostToolUse', tool_name: 'Skill', tool_input: { skill: 'code-review' }, tool_response: {} }],
       ['hook expand', ['hook', 'expand'], { ...base, hook_event_name: 'UserPromptExpansion', expansion_type: 'slash_command', command_name: 'verify', command_args: '', command_source: 'builtin', prompt: '/verify' }],
     ];
     for (const [label, args, input] of samples) {

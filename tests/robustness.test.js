@@ -17,7 +17,7 @@ function t(name, fn, opts) {
 }
 
 // Every hook entry point must exit 0 and print nothing or a JSON object without `decision`.
-const ENTRIES = [['run', 'verify'], ['run', 'code-review'], ['commit'], ['expand']];
+const ENTRIES = [['skill'], ['commit'], ['expand']];
 
 function assertSafe(r, label) {
   assert.equal(r.status, 0, `${label}: exit ${r.status} ${r.stderr}`);
@@ -48,7 +48,7 @@ t('nonexistent and non-git cwd are harmless', (repo) => {
 });
 
 t('unknown or missing subcommands exit 0 with a short stderr note', (repo) => {
-  for (const args of [[], ['bogus'], ['run'], ['run', 'nope']]) {
+  for (const args of [[], ['bogus'], ['run'], ['run', 'verify']]) {
     const r = repo.hook(args, {});
     assert.equal(r.status, 0, args.join(' '));
     assert.equal(r.stdout, '');
@@ -80,7 +80,7 @@ t('prompt, command_args and command text never reach the ledger', (repo) => {
   repo.write('a.js', 'x\n');
   repo.commit('init');
   repo.write('a.js', 'y\n');
-  repo.hook(['run', 'verify'], { tool_name: 'Skill', tool_input: { skill: 'verify', args: MARK + '-args' } });
+  repo.hook(['skill'], { tool_name: 'Skill', tool_input: { skill: 'verify', args: MARK + '-args' } });
   repo.hook(['expand'], { hook_event_name: 'UserPromptExpansion', command_name: 'verify', command_args: MARK + '-cargs', prompt: '/verify ' + MARK + '-prompt' });
   repo.hook(['expand'], { hook_event_name: 'UserPromptExpansion', command_name: 'review', command_args: MARK, prompt: MARK });
   repo.commit('msg ' + MARK + '-msg');

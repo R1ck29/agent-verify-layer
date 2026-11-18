@@ -175,7 +175,7 @@ t('linked worktree: ledger lives under the worktree git dir and hooks work', (re
     return r.stdout.trim();
   };
   fs.writeFileSync(path.join(wt, 'src', 'a.js'), 'wt\n');
-  repo.hook(['run', 'verify'], { tool_input: { skill: 'verify' } }, { cwd: wt });
+  repo.hook(['skill'], { tool_input: { skill: 'verify' } }, { cwd: wt });
   g('add', '-A');
   g('commit', '-q', '-m', 'wt');
   const r = repo.hook(['commit'], { tool_input: { command: 'git commit -m wt' } }, { cwd: wt });
@@ -247,9 +247,22 @@ t('UserPromptExpansion names: nested verify, review alias, others ignored', (rep
   assert.ok(runs.every((r) => r.via === 'user'));
 });
 
-t('a Skill call for another skill name is ignored by `run verify`', (repo) => {
+t('the Skill hook records verify, nested verify and the review alias, and ignores other skills', (repo) => {
   seed(repo);
-  repo.hook(['run', 'verify'], { tool_name: 'Skill', tool_input: { skill: 'simplify' } });
+  const call = (skill, extra = {}) => repo.hook(['skill'], { tool_name: 'Skill', tool_input: { skill }, ...extra });
+  for (const skill of ['verify', 'apps/web:verify', 'review', 'code-review', 'Verify']) call(skill);
+  for (const skill of ['simplify', 'verify-all', 'reviewer', 'preview', '']) call(skill);
+  repo.hook(['skill'], { tool_name: 'Skill', tool_input: {} });
+  const runs = repo.ledger().filter((r) => r.kind === 'run');
+  assert.deepEqual(runs.map((r) => r.skill), ['verify', 'verify', 'code-review', 'code-review', 'verify']);
+  assert.ok(runs.every((r) => r.via === 'model'));
+});
+
+t('the Skill hook answers a non-matching skill with no output and no ledger', (repo) => {
+  seed(repo);
+  const r = repo.hook(['skill'], { tool_name: 'Skill', tool_input: { skill: 'simplify' } });
+  assert.equal(r.status, 0);
+  assert.equal(r.stdout, '');
   assert.deepEqual(repo.ledger(), []);
 });
 

@@ -90,11 +90,11 @@ class Repo {
     if (via === 'user') {
       return this.hook(['expand'], { session_id: session, hook_event_name: 'UserPromptExpansion', expansion_type: 'slash_command', command_name: 'verify', command_args: '', prompt: '/verify' });
     }
-    return this.hook(['run', 'verify'], { session_id: session, hook_event_name: 'PostToolUse', tool_name: 'Skill', tool_input: { skill: 'verify' }, tool_response: {} });
+    return this.hook(['skill'], { session_id: session, hook_event_name: 'PostToolUse', tool_name: 'Skill', tool_input: { skill: 'verify' }, tool_response: {} });
   }
 
   codeReview(session = this.sessionId) {
-    return this.hook(['run', 'code-review'], { session_id: session, hook_event_name: 'PostToolUse', tool_name: 'Skill', tool_input: { skill: 'code-review' }, tool_response: {} });
+    return this.hook(['skill'], { session_id: session, hook_event_name: 'PostToolUse', tool_name: 'Skill', tool_input: { skill: 'code-review' }, tool_response: {} });
   }
 
   commitHook(command = 'git commit -m c', session = this.sessionId) {

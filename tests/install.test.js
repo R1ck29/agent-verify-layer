@@ -72,7 +72,7 @@ t('--apply installs 5 exec-form handlers with absolute vl.js paths, observe conf
   const s = c.read();
   const own = [];
   for (const [event, groups] of Object.entries(s.hooks)) for (const g of groups) for (const h of g.hooks) if ((h.args || []).some((a) => /vl\.js$/.test(a))) own.push({ event, g, h });
-  assert.equal(own.length, 5);
+  assert.equal(own.length, 4);
   for (const { h } of own) {
     assert.equal(h.command, 'node');
     assert.ok(path.isAbsolute(h.args[0]), h.args[0]);
@@ -80,7 +80,7 @@ t('--apply installs 5 exec-form handlers with absolute vl.js paths, observe conf
     assert.equal(h.args[1], 'hook');
     assert.equal(h.onFailure, 'continue');
   }
-  assert.deepEqual(own.map((o) => o.h.if).filter(Boolean).sort(), ['Bash(git commit *)', 'PowerShell(git commit *)', 'Skill(code-review)', 'Skill(verify)']);
+  assert.deepEqual(own.map((o) => o.h.if).filter(Boolean).sort(), ['Bash(git commit *)', 'PowerShell(git commit *)']);
   assert.equal(c.backups().length, 1);
   assert.deepEqual(JSON.parse(fs.readFileSync(c.config, 'utf8')), { mode: 'observe' });
 });
@@ -107,16 +107,16 @@ t('--apply twice is byte-identical, writes no second backup and says so', (c) =>
   assert.equal(fs.readFileSync(c.settings, 'utf8'), once);
   assert.equal(c.backups().length, 1);
   assert.match(r.stdout, /既に目的の状態/);
-  assert.equal(ownCount(c.read()), 5);
+  assert.equal(ownCount(c.read()), 4);
   assert.match(c.install('--check').stdout, /導入済み（最新）/);
 });
 
 t('--apply onto an empty or missing settings file works', (c) => {
   assert.equal(c.install('--apply').status, 0);
-  assert.equal(ownCount(c.read()), 5);
+  assert.equal(ownCount(c.read()), 4);
   c.put('{}\n');
   assert.equal(c.install('--apply').status, 0);
-  assert.equal(ownCount(c.read()), 5);
+  assert.equal(ownCount(c.read()), 4);
 });
 
 t('--uninstall removes only our hooks: the result equals the original settings', (c) => {
@@ -163,7 +163,7 @@ t('an outdated own hook (old install path) is replaced, not duplicated', (c) => 
   c.install('--apply');
   const raw = fs.readFileSync(c.settings, 'utf8');
   assert.equal(raw.includes('/old/place'), false);
-  assert.equal(ownCount(c.read()), 5);
+  assert.equal(ownCount(c.read()), 4);
 });
 
 t('JSON that cannot be parsed (or is not an object) is refused and left untouched', (c) => {

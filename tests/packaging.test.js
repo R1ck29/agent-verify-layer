@@ -58,9 +58,11 @@ test('hooks.json follows the hooks reference: exec form, one `if` per handler, t
       }
     }
   }
-  assert.equal(handlers, 5);
+  assert.equal(handlers, 4);
   const post = hooks.PostToolUse;
-  assert.equal(post.find((g) => g.matcher === 'Skill').hooks.length, 2);
+  const skill = post.find((g) => g.matcher === 'Skill');
+  // `if: Skill(verify)` did not match on a real 2.1.325: the Skill hook must stay `if`-free and decide in the script
+  assert.deepEqual(skill.hooks.map((h) => [h.if, h.args[2]]), [[undefined, 'skill']]);
   const bash = post.find((g) => g.matcher === 'Bash|PowerShell');
   assert.deepEqual(bash.hooks.map((h) => h.if).sort(), ['Bash(git commit *)', 'PowerShell(git commit *)']);
   // the UserPromptExpansion matcher is a regex and must cover nested and aliased names

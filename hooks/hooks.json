@@ -6,17 +6,8 @@
         "hooks": [
           {
             "type": "command",
-            "if": "Skill(verify)",
             "command": "node",
-            "args": ["${CLAUDE_PLUGIN_ROOT}/scripts/vl.js", "hook", "run", "verify"],
-            "timeout": 10,
-            "onFailure": "continue"
-          },
-          {
-            "type": "command",
-            "if": "Skill(code-review)",
-            "command": "node",
-            "args": ["${CLAUDE_PLUGIN_ROOT}/scripts/vl.js", "hook", "run", "code-review"],
+            "args": ["${CLAUDE_PLUGIN_ROOT}/scripts/vl.js", "hook", "skill"],
             "timeout": 10,
             "onFailure": "continue"
           }
