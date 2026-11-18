@@ -259,16 +259,30 @@ t('a hook in a directory that is not a git repo does nothing and exits 0', (repo
   assert.equal(r.stdout, '');
 });
 
-// Regression: the temp index is a copy of the real one. If its mtime were new, git's
-// racy-clean check would be defeated and a same-size edit made right after the last index
-// write could be missed, recording a stale tree (flaky "stale" for correctly verified work).
-t('same-size edit right after a commit is seen by the tree hash (racy-git regression)', (repo) => {
+// Regression (deterministic): the temp index is a copy of the real one. If the copy had a fresh
+// mtime, git's racy-clean check would be defeated and a same-size edit made in the same second as
+// the last index write would be missed, recording a stale tree for correctly verified work.
+// core.checkStat=minimal makes git compare whole-second mtime and size only, so the stat data can
+// be reproduced exactly with utimes; the entry is then "racy" only if the index mtime is preserved.
+t('same-size edit in the same second as the index write is seen (racy-git regression)', (repo) => {
+  repo.git('config', 'core.checkStat', 'minimal');
+  repo.git('config', 'core.trustctime', 'false');
   seed(repo);
-  for (let i = 0; i < 8; i++) {
-    repo.write('src/a.js', `v${i % 10}\n`.padEnd(4, 'x'));
-    repo.verify();
-    repo.commit(`c${i}`);
-    repo.commitHook(`git commit -m c${i}`);
-    assert.equal(repo.lastCommitRow().result, 'verified', `iteration ${i}`);
-  }
+  // Move the cached stat of a.js (and the index mtime) well into the past so the test does not
+  // depend on the wall clock: only the preserved index mtime can make the entry "racy".
+  const past = Math.floor(Date.now() / 1000) - 1000;
+  const file = path.join(repo.dir, 'src', 'a.js');
+  fs.utimesSync(file, past, past);
+  repo.git('update-index', '--refresh');
+  fs.writeFileSync(file, 'two\n'); // same size as "one\n"
+  fs.utimesSync(file, past, past); // identical stat to the cached entry
+  fs.utimesSync(path.join(repo.dir, '.git', 'index'), past, past); // entry mtime == index mtime: racy
+  repo.verify();
+  repo.git('add', 'src/a.js');
+  repo.git('commit', '-q', '-m', 'edit');
+  repo.commitHook();
+  assert.equal(repo.lastCommitRow().result, 'verified');
+  // the recorded tree really contains the edited content
+  const tree = repo.ledger().find((r) => r.kind === 'run').tree;
+  assert.equal(repo.git('show', `${tree}:src/a.js`), 'two');
 });
