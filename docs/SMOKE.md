@@ -56,3 +56,41 @@ ECC_GATEGUARD=off claude -p "In a.js change the greeting from hello to hi, then 
 4. Claude が `/verify` を呼ばずにコミットしたなら、`result: none` の commit 行ができるはずです。それは「標準の指示が守られなかった」という観察で、この層の動作としては正しい結果です。
 5. 利用者が `/verify` を打つ経路（UserPromptExpansion）は、対話セッションで `/verify` を打ってから `report` を見て、`via: user` の行ができるかを確かめる。導入先の 2.1.321 では、ここが最初の確認点になる。
 6. 結果を、この文書の末尾に追記する（過去の記録は書き換えない）。
+
+---
+
+# 追記: ログイン済みの端末での実機スモーク（2026-11-18 16:22 JST）
+
+上の記録（未ログインで失敗）のあとに、利用者が**外側のシェル（ログイン済み）**で、上の手順どおりに 1 回実行しました。生ログは `smoke-2026-11-18-haiku.jsonl`（このリポジトリの外）です。上の記録は書き換えず、この節で結果を足します。
+
+## 条件
+
+- Claude Code 2.1.325、モデルは haiku、`--plugin-dir <このリポジトリ>`、`--include-hook-events`
+- 対象: `/tmp/vl-smoke`（`verify` スキル入りの使い捨てリポジトリ）
+- 外側のシェルで実行した理由: Claude の Bash ツールから起動した入れ子の `claude -p` には、認証が引き継がれない（上の「未ログイン」はこれが原因）
+
+## 結果
+
+- 良い点
+  - Claude は標準の指示どおり `Skill(verify)` を呼んでから、コミットした
+  - `if: "Bash(git commit *)"` の PostToolUse hook が発火し、台帳に commit 行が書かれた（hook は 14 ms）
+  - `report` の `git log` との突き合わせは 100%
+- **不具合**: `Skill(verify)` の PostToolUse で、この層の hook が起動しなかった
+  - `PostToolUse:Skill` の `hook_started` は 2 件だけで、どちらも ECC の hook だった。台帳に run 行がない
+  - そのため commit 行は `result: none`、`session_verify: false` になった
+  - 同じ入力を手で `vl.js hook run verify` に渡すと、run 行は正しく書かれた。つまり原因はスクリプトではなく、**`if: "Skill(verify)"` が 2.1.325 の実機で当たっていないこと**
+
+## 対処
+
+- Skill 側は `if` に頼らない。`matcher: "Skill"` の hook を 1 本（`vl.js hook skill`）にし、スクリプト側で `tool_input.skill` を見て判定する
+  - `verify` と入れ子の名前（`apps/web:verify`）は verify、`code-review` と別名 `review` は code-review として記録する
+  - それ以外のスキルでは何も出力せず、台帳にも書かずに、すぐ終了する
+- インストーラの settings マージ版も、同じ 1 本になる（`hooks/hooks.json` から作るため）。古い `hook run verify|code-review` の登録は、再度 `--apply` すると置き換わる
+- `if: "Bash(git commit *)"` は実機で当たったので残す。スクリプト側の HEAD 確認も変えていない
+- テストを追加した（Skill hook が verify・入れ子の verify・`review`・`code-review` を記録し、ほかのスキルは無視すること。`hooks.json` の Skill hook に `if` が付かないこと）。実機ログと同じ形の入力（`tool_input.skill: "verify"`）を `hook skill` に渡して、run 行が書かれることも確かめた
+
+## 実機での確認状況
+
+- 確認できた: Skill の記録以外の配線（`Bash(git commit *)` の `if`、commit 行の書き込み、`report` の突き合わせ）と、標準の指示が守られたこと
+- 修正後の実機での再確認は**まだ**。ログイン済みの端末で、上の手順を 1 回やり直し、run 行（`via: model`）ができて、commit 行が `verified` になるかを見る
+- 引き続き未確認: `UserPromptExpansion`（利用者が打った `/verify`）、`PowerShell` の `if`

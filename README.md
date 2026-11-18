@@ -24,12 +24,13 @@ Claude Code の「コミット前の検証」を**測る**ための、観察だ�
 ## 仕組み
 
 ```
-利用者 / Claude ──/verify──▶ PostToolUse(Skill) または UserPromptExpansion ──▶ vl.js hook run|expand
+利用者 / Claude ──/verify──▶ PostToolUse(Skill) または UserPromptExpansion ──▶ vl.js hook skill|expand
                                    └─ 作業ツリーのハッシュ（一時インデックス）を記録 ＋ チェックリスト照合
 Claude ──git commit──▶ PostToolUse(Bash|PowerShell, if: git commit *) ──▶ vl.js hook commit
                                    └─ HEAD を直近の verify の記録と比べて 1 行追記
 ```
 
+- Skill の hook に `if` は付けません（実機の 2.1.325 で `if: "Skill(verify)"` が当たらなかったため。`docs/SMOKE.md`）。`matcher: "Skill"` の 1 本が全スキルの呼び出しで起動し、スクリプト側で `verify`（入れ子の `apps/web:verify` も）と `code-review`（別名 `review`）だけを記録して、ほかは何もせず終了します。Bash の `if` は実機で当たりました。
 - 観察は **PostToolUse だけ**で行います。PreToolUse には載せません（ECC の gateguard などと並列に走って、拒否されたコミットの行が残るのを避けるため）。
 - ツリーのハッシュは、本物の index を一時ファイルにコピーして `git add -A` → `git write-tree` で求めます（本物の index と `index.lock` には触れません）。
 - 判定は、**コミットに含まれるファイル**について、直近の verify 開始時のツリーと HEAD の差を見ます。

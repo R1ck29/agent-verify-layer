@@ -2,6 +2,12 @@
 
 形式は [Keep a Changelog](https://keepachangelog.com/ja/1.1.0/) に沿います。版は [SemVer](https://semver.org/lang/ja/) です。
 
+## [Unreleased]
+
+### 修正
+
+- 実機の Claude Code 2.1.325 で、`if: "Skill(verify)"` の PostToolUse hook が起動せず、run 行が台帳に書かれなかった（commit 行が `none` になる）。Skill の hook を `if` なしの `matcher: "Skill"` 1 本（`vl.js hook skill`）にし、スクリプト側で `tool_input.skill` から verify / 入れ子の verify / code-review（別名 `review`）を判定して記録し、ほかのスキルでは何もせず終了するようにした。`hook run <verify|code-review>` は `hook skill` に置き換わった（`install.js --apply` で入れ直すと古い登録は置き換わる）。Bash の `if` は実機で当たったので変更なし。詳細は `docs/SMOKE.md`
+
 ## [0.1.0] - 2026-11-18
 
 観察モードだけの初版。仕様は `docs/REVIEW-NOTES.md` 第 5 節「調整済み計画」です（設計書 `docs/DESIGN-source.md` と食い違う点はレビューノートを優先）。
