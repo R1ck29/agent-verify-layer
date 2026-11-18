@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """模擬の claude CLI（モデルを呼ばない）。`run-eval.sh dry` が、AHE の実行の流れ全体（fixture の複製・install・採点・台帳）を確かめるために使う。
 
-本物の代わりに、依頼の文面から対象のタスクを見分け、eval/reference/<task>/<variant>/ の参照解を作業ツリーに当てて、git にコミットする。
+本物の代わりに、依頼の文面から対象のタスクを見分け、eval/reference/<task>/<variant>/（E1b は eval/reference-e1b/）の参照解を作業ツリーに当てて、git にコミットする。
 プロファイルの settings.json に hook があれば、本物の Claude Code と同じ入力（stdin の JSON）で、その hook を実際に実行する。
 環境変数: FAKE_VARIANT = fixed（既定）| buggy | none、FAKE_VERIFY = 1 なら Skill(verify) を Edit の後・コミットの前に呼ぶ。
 """
@@ -25,6 +25,15 @@ KEYS = {
 }
 prompt = sys.stdin.read()
 task = next((t for k, t in KEYS.items() if k in prompt), None)
+REF = EVAL / "reference"
+if task is None:  # E1b: タスク YAML（tasks-e1b/）の依頼文と突き合わせる（AHE の Python には PyYAML がある）
+    import yaml
+
+    for y in sorted((EVAL / "tasks-e1b").glob("*.yaml")):
+        d = yaml.safe_load(y.read_text(encoding="utf-8"))
+        if str(d.get("prompt", "")).strip() and str(d["prompt"]).strip() in prompt:
+            task, REF = d["id"], EVAL / "reference-e1b"
+            break
 variant = os.environ.get("FAKE_VARIANT", "fixed")
 cwd = Path.cwd()
 events = []
@@ -62,9 +71,9 @@ def run_hooks(matcher_tool, hook_input):
 emit({"type": "system", "subtype": "init", "claude_code_version": "9.9.9", "model": "fake", "skills": ["verify"], "plugins": []})
 base = {"session_id": "fake-session", "cwd": str(cwd)}
 if task and variant != "none":
-    src = EVAL / "reference" / task / variant
+    src = REF / task / variant
     if not src.is_dir():
-        src = EVAL / "reference" / task / "fixed"
+        src = REF / task / "fixed"
     for f in sorted(p for p in src.rglob("*") if p.is_file()):
         dest = cwd / f.relative_to(src)
         dest.parent.mkdir(parents=True, exist_ok=True)

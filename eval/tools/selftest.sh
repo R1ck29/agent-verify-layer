@@ -3,6 +3,7 @@
 #   1. 隠しテスト: 変更なし=落ちる、不具合入り（罠）=落ちる、修正済み=通る
 #   2. チェックリスト: 罠の diff（不具合入り・修正済みとも）で狙いの項目が発火し、対照の diff では何も発火しない
 #   3. 4 つの fixture のチェックリストが同じ内容で、P1 の CLAUDE.md が checklist.json と一致している
+#   4. E1b（tools/selftest-e1b.sh）
 # 使い方: tools/selftest.sh   （終了コード 0 = すべて期待どおり）
 set -u
 here="$(cd "$(dirname "$0")/.." && pwd)"
@@ -68,5 +69,7 @@ ahepy="$ahe/.venv/bin/python"; [ -x "$ahepy" ] || ahepy="$py"
 ic="$(PYTHONPATH="$ahe" "$ahepy" "$here/tools/install-check.py" 2>&1)" && ok "install-check（3 プロファイルすべて期待どおり）" || { echo "$ic" | grep -E "FAIL|Error|install-check"; bad "install-check"; }
 echo "== 認証情報らしい文字列が eval/ にない"
 if grep -rEq "sk-ant-|oat01|CLAUDE_CODE_OAUTH_TOKEN=[^ ]" "$here" --exclude=selftest.sh --exclude=README.md --exclude=run-eval.sh --exclude-dir=.harness-eval-cache; then bad "認証情報らしい文字列がある"; else ok "なし（名前の inherit_env だけ）"; fi
+echo "== E1b（tools/selftest-e1b.sh）"
+"$here/tools/selftest-e1b.sh" || bad "selftest-e1b"
 [ $fail -eq 0 ] && echo "selftest: すべて期待どおり" || echo "selftest: 失敗あり"
 exit $fail
