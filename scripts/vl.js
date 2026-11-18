@@ -1,7 +1,8 @@
 #!/usr/bin/env node
 'use strict';
 // agent-verify-layer entry point (Node 18+, standard library only).
-//   vl.js hook skill | hook commit | hook expand   (Claude Code hooks; never block work)
+//   vl.js hook skill | hook commit | hook expand [--agent claude|codex]   (hooks; never block work)
+//   vl.js mark verify [--agent claude|codex] [--repo DIR]   (run after the verify checks passed)
 //   vl.js report [--json] [--days N] [--repo DIR]
 //   vl.js doctor [--json] [--repo DIR]
 const { readStdin, parseJsonObject, shortError } = require('./lib/io');
@@ -15,13 +16,15 @@ async function runHook(args) {
       process.stderr.write(`[verify-layer] ${shortError(e)}\n`);
       process.exit(0);
     });
-    const [sub] = args;
+    const [sub, ...rest] = args;
+    const i = rest.indexOf('--agent');
+    const opts = { agent: i >= 0 ? rest[i + 1] : undefined };
     const input = parseJsonObject(await readStdin());
     const hooks = require('./lib/hooks');
     let out = null;
-    if (sub === 'skill') out = hooks.handleSkill(input);
-    else if (sub === 'commit') out = hooks.handleCommit(input);
-    else if (sub === 'expand') out = hooks.handleExpand(input);
+    if (sub === 'skill') out = hooks.handleSkill(input, opts);
+    else if (sub === 'commit') out = hooks.handleCommit(input, opts);
+    else if (sub === 'expand') out = hooks.handleExpand(input, opts);
     else process.stderr.write(`[verify-layer] ${HOOK_USAGE}\n`);
     if (out) process.stdout.write(JSON.stringify(out));
   } catch (e) {
@@ -40,6 +43,7 @@ function parseFlags(args) {
       if (!(flags.days > 0)) flags.bad = '--days には正の数を指定してください';
     }
     else if (a === '--repo') flags.repo = args[++i];
+    else if (a === '--agent') flags.agent = args[++i];
     else flags._.push(a);
   }
   return flags;
@@ -58,11 +62,15 @@ async function main(argv) {
     process.exitCode = require('./lib/report').run(flags);
     return;
   }
+  if (cmd === 'mark') {
+    process.exitCode = require('./lib/mark').run(parseFlags(rest));
+    return;
+  }
   if (cmd === 'doctor') {
     process.exitCode = require('./lib/doctor').run(parseFlags(rest));
     return;
   }
-  process.stderr.write('usage: vl.js <hook|report|doctor> ...\n');
+  process.stderr.write('usage: vl.js <hook|mark|report|doctor> ...\n');
   process.exitCode = cmd ? 2 : 0;
 }
 

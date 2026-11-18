@@ -21,6 +21,9 @@ const DEFAULTS = Object.freeze({
   mode: 'observe',
   skipGlobs: DEFAULT_SKIP_GLOBS,
   timeoutMs: 8000,
+  // Add one line to the verify context telling the agent to run `vl.js mark verify` once the
+  // checks pass (records the tree at check time; see lib/mark.js). false turns the line off.
+  markHint: true,
 });
 
 function claudeDir() {
@@ -51,6 +54,7 @@ function loadConfig() {
     cfg.skipGlobs = raw.skipGlobs;
   }
   if (Number.isFinite(raw.timeoutMs) && raw.timeoutMs > 0) cfg.timeoutMs = raw.timeoutMs;
+  if (typeof raw.markHint === 'boolean') cfg.markHint = raw.markHint;
   return cfg;
 }
 

@@ -114,7 +114,7 @@ test('report.summarize: counts, rates, percentiles and git-log reconciliation', 
   assert.equal(s.verified_rate_pct, 50); // 2 of 4 judged (skipped excluded)
   assert.equal(s.session_verify_rate_pct, 50);
   assert.equal(s.session_code_review_rate_pct, 25);
-  assert.deepEqual(s.runs, { verify: 3, verify_via_model: 2, verify_via_user: 1, code_review: 1 });
+  assert.deepEqual(s.runs, { verify: 3, verify_via_model: 2, verify_via_user: 1, verify_marked: 0, code_review: 1 });
   assert.deepEqual(s.stale_files, { median: 3, max: 3 });
   assert.equal(s.self_check_change_commits, 1);
   assert.deepEqual(s.checklist_fired, { x: 2, y: 1 });

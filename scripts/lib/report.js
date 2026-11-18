@@ -18,11 +18,19 @@ function summarize(rows, logShas) {
   const results = { verified: 0, stale: 0, none: 0, skipped: 0 };
   for (const c of commits) if (c.result in results) results[c.result]++;
   const judged = results.verified + results.stale + results.none; // skipped is outside the instruction
-  const verifyRuns = runs.filter((r) => r.skill === 'verify');
+  // mark rows (`via: "mark"`) record when the checks passed; they are not extra verify starts.
+  const allVerify = runs.filter((r) => r.skill === 'verify');
+  const verifyRuns = allVerify.filter((r) => r.via !== 'mark');
+  const marks = allVerify.filter((r) => r.via === 'mark');
+  const agents = {};
+  for (const c of commits) {
+    const a = c.agent || 'claude'; // rows before the agent field were all Claude Code
+    agents[a] = (agents[a] || 0) + 1;
+  }
 
   const staleSizes = commits.filter((c) => c.result === 'stale' && Number.isFinite(c.stale_files)).map((c) => c.stale_files);
   const fired = {};
-  for (const r of verifyRuns) for (const id of r.fired || []) fired[id] = (fired[id] || 0) + 1;
+  for (const r of allVerify) for (const id of r.fired || []) fired[id] = (fired[id] || 0) + 1;
   const ms = rows.filter((r) => Number.isFinite(r.ms)).map((r) => r.ms);
 
   const recorded = new Set(commits.map((c) => c.sha));
@@ -32,6 +40,8 @@ function summarize(rows, logShas) {
 
   return {
     commits: { total: commits.length, ...results },
+    commits_by_agent: agents,
+    verified_by_mark: commits.filter((c) => c.result === 'verified' && c.basis === 'mark').length,
     verified_rate_pct: pct(results.verified, judged),
     session_verify_rate_pct: pct(commits.filter((c) => c.session_verify && c.result !== 'skipped').length, judged),
     session_code_review_rate_pct: pct(commits.filter((c) => c.session_code_review && c.result !== 'skipped').length, judged),
@@ -39,6 +49,7 @@ function summarize(rows, logShas) {
       verify: verifyRuns.length,
       verify_via_model: verifyRuns.filter((r) => r.via === 'model').length,
       verify_via_user: verifyRuns.filter((r) => r.via === 'user').length,
+      verify_marked: marks.length,
       code_review: runs.filter((r) => r.skill === 'code-review').length,
     },
     stale_files: { median: percentile(staleSizes, 0.5), max: staleSizes.length ? Math.max(...staleSizes) : null },
@@ -67,7 +78,10 @@ function formatText(s, meta) {
   L.push(`  同じセッションで verify があった率: ${s.session_verify_rate_pct ?? '-'}% / code-review があった率: ${s.session_code_review_rate_pct ?? '-'}%`);
   L.push(`  stale の大きさ（コミット内の差のあるファイル数）: 中央値 ${s.stale_files.median ?? '-'} / 最大 ${s.stale_files.max ?? '-'}`);
   L.push(`  チェック自体を触ったコミット: ${s.self_check_change_commits} 件`);
-  L.push(`verify の実行: ${s.runs.verify} 回（Claude 経由 ${s.runs.verify_via_model} / 利用者 ${s.runs.verify_via_user}）、code-review: ${s.runs.code_review} 回`);
+  const byAgent = Object.entries(s.commits_by_agent);
+  if (byAgent.length > 1 || (byAgent.length === 1 && byAgent[0][0] !== 'claude')) L.push(`  エージェント別: ${byAgent.map(([k, v]) => `${k} ${v}`).join(' / ')}`);
+  L.push(`  verified のうち、確認後の mark で判定したもの: ${s.verified_by_mark} 件`);
+  L.push(`verify の実行: ${s.runs.verify} 回（モデル経由 ${s.runs.verify_via_model} / 利用者 ${s.runs.verify_via_user}）、確認後の mark: ${s.runs.verify_marked} 回、code-review: ${s.runs.code_review} 回`);
   const ids = Object.entries(s.checklist_fired).sort((a, b) => b[1] - a[1]);
   L.push(`チェックリスト項目の発火: ${ids.length ? ids.map(([k, v]) => `${k}×${v}`).join(', ') : 'なし'}${s.checklist_warnings ? `（不正な項目・正規表現の警告 ${s.checklist_warnings} 件）` : ''}`);
   L.push(`hook の所要時間(ms): p50 ${s.hook_ms.p50 ?? '-'} / p95 ${s.hook_ms.p95 ?? '-'} / 最大 ${s.hook_ms.max ?? '-'}`);

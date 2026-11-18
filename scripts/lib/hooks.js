@@ -7,6 +7,10 @@ const checklist = require('./checklist');
 const { matchAny } = require('./glob');
 
 const RECENT_COMMIT_S = 300;
+const VL_PATH = require('node:path').resolve(__dirname, '..', 'vl.js');
+const AGENTS = ['claude', 'codex'];
+// Codex hooks have no `if`, so the commit hook sees every shell command: cheap pre-filter.
+const COMMIT_RE = /\bgit\b[\s\S]*\bcommit\b/;
 
 const now = () => Date.now() / 1000;
 
@@ -26,17 +30,30 @@ function str(v) {
   return typeof v === 'string' && v ? v : undefined;
 }
 
-// A verify / code-review run was started (by Claude via the Skill tool, or typed by the user).
-// Records the working-tree hash at that moment; for verify, also hands back the checklist items
-// that match the current diff. Returns a hook JSON object or null.
-function handleRun(kind, input, via, event) {
+// Explicit --agent wins; otherwise `turn_id` (a Codex-only input field) means Codex.
+// Environment variables are not used: Codex also sets CLAUDE_PLUGIN_ROOT for plugin hooks.
+function resolveAgent(flag, input) {
+  if (AGENTS.includes(flag)) return flag;
+  return input && str(input.turn_id) ? 'codex' : 'claude';
+}
+
+// The command an agent runs once its checks pass (see lib/mark.js).
+function markCommand(agent) {
+  return `node "${VL_PATH}" mark verify --agent ${agent}`;
+}
+
+function markHint(agent) {
+  return `[verify-layer] verify の確認がすべて通ったら、コミットの前に次を実行して、確認した時点の状態を記録してください（記録だけで、作業は止めません。そのあとファイルを変えたら、確認と記録をやり直してください）: ${markCommand(agent)}`;
+}
+
+// Records one verify / code-review run with the working-tree hash at this moment and, for verify,
+// the HEAD-side checklist items that match the current diff. Shared by the hooks and `mark`.
+// Returns { hits, selfCheck } (the caller decides what to show), or null outside a repo.
+function recordRun(kind, cwd, { via, agent, session, cfg }) {
   const t0 = now();
-  const cfg = loadConfig();
-  if (cfg.mode === 'off') return null;
-  const cwd = str(input.cwd) || process.cwd();
-  const root = git.repoRoot(cwd, { timeout: cfg.timeoutMs });
-  if (!root) return null;
   const opts = { timeout: cfg.timeoutMs };
+  const root = git.repoRoot(cwd, opts);
+  if (!root) return null;
 
   const tree = git.treeHash(root, opts);
   const changes = checklist.collectChanges(root, opts);
@@ -50,41 +67,66 @@ function handleRun(kind, input, via, event) {
     hits = checklist.matchItems(cl.items, changes, root);
   }
 
-  ledger.append(root, {
+  const written = ledger.append(root, {
     kind: 'run',
     ts: t0,
     skill: kind,
     via,
+    agent,
     tree,
-    session: str(input.session_id),
+    session,
     fired: hits.map((h) => h.item.id),
     self_check_change: selfCheck,
     ...(warnings ? { checklist_warnings: warnings } : {}),
     ms: Math.round((now() - t0) * 1000),
   });
-  return context(event, kind === 'verify' ? checklist.formatContext(hits, selfCheck) : '');
+  return { root, tree, hits, selfCheck, written };
+}
+
+// A verify / code-review run was started (by Claude via the Skill tool, or typed by the user).
+function handleRun(kind, input, via, event, agent) {
+  const cfg = loadConfig();
+  if (cfg.mode === 'off') return null;
+  const r = recordRun(kind, str(input.cwd) || process.cwd(), { via, agent, session: str(input.session_id), cfg });
+  if (!r || kind !== 'verify') return null;
+  const text = [checklist.formatContext(r.hits, r.selfCheck), cfg.markHint ? markHint(agent) : ''].filter(Boolean).join('\n');
+  return context(event, text);
 }
 
 // PostToolUse(Skill). The hook has no `if` (`Skill(verify)` did not match on a real Claude Code
 // 2.1.325), so every Skill call lands here: decide from tool_input.skill, and exit at once for
 // anything that is not verify / code-review (including nested `apps/web:verify`).
-function handleSkill(input) {
+function handleSkill(input, { agent } = {}) {
   const ti = input.tool_input && typeof input.tool_input === 'object' ? input.tool_input : {};
   const kind = kindFromName(str(ti.skill) || str(ti.name));
-  return kind ? handleRun(kind, input, 'model', 'PostToolUse') : null;
+  return kind ? handleRun(kind, input, 'model', 'PostToolUse', resolveAgent(agent, input)) : null;
 }
 
 // UserPromptExpansion: the user typed /verify, /code-review or /review. `prompt` and
 // `command_args` are never read, let alone stored.
-function handleExpand(input) {
+function handleExpand(input, { agent } = {}) {
   const kind = kindFromName(input.command_name);
   if (!kind) return null;
-  return handleRun(kind, input, 'user', 'UserPromptExpansion');
+  return handleRun(kind, input, 'user', 'UserPromptExpansion', resolveAgent(agent, input));
+}
+
+// Shell command text from a PostToolUse input. Claude and Codex both send tool_input.command as a
+// string; an array or `cmd` is accepted defensively (unified exec shapes are not documented).
+function commandText(input) {
+  const ti = input.tool_input && typeof input.tool_input === 'object' ? input.tool_input : {};
+  const c = ti.command !== undefined ? ti.command : ti.cmd;
+  if (typeof c === 'string') return c;
+  if (Array.isArray(c) && c.every((x) => typeof x === 'string')) return c.join(' ');
+  return undefined;
 }
 
 // PostToolUse for a successful `git commit`: judge HEAD and append one ledger row.
-function handleCommit(input) {
+function handleCommit(input, { agent: agentFlag } = {}) {
   const t0 = now();
+  const agent = resolveAgent(agentFlag, input);
+  const command = commandText(input);
+  // Claude filters with `if: Bash(git commit *)`; Codex has no `if`, so filter here (a few ms).
+  if (agent === 'codex' && !(typeof command === 'string' && COMMIT_RE.test(command))) return null;
   const cfg = loadConfig();
   if (cfg.mode === 'off') return null;
   const cwd = str(input.cwd) || process.cwd();
@@ -100,7 +142,6 @@ function handleCommit(input) {
   if (head.time !== null && now() - head.time > RECENT_COMMIT_S) return null;
 
   const paths = git.commitPaths(root, head, opts) || [];
-  const command = input.tool_input && input.tool_input.command;
   // Quoted text (commit messages) is stripped first so `-m "about --amend"` is not an amend.
   const amend =
     typeof command === 'string' && /(^|\s)--amend(\s|=|$)/.test(command.replace(/'[^']*'|"[^"]*"/g, ' '));
@@ -123,7 +164,9 @@ function handleCommit(input) {
     ts: t0,
     sha: head.sha,
     mode: cfg.mode,
+    agent,
     result: verdict.result,
+    basis: run ? run.via || null : null,
     stale_files: verdict.stale_files,
     since_run_s: run ? Math.round(t0 - run.ts) : null,
     session_verify: sessionRan('verify'),
@@ -137,4 +180,4 @@ function handleCommit(input) {
   return selfCheck ? context('PostToolUse', checklist.formatContext([], true)) : null;
 }
 
-module.exports = { kindFromName, handleSkill, handleExpand, handleCommit };
+module.exports = { kindFromName, resolveAgent, markCommand, recordRun, commandText, handleSkill, handleExpand, handleCommit, COMMIT_RE };

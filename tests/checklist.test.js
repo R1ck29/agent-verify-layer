@@ -32,6 +32,14 @@ function seedWithChecklist(repo, items = [ITEM]) {
 
 const context = (r) => r.json && r.json.hookSpecificOutput && r.json.hookSpecificOutput.additionalContext;
 
+// With no matching item, a verify run only carries the one-line `mark verify` hint (markHint).
+function onlyMarkHint(r) {
+  const text = context(r);
+  assert.equal(typeof text, 'string');
+  assert.equal(text.split('\n').length, 1, text);
+  assert.match(text, /mark verify --agent claude$/);
+}
+
 t('a matching item is handed to Claude as additionalContext (PostToolUse shape)', (repo) => {
   seedWithChecklist(repo);
   repo.write('src/hooks/h.js', 'ok();\nconsole.error("note");\n');
@@ -56,13 +64,13 @@ t('UserPromptExpansion for /verify gets the same context with its own event name
   assert.match(context(r), /stderr-notice/);
 });
 
-t('no match -> no output at all', (repo) => {
+t('no match -> no checklist output (only the mark hint)', (repo) => {
   seedWithChecklist(repo);
   repo.write('src/hooks/h.js', 'ok();\nconsole.log("fine");\n'); // path matches, pattern does not
   const r = repo.verify();
-  assert.equal(r.stdout, '');
+  onlyMarkHint(r);
   repo.write('other.js', 'console.error(1)\n'); // pattern matches, path does not
-  assert.equal(repo.verify().stdout, '');
+  onlyMarkHint(repo.verify());
 });
 
 t('pattern is applied to added lines only, not removed ones', (repo) => {
@@ -70,7 +78,7 @@ t('pattern is applied to added lines only, not removed ones', (repo) => {
   repo.write('src/hooks/h.js', 'console.error("old");\nkeep();\n');
   repo.commit('init');
   repo.write('src/hooks/h.js', 'keep();\n'); // the console.error line is removed
-  assert.equal(repo.verify().stdout, '');
+  onlyMarkHint(repo.verify());
 });
 
 t('the checklist is read from HEAD: working-tree edits have no effect', (repo) => {
@@ -121,7 +129,7 @@ t('missing checklist: silent, no warning rows', (repo) => {
   repo.write('src/a.js', 'y\n');
   const r = repo.verify();
   assert.equal(r.status, 0);
-  assert.equal(r.stdout, '');
+  onlyMarkHint(r);
   assert.equal(repo.ledger().find((x) => x.kind === 'run').checklist_warnings, undefined);
 });
 
@@ -132,7 +140,7 @@ t('broken checklist JSON / invalid regex / malformed items: nothing emitted for 
   repo.write('src/hooks/h.js', 'console.error(1)\n');
   let r = repo.verify();
   assert.equal(r.status, 0);
-  assert.equal(r.stdout, '');
+  onlyMarkHint(r);
   assert.equal(repo.ledger().pop().checklist_warnings, 1);
 
   repo.write('.claude/verification/checklist.json', JSON.stringify({
@@ -159,7 +167,7 @@ t('broken checklist JSON / invalid regex / malformed items: nothing emitted for 
 t('untracked files are matched by their content; non-matching content does not fire', (repo) => {
   seedWithChecklist(repo);
   repo.write('src/hooks/new.js', 'fine();\n');
-  assert.equal(repo.verify().stdout, '');
+  onlyMarkHint(repo.verify());
   repo.write('src/hooks/new.js', 'console.error("x");\n');
   assert.match(context(repo.verify()), /stderr-notice/);
 });

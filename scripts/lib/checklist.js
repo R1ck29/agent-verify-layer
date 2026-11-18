@@ -18,6 +18,13 @@ const SELF_CHECK_GLOBS = [
   'hooks/**',
   '**/.claude/skills/verify/**',
   '.claude/skills/verify/**',
+  // Codex: the same checks live in AGENTS.md, the repo verify skill and project hooks.
+  '**/AGENTS.md',
+  '**/AGENTS.override.md',
+  '**/.agents/skills/verify/**',
+  '.agents/skills/verify/**',
+  '.codex/hooks.json',
+  '.codex/config.toml',
 ];
 
 const MAX_ITEMS = 10;
@@ -161,10 +168,11 @@ function matchItems(items, changes, root) {
 }
 
 // Text handed to Claude as additionalContext. Empty string when there is nothing to say.
-function formatContext(hits, selfCheck) {
+// `when` says where the agent should check the items: inside verify (hook) or before committing (mark).
+function formatContext(hits, selfCheck, when = 'verify の中で') {
   const lines = [];
   if (hits.length) {
-    lines.push('[verify-layer] 次の確認項目が今回の変更に当たりました（HEAD 側の .claude/verification/checklist.json 由来）。verify の中で確認してください。');
+    lines.push(`[verify-layer] 次の確認項目が今回の変更に当たりました（HEAD 側の .claude/verification/checklist.json 由来）。${when}確認してください。`);
     for (const { item, files } of hits) {
       const shown = files.slice(0, 3).join(', ') + (files.length > 3 ? ` ほか${files.length - 3}件` : '');
       const parts = [`- [${item.id}] ${item.check}`, `  理由: ${item.why}`];
@@ -174,7 +182,7 @@ function formatContext(hits, selfCheck) {
     }
   }
   if (selfCheck) {
-    lines.push('[verify-layer] 警告: この変更はチェック自体（チェックリスト、CLAUDE.md、hooks、設定、.claude/skills/verify/）を触っています。判定の基準を変える変更なので、利用者に内容を見せて確認を求めてください。');
+    lines.push('[verify-layer] 警告: この変更はチェック自体（チェックリスト、CLAUDE.md・AGENTS.md、hooks、設定、verify スキル）を触っています。判定の基準を変える変更なので、利用者に内容を見せて確認を求めてください。');
   }
   const text = lines.join('\n');
   return text.length > MAX_CONTEXT_CHARS ? text.slice(0, MAX_CONTEXT_CHARS) + '\n…（省略）' : text;
