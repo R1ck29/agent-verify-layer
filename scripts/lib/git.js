@@ -69,6 +69,12 @@ function treeHash(cwd, opts) {
     if (idx) {
       try {
         fs.copyFileSync(idx, tmp);
+        // Keep the original index mtime (minus 2 us): git decides "racily clean" entries by
+        // comparing file mtimes with the index mtime. A fresh mtime on the copy would make a
+        // file edited right after the last index write look unchanged and give a stale tree.
+        const st = fs.statSync(idx, { bigint: true });
+        const sec = Number(st.mtimeNs / 1000n) / 1e6 - 0.000002;
+        fs.utimesSync(tmp, sec, sec);
       } catch {
         /* no index yet: start from an empty one */
       }
