@@ -63,7 +63,7 @@ export CLAUDE_CODE_OAUTH_TOKEN="<トークン>"
 - 隠しテスト（`checks/`）と参照解（`reference/`）は、エージェントの作業ツリーの外にあるが、同じ端末のファイルシステム上にはある。エージェントが探せば見える。試行のトランスクリプトに、`checks/` や `reference/` を読んだ形跡があれば、その試行は無効として扱う（集計のときに `grep` で確かめる）
 - 隠しテストは Linux で確かめた（ASCII の locale は `LC_ALL=C PYTHONUTF8=0 PYTHONCOERCECLOCALE=0`、FIFO は `os.mkfifo`）。macOS・Windows では未確認
 - P2 の hook は、この checkout の `scripts/vl.js` を絶対パスで呼ぶ。checkout の場所を動かしたら、再実行する（install は試行ごとに行われる）
-- 数値の読み方・判定基準・限界は RESULTS.md
+- 数値の読み方・判定基準・限界・結果は RESULTS.md。集計は `python3 -I tools/aggregate.py ../../eval-out/full/<run> --json results/e1-full-aggregate.json`
 
 ## E2（レビュアーの再現率）を今回やらない理由
 
@@ -83,7 +83,8 @@ profiles/              P0・P1・P2 の YAML、common/seed-git.sh（共通の準
 fixtures/<4 つ>/       エージェントに見える作業ツリー（チェックリストと verify スキル入り）
 checks/                隠しテストと補助グレーダー（エージェントには見えない）
 reference/<task>/      隠しテストの検証用の参照解（不具合入り・修正済み）
-tools/                 selftest.sh、install-check.py、fired.sh、gen-static-rules.py、fake_claude.py（dry 用）
+tools/                 selftest.sh、install-check.py、fired.sh、gen-static-rules.py、fake_claude.py（dry 用）、aggregate.py（結果の集計）
+results/               full の集計の値（e1-full-aggregate.json）
 CASES.md               正解キーの出どころ・限界
 RESULTS.md             判定基準（事前固定）・結果・次の版
 ```

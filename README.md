@@ -101,7 +101,7 @@ Claude ──git commit──▶ PostToolUse(Bash|PowerShell, if: git commit *) 
 
 ## 評価結果
 
-評価 E1（縮小版: 実際のバグ由来の罠 4 件 ＋ 対照 4 件 × 3 プロファイル）の一式は [eval/](eval/README.md) にあります。**状態: 未実施**（準備と、モデルを呼ばない範囲の確認だけが済んでいる）。判定基準は結果を見る前に [eval/RESULTS.md](eval/RESULTS.md) に固定してあり、結果が出たらそこと、この欄に書きます。E2（レビュアーの再現率）は今回やりません（理由は eval/README.md）。実機スモークの記録は [docs/SMOKE.md](docs/SMOKE.md)。
+評価 E1（縮小版: 実際のバグ由来の罠 4 件 ＋ 対照 4 件 × 3 プロファイル × 2 回 = 48 試行、sonnet）の一式は [eval/](eval/README.md) にあります。**結果（2026-11-18）: 判定不能**。P0（層なし）が罠 8/8 で天井だったため、層の効果を測れていません。隠しテストの合格は、罠が P0 8/8・P1（CLAUDE.md にルール）8/8・P2（この層）6/8、対照はどれも 8/8。P2 の不合格 2 件は `trap-drift-scope`（2 回とも verify を呼ばず直接実行）。台帳は 16 コミットすべてを拾い、結果の合致は 13/16（偽の stale 2）でした。この評価は、有用とも有用でないとも言えません。判定基準は結果を見る前に固定してあり、数値・限界・次の版は [eval/RESULTS.md](eval/RESULTS.md)、集計は `eval/tools/aggregate.py`。E2（レビュアーの再現率）は今回やりません（理由は eval/README.md）。実機スモークの記録は [docs/SMOKE.md](docs/SMOKE.md)。
 
 実機スモークの現状（[docs/SMOKE.md](docs/SMOKE.md)）: 開発環境の `claude` が未ログインでモデルを呼べず、**台帳に行が出るかの実機確認は未実施**です。プラグインの読み込みと hook の認識（`plugin details`、`plugin validate`）だけを実機で確かめました。ログイン済みの端末での確認手順を同じ文書に載せています。
 
