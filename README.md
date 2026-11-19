@@ -1,8 +1,8 @@
 # agent-verify-layer
 
-（旧名 claude-verify-layer。2026-11-18 に Codex 対応を見据えて改名。Claude Code のプラグイン名 `verify-layer` は変えていません。Codex 対応の計画は [docs/CODEX-SUPPORT-PLAN.md](docs/CODEX-SUPPORT-PLAN.md)）
+（旧名 claude-verify-layer。2026-11-18 に Codex 対応を見据えて改名。Claude Code のプラグイン名 `verify-layer` は変えていません。Codex 対応の計画とレビューは [docs/CODEX-SUPPORT-PLAN.md](docs/CODEX-SUPPORT-PLAN.md)）
 
-Claude Code の「コミット前の検証」を**測る**ための、観察だけの層です（v0.1.0）。
+Claude Code と Codex CLI の「コミット前の検証」を**測る**ための、観察だけの層です（v0.1.0。Codex は 0.170 の文書に基づく対応で、実機の確認はこれから。下の「Codex」）。
 
 - verify（と code-review）が実行されたか、そのあとのコミットが**検証した状態のままか**を、各リポジトリの `.git/claude-verify/ledger.jsonl` に記録する
 - HEAD にコミット済みの `.claude/verification/checklist.json` を今回の diff に照合し、当たった項目だけを verify の開始時に Claude へ渡す
@@ -10,7 +10,7 @@ Claude Code の「コミット前の検証」を**測る**ための、観察だ�
 
 作業は一切止めません（観察モード）。モデルも呼ばないので、常時かかる費用はありません。依存は Node 18 以上の標準機能と git だけです（npm の依存なし）。private のため LICENSE は付けていません。
 
-導入は [INSTALL_FOR_CLAUDE.md](INSTALL_FOR_CLAUDE.md) を、導入先の Claude Code に読ませてください（検出 → 承認 → 導入 → 確認 → 削除の順で進みます）。設計の経緯は [docs/DESIGN-source.md](docs/DESIGN-source.md)（原本）と [docs/REVIEW-NOTES.md](docs/REVIEW-NOTES.md)（レビューと調整済み計画。**食い違いはこちらが優先**）にあります。
+導入は [INSTALL_FOR_CLAUDE.md](INSTALL_FOR_CLAUDE.md) を、導入先の Claude Code（または Codex）に読ませてください（検出 → 承認 → 導入 → 確認 → 削除の順で進みます。Codex がない端末では Codex の部分を飛ばし、Claude だけ・Codex だけ・両方のどれでも入れられます）。設計の経緯は [docs/DESIGN-source.md](docs/DESIGN-source.md)（原本）と [docs/REVIEW-NOTES.md](docs/REVIEW-NOTES.md)（レビューと調整済み計画。**食い違いはこちらが優先**）にあります。
 
 ## 何をするか・しないか
 
@@ -43,6 +43,22 @@ Claude ──git commit──▶ PostToolUse(Bash|PowerShell, if: git commit *) 
   - 記録したツリーが git から消えていて比べられないときは `stale`（`stale_files` が `null`、`warn: tree-unreachable`）
 - 同じ `session_id` で verify / code-review があったか（`session_verify` / `session_code_review`）も残します。ツリー単位の判定とセッション単位の判定を並べて見るためです。
 - `.claude/skills/verify/SKILL.md` は `/verify` 自身が書き換えるため、コミットに含まれなければ判定に影響しません。
+
+## Codex
+
+Codex CLI（0.170 の文書。`../sources/codex/`）向けの部分です。台帳・判定・チェックリスト・`report` は Claude と共通で、行に `agent: "codex"` が付きます。
+
+| 部品 | Codex での形 |
+| --- | --- |
+| コミットの記録 | `$CODEX_HOME/hooks.json` の PostToolUse `^Bash$` に 1 本（`node "<絶対パス>/vl.js" hook commit --agent codex`、`timeout: 10`）。Codex の hook には `if` がないので、`git … commit` を含まないコマンドはスクリプトの先頭で即終了する。`install.js --agent codex` がマージする（既定は確認だけ、冪等、他の hook は変えない） |
+| verify の起点 | Codex には「コミット前に verify を使う」標準の指示がないため、AGENTS.md に 2 行（`$verify` を使う／確認が通ったら `vl.js mark verify --agent codex`）を `--agents-md` で追記する |
+| verify スキル | `codex/skills/verify/SKILL.md` を、承認のうえで各リポジトリの `.agents/skills/verify/` に写す（`--repo-skill`）。確認の手順は持たず、Claude の `/verify` が記録した `.claude/skills/verify/SKILL.md` に従う（手順は 1 か所） |
+| 記録の時点 | `mark verify` が「確認が終わった時点」のツリーを記録し、その時点の diff に当たるチェックリストの項目を出す（Codex には Skill の hook がないため、チェックリストを渡す経路はここ） |
+| hook の信頼 | Codex は `/hooks` で利用者が信頼するまで hook を動かさない。`doctor` は信頼の状態を読めないので、確認の手順を案内する |
+| doctor | 版、`features.hooks`、`allow_managed_hooks_only`、hook の配線と重複、プロジェクトの信頼、`.agents/skills/verify`、個人用の verify、AGENTS.md の 2 行。Codex がなければ 1 行の案内だけ |
+| レビュアー | Codex の `/review`。会話内のコマンドで hook にならないため、初版は記録しない |
+
+未確認（実機で確かめること）は [docs/CODEX-SUPPORT-PLAN.md](docs/CODEX-SUPPORT-PLAN.md) の「未確認」にあります。
 
 ## 台帳の読み方
 
@@ -117,9 +133,10 @@ CI は ubuntu / macos / windows × Node 18 / 22（`.github/workflows/ci.yml`）�
 ```
 .claude-plugin/      plugin.json と、ZIP を展開したディレクトリをマーケットプレイスにするための marketplace.json
 hooks/hooks.json     プラグイン形式の hook 配線（exec 形式、Bash と PowerShell を別々に）
-scripts/vl.js        入口（hook skill|commit|expand / report / doctor）
+scripts/vl.js        入口（hook skill|commit|expand / mark verify / report / doctor）
 scripts/lib/         git・glob・ledger・classify・checklist・hooks・report・doctor・settings（標準機能だけ）
-scripts/install.js   プラグインが使えない環境向けの settings.json マージ（--check / --apply / --uninstall）
+scripts/install.js   プラグインが使えない環境向けの settings.json マージ（--check / --apply / --uninstall）。--agent codex で Codex の hooks.json・AGENTS.md・リポジトリのスキル
+codex/skills/verify/ Codex 用の verify スキルの雛形（Claude のプラグインのスキルではない）
 rules/verification.md  Rules の 2 行
 examples/checklist.json  チェックリストの雛形
 tests/               node:test

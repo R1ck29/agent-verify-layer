@@ -5,6 +5,7 @@
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
+const { spawnSync } = require('node:child_process');
 
 const VL_PATH = path.resolve(__dirname, '..', 'vl.js');
 const HOOK_TIMEOUT_S = 10; // Codex default is 600 s
@@ -134,7 +135,52 @@ function hookBlockers(home, env = process.env) {
   return out;
 }
 
+// `codex --version` -> '0.170.0' (or the raw text), null when the command is missing or fails.
+// VL_CODEX_BIN replaces the command (tests: a fake or a missing binary, never the real one).
+function codexVersion(env = process.env) {
+  const bin = env.VL_CODEX_BIN || 'codex';
+  const win = process.platform === 'win32';
+  const r = spawnSync(win && /\s/.test(bin) ? `"${bin}"` : bin, ['--version'], { encoding: 'utf8', timeout: 8000, windowsHide: true, shell: win, env });
+  if (r.error || r.status !== 0) return null;
+  const m = /(\d+\.\d+\.\d+)/.exec(r.stdout || '');
+  return m ? m[1] : (r.stdout || '').trim() || 'unknown';
+}
+
+// `[projects."<path>"] trust_level` from config.toml for this repo: 'trusted' | 'untrusted' | null.
+function projectTrust(configText, root) {
+  // realpath: macOS /var -> /private/var, Windows 8.3 short names -> long names.
+  const norm = (p) => {
+    let r = path.resolve(p);
+    try {
+      r = fs.realpathSync.native(r);
+    } catch {
+      /* not on this machine: compare as written */
+    }
+    return process.platform === 'win32' ? r.toLowerCase() : r;
+  };
+  const want = norm(root);
+  let inTable = false;
+  for (const raw of String(configText || '').split(/\r?\n/)) {
+    const line = raw.trim();
+    const h = /^\[\s*projects\s*\.\s*(?:"((?:[^"\\]|\\.)*)"|'([^']*)')\s*\]/.exec(line);
+    if (h) {
+      const p = h[1] !== undefined ? h[1].replace(/\\(.)/g, '$1') : h[2];
+      inTable = norm(p) === want;
+      continue;
+    }
+    if (line.startsWith('[')) {
+      inTable = false;
+      continue;
+    }
+    const m = inTable && /^trust_level\s*=\s*["']([^"']*)["']/.exec(line);
+    if (m) return m[1];
+  }
+  return null;
+}
+
 module.exports = {
+  codexVersion,
+  projectTrust,
   tomlGet,
   readText,
   requirementsPaths,

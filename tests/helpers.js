@@ -26,6 +26,10 @@ function isolatedEnv(extra = {}) {
     USERPROFILE: home,
     CLAUDE_CONFIG_DIR: path.join(home, '.claude'),
     VL_CONFIG_DIR: path.join(home, 'vl-config'),
+    // Codex: never the real ~/.codex, codex binary or /etc/codex/requirements.toml.
+    CODEX_HOME: path.join(home, '.codex'),
+    VL_CODEX_BIN: path.join(home, 'no-codex-here'),
+    VL_CODEX_REQUIREMENTS: path.join(home, 'no-requirements.toml'),
     GIT_CONFIG_NOSYSTEM: '1',
     GIT_CONFIG_GLOBAL: path.join(home, 'gitconfig'),
     GIT_AUTHOR_NAME: 'Test',
@@ -128,4 +132,12 @@ class Repo {
   }
 }
 
-module.exports = { ROOT, VL, INSTALL, Repo, tmpDir, rmrf, isolatedEnv, run };
+// A stand-in `codex` command printing `codex-cli <version>` (use via VL_CODEX_BIN).
+function fakeCodex(dir, version = '0.170.0') {
+  const win = process.platform === 'win32';
+  const bin = path.join(dir, win ? 'codex.cmd' : 'codex');
+  fs.writeFileSync(bin, win ? `@echo codex-cli ${version}\r\n` : `#!/bin/sh\necho "codex-cli ${version}"\n`, { mode: 0o755 });
+  return bin;
+}
+
+module.exports = { ROOT, VL, INSTALL, Repo, tmpDir, rmrf, isolatedEnv, run, fakeCodex };

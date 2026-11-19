@@ -273,3 +273,15 @@ t('a read-only settings file is refused with nothing written', (c) => {
   assert.deepEqual(JSON.parse(fs.readFileSync(c.settings, 'utf8')), { keep: 1 });
   assert.deepEqual(c.backups(), []);
 }, { skip: process.platform === 'win32' || (process.getuid && process.getuid() === 0) });
+
+t('Claude settings with hooks or an event of an unexpected shape: refused with exit 2, nothing written', (c) => {
+  for (const doc of [{ model: 'x', hooks: { PostToolUse: { matcher: 'Bash' } } }, { hooks: [] }, { hooks: 'x' }]) {
+    c.put(doc);
+    const before = fs.readFileSync(c.settings, 'utf8');
+    const r = c.install('--apply');
+    assert.equal(r.status, 2, before);
+    assert.match(r.stdout, /何も書いていません/);
+    assert.equal(fs.readFileSync(c.settings, 'utf8'), before);
+    assert.deepEqual(c.backups(), []);
+  }
+});

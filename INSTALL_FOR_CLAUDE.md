@@ -1,10 +1,14 @@
-# INSTALL_FOR_CLAUDE.md — agent-verify-layer の導入手順（Claude Code 向け）
+# INSTALL_FOR_CLAUDE.md — agent-verify-layer の導入手順（Claude Code と Codex）
 
-この文書は、ZIP を展開した利用者のマシンで動いている Claude Code（あなた）が読み、実行するための手順書です。順番どおりに進めてください。**書き込みは、利用者の承認を得てからです。** それまでは読むだけにします。
+この文書は、ZIP を展開した利用者のマシンで動いているエージェント（あなた。Claude Code か Codex）が読み、実行するための手順書です。順番どおりに進めてください。**書き込みは、利用者の承認を得てからです。** それまでは読むだけにします。ファイル名は互換のため据え置いています。
+
+- Claude の部分は第 1〜8 節、Codex の部分は第 9 節です。どちらか一方だけ入れることも、両方入れることもできます（第 3 節の「部分的に入れる」）。台帳・設定（`~/.claude/verify-layer/config.json`）・`report` は両方で共通です
+- **Codex がない端末では第 9 節を飛ばします**（`codex --version` が失敗し、`$CODEX_HOME`（既定 `~/.codex`）もないとき）。Claude Code がない端末では、第 1 節の Node・git・OS の行だけを調べて第 9 節へ進みます
+- あなたが Codex なら、`claude` コマンドは使わず、第 1 節の共通の行と第 9 節に従ってください
 
 ## 0. これは何か（先に利用者へ 1 段落で伝える）
 
-agent-verify-layer（旧名 claude-verify-layer）は、コミットが「verify を実行したあとの状態」でされたかを、各リポジトリの `.git/claude-verify/ledger.jsonl` に**記録するだけ**の仕組みです（観察モード）。作業は止めません。プロンプト、コマンド、ファイル名は記録しません。台帳はその端末の中にしか残らず、外には送りません。もう 1 つの機能は、HEAD にコミット済みの `.claude/verification/checklist.json` を今回の diff に照合し、当たった項目だけを verify の開始時に Claude へ渡すことです（モデルは呼びません）。
+agent-verify-layer（旧名 claude-verify-layer）は、コミットが「verify を実行したあとの状態」でされたかを、各リポジトリの `.git/claude-verify/ledger.jsonl` に**記録するだけ**の仕組みです（観察モード。Claude Code と Codex に対応）。作業は止めません。プロンプト、コマンド、ファイル名は記録しません。台帳はその端末の中にしか残らず、外には送りません。もう 1 つの機能は、HEAD にコミット済みの `.claude/verification/checklist.json` を今回の diff に照合し、当たった項目だけを verify の開始時に Claude へ渡すことです（モデルは呼びません）。
 
 役割の違い: wikiskill は「業務の例からスキルを育てる」仕組み、agent eval は「ハーネスの変更が効いたかを with / without で採点する」仕組みです。この検証レイヤーは、日々のコミットで verify が実際に行われたかを**測る**ための記録係で、どちらとも置き換えにはなりません。agent eval は、この層を配ってよいかを後で採点するときに使います（v0.1 には含みません）。
 
@@ -26,6 +30,7 @@ agent-verify-layer（旧名 claude-verify-layer）は、コミットが「verify
 | 同名のスキル | `~/.claude/skills/verify`、`~/.claude/skills/simplify`、`~/.claude/commands/verify.md`、管理設定ディレクトリの `.claude/skills/verify` | 個人用・エンタープライズの `verify` は、全リポジトリのリポジトリ側の記録を上書きする。見つけたら利用者に伝える（消すのは提案だけ） |
 | `verify` が標準の指示の対象か | 環境変数 `CLAUDE_CODE_DISABLE_GIT_INSTRUCTIONS`、設定 `includeGitInstructions: false`、`skillOverrides` の `verify` / `simplify` が `user-invocable-only` か `off`、プロジェクトの `verify` の `disable-model-invocation: true`、`--bare` / `--safe-mode` の使用 | どれかに当たると標準の指示が消え、verify の実行率は 0 になる |
 | コミットに反応する既存 hook | ECC の gateguard など（PreToolUse の Bash）。settings と有効なプラグインを見る | 同じイベントの hook は並列に動く。この層は PostToolUse だけなので衝突しない。ほかを無効にするのは提案にとどめる |
+| Codex | `codex --version`、`$CODEX_HOME`（未設定なら `~/.codex`）があるか | どちらもなければ Codex の部分（第 9 節）は飛ばす。あれば第 9 節の検出も行う |
 | プラグイン配布 | 利用者に聞く。`claude plugin marketplace list` も見る | あれば、配布担当に ZIP の内容を導入先のマーケットプレイスへ登録してもらうのが最も確実 |
 
 そのあと `node <展開先>/scripts/vl.js doctor`（読むだけ。使い捨てのリポジトリで hook を試し、利用者のリポジトリや設定には書かない）を実行し、出力を結果に加えます。
@@ -39,6 +44,7 @@ agent-verify-layer（旧名 claude-verify-layer）は、コミットが「verify
 3. 選んだ経路と、書き込む場所と内容（第 3 節）
 4. 書き込む前に `--check` で見せる差分、取るバックアップ、元に戻す方法（第 7 節）
 5. 第 5 節の 2 と 3（使い捨てリポジトリでのモデル実行、各リポジトリでの `SKILL.md` のコミット）は**別々の承認**にする。導入の承認に含めない
+6. Codex がある端末では、Claude の部分と Codex の部分（第 9 節）を**別々に**承認してもらう。どちらか一方だけでもよい
 
 ## 3. 経路の選び方
 
@@ -50,6 +56,18 @@ agent-verify-layer（旧名 claude-verify-layer）は、コミットが「verify
 | `strictPluginOnlyCustomization` が skills を含む | 導入はできるが、プロジェクトの `verify` が読み込まれないので verify の実行率は 0 になる、と伝える |
 | `strictPluginOnlyCustomization` が hooks を含む、または `disableAllHooks: true` | **B（settings マージ）は選ばない。** settings に書いた hook は動かない。A（プラグイン）だけを提案する。それも止まっているなら、書き込まずに理由を伝えて終える |
 | Node がない | 第 6 節。導入しない |
+
+### 部分的に入れる
+
+導入先の環境や方針に合わせて、次の単位で選べます。「要るもの」を満たしていれば、どの単位もあとから足せます。Claude と Codex は互いに独立で、Codex のリポジトリのスキルは利用者全体の hook や AGENTS.md に触れません（hook がなくても置けます）。
+
+| 単位 | 入れるもの | 効果 | 要るもの |
+| --- | --- | --- | --- |
+| Claude: 記録 | 第 4 節の A か B | Claude のコミットと verify を記録する | Claude Code、Node、git |
+| Claude: Rules | `--rules`（または `rules/verification.md` のコピー） | 検証の規則を 2 行足す（flaky なテストを skip や再実行で済ませない、verify が 3 回続けて失敗したら止めて報告する） | Claude: 記録 |
+| Codex: 記録 | 第 9 節の `--agent codex --apply` | Codex のコミットを記録する | Codex、Node、git、`/hooks` での信頼 |
+| Codex: 指示 | 第 9 節の `--agents-md` | AGENTS.md に 2 行（`$verify` を使う、確認後に mark する） | Codex: 記録 |
+| Codex: リポジトリのスキル | 第 9 節の `--repo-skill`（リポジトリごと） | `.agents/skills/verify/` に verify スキルを置く | 利用者の承認（コミットするかは利用者が決める） |
 
 ## 4. 導入する（承認後）
 
@@ -116,6 +134,8 @@ hook は `command: "node"` の exec 形式で動くので、Node がないと**�
 
 ## 8. してはいけないこと
 
+（Codex に固有のものは第 9 節の最後にあります）
+
 - `.claude/skills/verify/` に書く。個人用の場所（`~/.claude/skills/verify`）に `verify` を置く
 - プロンプト、コマンド、コマンドの引数、ファイル名を台帳に書く
 - 利用者の承認なしに設定やファイルを書く。承認前に実行してよいのは `--check`、`doctor`、`report` だけ
@@ -123,3 +143,73 @@ hook は `command: "node"` の exec 形式で動くので、Node がないと**�
 - 管理設定を書き換える。管理設定が hook を止めているときは、管理者向けの断片を出して終える
 - GitHub に届かない環境で、`code-review@claude-plugins-official` を配る（`gh pr` 専用で、同梱の `/code-review` と名前が紛らわしい）
 - `enforce`（コミットを止める動き）を有効にする。v0.1 にはありません
+
+## 9. Codex の部分
+
+Codex がない端末では、この節を飛ばします（利用者には「Codex が見つからないので Claude の部分だけ入れます」と 1 行伝える）。根拠の文書は Codex CLI 0.170 のもので、これより古い版では動きを確かめていません。
+
+### 9.1 検出（読むだけ）
+
+| 調べること | 方法 | 結果の意味 |
+| --- | --- | --- |
+| Codex の版 | `codex --version` | 0.170 より前なら、hook の入出力が文書と違い記録が動かない可能性がある。そのことを伝え、Codex の部分を入れるかを利用者に決めてもらう |
+| Codex のホーム | `$CODEX_HOME`（未設定なら `~/.codex`） | hook はここの `hooks.json` にマージする |
+| hooks が有効か | `$CODEX_HOME/config.toml` と管理者の `requirements.toml` の `[features] hooks`（旧名 `codex_hooks`） | `false` なら hook は動かない。入れても記録されないと伝える |
+| 管理された hook だけか | `requirements.toml` の `allow_managed_hooks_only = true` | **自分では入れない。** 管理者に `requirements.toml` の `[hooks]` で配ってもらう（コマンドは `install.js --agent codex --check` の出力にある） |
+| 既存の hook | `$CODEX_HOME/hooks.json`、`config.toml` の `[hooks]`、`<repo>/.codex/hooks.json` | 他の hook は変えない。この層は PostToolUse `^Bash$` の 1 本だけを足す。同じ hook が 2 か所にあると 2 回走る |
+| 指示のファイル | `$CODEX_HOME/AGENTS.override.md`（空でなければこちらだけが読まれる）、なければ `$CODEX_HOME/AGENTS.md` と大きさ | 追記先。32 KiB を超えると末尾が読まれないことがある |
+| 個人用の verify | `~/.agents/skills/verify` | あれば利用者に伝える（リポジトリの verify と両方が一覧に出る） |
+
+まとめて `node <展開先>/scripts/vl.js doctor` でも確かめられます（Codex がなければ 1 行の案内だけになります）。
+
+### 9.2 導入する（承認後）
+
+まず読むだけで差分を見せます。
+
+```
+node <展開先>/scripts/install.js --agent codex --check --agents-md
+```
+
+承認を得たら適用します（`--agents-md` は「Codex: 指示」を入れるときだけ）。
+
+```
+node <展開先>/scripts/install.js --agent codex --apply --agents-md
+```
+
+- `$CODEX_HOME/hooks.json` を JSON として読み、自分の hook（`node "<絶対パス>/vl.js" hook commit --agent codex`、`timeout: 10`）だけを足します。2 回実行しても同じ結果です。読めない JSON なら何も書かずに止まります。書き込む前にバックアップを取ります
+- `--agents-md` は、AGENTS.md（空でない `AGENTS.override.md` があればそちら）の末尾に 2 行を足します。既存の行は変えません
+- `node` が Codex の PATH にないときは `--node <node の絶対パス>` を付けます
+- `--scope project`（`.codex/hooks.json`）は使えません。端末ごとの絶対パスをコミットすることになるためです
+
+**hook の信頼**: Codex は、利用者が信頼するまで hook を実行しません。利用者に Codex を起動して `/hooks` を開いてもらい、verify-layer の hook（PostToolUse `^Bash$`）を確認して信頼してもらいます。hook の定義（`command` の文字列など）が変わると再び確認が要ります。同じ展開先で入れ直しても定義は変わりませんが、展開先を移したり `--node` を変えたりすると変わります。`--dangerously-bypass-hook-trust` は使いません。
+
+### 9.3 リポジトリごとの verify スキル（任意。別の承認）
+
+Codex には「コミット前に verify を使う」標準の指示がないため、AGENTS.md の 2 行と、各リポジトリの `.agents/skills/verify/SKILL.md` で補います。このスキルは確認の手順を持たず、Claude の `/verify` が記録した `.claude/skills/verify/SKILL.md` に従います（手順は 1 か所）。対象のリポジトリの中で、まず確認だけをします。
+
+```
+node <展開先>/scripts/install.js --agent codex --repo-skill
+```
+
+承認を得たら `--apply --repo-skill` で写します。この操作は `.agents/skills/verify/` だけを扱い、`hooks.json` と AGENTS.md は変更しません（`--agents-md` と同時には使えません）。既にある `.agents/skills/verify/` は上書きしません。写したファイルをコミットするかは利用者が決めます。
+
+### 9.4 導入後の確認
+
+1. `node <展開先>/scripts/vl.js doctor` の `Codex:` で始まる行を読み、NG・WARN を報告する
+2. 任意（モデル費用は 1 回分。別の承認）: 使い捨てのリポジトリで Codex に小さな変更をコミットさせ、`node <展開先>/scripts/vl.js report` で `agent: codex` の commit 行が増えたかを見る。増えなければ、まず `/hooks` の信頼を確かめる
+
+### 9.5 アンインストール
+
+```
+node <展開先>/scripts/install.js --agent codex --uninstall --agents-md
+node <展開先>/scripts/install.js --agent codex --uninstall --repo-skill   # 各リポジトリで。スキルだけを外す。雛形から変えたものは残す
+```
+
+自分の hook と 2 行だけを外します。外した結果 `hooks.json` が空になるときはファイルを消します（バックアップは残ります）。台帳は Claude の部分と共通なので、消すかは利用者に聞きます。
+
+### 9.6 Codex でしてはいけないこと
+
+- `requirements.toml` や `config.toml` を書き換える（hooks を有効にするのも利用者か管理者の判断）
+- `<repo>/.codex/hooks.json` や `config.toml` の `[hooks]` にも同じ hook を書く（2 回走る）
+- `~/.agents/skills/verify` に個人用の verify を置く。`.claude/skills/verify/` に書く
+- `--dangerously-bypass-hook-trust` で信頼の確認を飛ばす

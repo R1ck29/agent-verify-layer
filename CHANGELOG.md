@@ -4,8 +4,15 @@
 
 ## [Unreleased]
 
+### 追加
+
+- Codex CLI 対応（0.170 の文書に基づく。実機の確認は未）: `vl.js hook commit --agent codex`（Codex の PostToolUse `^Bash$`。`turn_id` があれば Codex と判定）、`install.js --agent codex`（`$CODEX_HOME/hooks.json` へのマージ、`--agents-md` で AGENTS.md に 2 行、`--repo-skill` で `.agents/skills/verify/` に雛形を写す。既定は確認だけ）、Codex 用の verify スキルの雛形 `codex/skills/verify/SKILL.md`、`doctor` の Codex 項目（Codex がなければ飛ばす）。台帳の行に `agent` を足した（ない行は claude として読む）
+- `vl.js mark verify`: 確認が終わった時点のツリーを verify の記録（`via: "mark"`）として残す。Claude 側でも `Skill(verify)` の hook が返す文脈で案内する（verify を編集前に読み込むと stale と出る問題の対策）
+
 ### 修正
 
+- `install.js --agent codex --repo-skill` が利用者全体の hook のマージ・削除も一緒に行っていた。リポジトリのスキルだけを扱うようにした
+- `install.js` が `module.exports` より前に `main()` を呼んでいたため、`--agent codex` が毎回「t.removeOwn is not a function」で失敗していた
 - 実機の Claude Code 2.1.325 で、`if: "Skill(verify)"` の PostToolUse hook が起動せず、run 行が台帳に書かれなかった（commit 行が `none` になる）。Skill の hook を `if` なしの `matcher: "Skill"` 1 本（`vl.js hook skill`）にし、スクリプト側で `tool_input.skill` から verify / 入れ子の verify / code-review（別名 `review`）を判定して記録し、ほかのスキルでは何もせず終了するようにした。`hook run <verify|code-review>` は `hook skill` に置き換わった（`install.js --apply` で入れ直すと古い登録は置き換わる）。Bash の `if` は実機で当たったので変更なし。詳細は `docs/SMOKE.md`
 
 ## [0.1.0] - 2026-11-18

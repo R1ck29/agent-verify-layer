@@ -73,6 +73,18 @@ function removeOwn(settings, isOwn = isOwnHandler) {
   return { settings: next, removed };
 }
 
+// A `hooks` value (or an event value we would add to) that is not the documented shape. Writing
+// would replace it and silently drop whatever it holds, so the installers refuse instead.
+function hooksShapeError(settings, ownGroups) {
+  if (!settings || !('hooks' in settings)) return null;
+  const h = settings.hooks;
+  if (h === null || typeof h !== 'object' || Array.isArray(h)) return '"hooks" がオブジェクトではありません';
+  for (const { event } of ownGroups) {
+    if (event in h && !Array.isArray(h[event])) return `"hooks.${event}" が配列ではありません`;
+  }
+  return null;
+}
+
 function addOwn(settings, ownGroups) {
   const next = JSON.parse(JSON.stringify(settings));
   if (!next.hooks || typeof next.hooks !== 'object' || Array.isArray(next.hooks)) next.hooks = {};
@@ -101,7 +113,8 @@ function timestamp() {
   return `${d.getFullYear()}${p(d.getMonth() + 1)}${p(d.getDate())}${p(d.getHours())}${p(d.getMinutes())}${p(d.getSeconds())}`;
 }
 
-// Writes through symlinks (dotfile managers) and keeps the original file mode.
+// Writes through symlinks (dotfile managers) and keeps the original file mode. A dangling symlink
+// is refused rather than replaced by a regular file.
 function atomicWrite(file, text) {
   let target = file;
   let mode;
@@ -109,7 +122,13 @@ function atomicWrite(file, text) {
     target = fs.realpathSync(file);
     mode = fs.statSync(target).mode & 0o777;
   } catch {
-    /* new file */
+    let link = false;
+    try {
+      link = fs.lstatSync(file).isSymbolicLink();
+    } catch {
+      /* new file */
+    }
+    if (link) throw new Error(`${file} はリンク先のないシンボリックリンクです。何も書いていません`);
   }
   fs.mkdirSync(path.dirname(target), { recursive: true });
   const tmp = `${target}.vl-tmp-${process.pid}`;
@@ -209,6 +228,11 @@ function run(opts) {
   const before = read.data || {};
   const nodeCmd = opts.node || 'node';
   const ownGroups = buildOwnGroups(nodeCmd);
+  const shape = hooksShapeError(before, ownGroups);
+  if (shape) {
+    report.error = `${t.settingsFile} の ${shape}。書き換えると中身が失われるため、何も書いていません。直してから再実行してください`;
+    return { code: 2, report };
+  }
   const { settings: stripped, removed } = removeOwn(before);
   report.installedHandlers = removed;
   report.foreignHandlers = (() => {
@@ -341,6 +365,6 @@ function main() {
   }
 }
 
-if (require.main === module) main();
+module.exports = { buildOwnGroups, removeOwn, addOwn, hooksShapeError, run, parseArgs, VL, atomicWrite, backup, isWritable, indentOf, printReport };
 
-module.exports = { buildOwnGroups, removeOwn, addOwn, run, parseArgs, VL, atomicWrite, backup, isWritable, indentOf, printReport };
+if (require.main === module) main();

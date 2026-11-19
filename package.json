@@ -2,7 +2,7 @@
   "name": "agent-verify-layer",
   "version": "0.1.0",
   "private": true,
-  "description": "Observe-mode verification layer for coding agents (Claude Code now; Codex planned) (ledger + HEAD-side checklist). No npm dependencies.",
+  "description": "Observe-mode verification layer for coding agents (Claude Code and Codex CLI) (ledger + HEAD-side checklist). No npm dependencies.",
   "engines": { "node": ">=18" },
   "scripts": {
     "test": "node --test"
