@@ -148,8 +148,14 @@ function codexVersion(env = process.env) {
 
 // `[projects."<path>"] trust_level` from config.toml for this repo: 'trusted' | 'untrusted' | null.
 function projectTrust(configText, root) {
+  // realpath: macOS /var -> /private/var, Windows 8.3 short names -> long names.
   const norm = (p) => {
-    const r = path.resolve(p);
+    let r = path.resolve(p);
+    try {
+      r = fs.realpathSync.native(r);
+    } catch {
+      /* not on this machine: compare as written */
+    }
     return process.platform === 'win32' ? r.toLowerCase() : r;
   };
   const want = norm(root);
