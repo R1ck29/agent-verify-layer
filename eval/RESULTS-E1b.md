@@ -33,4 +33,5 @@ Codex 側: P0 codex-baseline / P1 codex-agents-md / P2 codex-verify-layer（gpt-
 - 全プロファイルが落とした罠: trap-stop-hook-decode（Claude 側と同じ）。
 - トークン（30 試行計）: 入力 6.90M（うちキャッシュ読み 6.21M）、出力 0.069M。API 換算 約 $2.70（本体のみ、判定役 $0）。
 - 注意: verify スキル（.agents/skills/verify）は fixture に入っているため、P0 でも読める（実際に P0 の罠試行でも SKILL.md を読んでいる）。P2 との差は hook と AGENTS.md の 2 行だけ。v0.2 の評価ではベースラインからスキルを外す。
+- ズル対策の再検査（feat/cheat-proof の leak_check・tamper_check、23:1x）: trap-wait-superseded / codex-baseline が `rg --files -g AGENTS.md /workspace` で試行の外を探索 → INVALID（答えは読んでいない）。改ざん 0。これを除くと P0 罠 3/5（有効 5）、P1 5/6、P2 5/6。外部ネットワーク（SDK の資料の web_search・curl）は 10 試行で警告。Claude 側 60 試行は INVALID 0・改ざん 0（判定は変わらない）。
 - 事前規則の n（各セル 2 試行）に届いていないので、判定は出さない。v0.2 の決定的な評価は held-out の罠で行う（docs/V02-DESIGN.md、eval/heldout/PREREG-v02.md）。
