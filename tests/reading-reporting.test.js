@@ -56,6 +56,12 @@ t('XREVIEW #10: names with a trailing space, quotes and unicode are matched too'
   }
 });
 
+t('an added line whose text begins with "++ " is content, not a diff header', (repo) => {
+  seed(repo);
+  repo.write('two words.js', 'ok();\n++ eval(x)\n');
+  assert.match(context(repo.verify()), /\[no-eval\]/);
+});
+
 test('XREVIEW #10: parseAddedLines still parses a plain diff', () => {
   const m = checklist.parseAddedLines('--- a/x.js\n+++ b/x.js\n@@ -1 +1,2 @@\n ok\n+eval(1)\n');
   assert.deepEqual(m.get('x.js'), ['eval(1)']);

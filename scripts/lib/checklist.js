@@ -133,7 +133,13 @@ function collectChanges(cwd, opts) {
     let lines = [];
     if (tracked) {
       const d = git(['diff', 'HEAD', '--no-color', '--no-ext-diff', '--no-renames', '-U0', '--', `:(literal)${p}`], { cwd, ...opts });
-      if (d.ok) lines = d.out.split('\n').filter((l) => l.startsWith('+') && !l.startsWith('+++ ')).map((l) => l.slice(1));
+      if (d.ok) {
+        // One file with -U0: the only header line starting with "+++ " is the first one; an added
+        // line whose text starts with "++ " is real content.
+        const all = d.out.split('\n');
+        const start = all.findIndex((l) => l.startsWith('+++ '));
+        lines = all.slice(start + 1).filter((l) => l.startsWith('+')).map((l) => l.slice(1));
+      }
     }
     cache.set(p, lines);
     return lines;
