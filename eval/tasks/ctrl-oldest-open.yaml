@@ -1,6 +1,6 @@
 id: ctrl-oldest-open
 description: "対照: 純粋な関数を足す（どの項目も発火しない）"
-targets: [claude_code]
+targets: [claude_code, codex]
 tags: [verify-layer, control]
 fixture: ../fixtures/taskstore
 prompt: |

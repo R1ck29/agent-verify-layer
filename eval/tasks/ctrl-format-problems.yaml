@@ -1,6 +1,6 @@
 id: ctrl-format-problems
 description: "対照: 文字列の整形を変える（どの項目も発火しない）"
-targets: [claude_code]
+targets: [claude_code, codex]
 tags: [verify-layer, control]
 fixture: ../fixtures/improver
 prompt: |

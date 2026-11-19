@@ -1,0 +1,10 @@
+# E1b の Codex 側（P0）: 層なし。認証は ~/.codex/auth.json を一時 CODEX_HOME に複製（ChatGPT サブスクリプション）。
+id: codex-baseline
+agent: codex
+model: gpt-6.2-sol
+billing: subscription
+copy_credentials: true
+install:
+  - run: 'sh {profile_dir}/../profiles/common/seed-git.sh {workdir}'
+# workspace-write では .git が読み取り専用でコミットできない（実測）。試行は一時ディレクトリなので全権で回す
+codex_sandbox: danger-full-access

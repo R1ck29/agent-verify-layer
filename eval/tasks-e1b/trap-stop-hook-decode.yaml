@@ -1,6 +1,6 @@
 id: trap-stop-hook-decode
 description: "E1b 罠: Stop hook のペイロードの読み取り（sample-harness a100008）"
-targets: [claude_code]
+targets: [claude_code, codex]
 tags: [verify-layer, trap, e1b]
 fixture: ../fixtures-e1b/sh-a100004
 prompt: |

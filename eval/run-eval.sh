@@ -31,8 +31,14 @@ else  # E1b の罠（tasks-e1b）と、後退の検出用に E1 の対照 4 件�
   pdir="$here/profiles-e1b"; tasks=("$here/tasks-e1b" "$here"/tasks/ctrl-*.yaml)
   smoke_sel=(--task "${E1B_SMOKE_TASK:-trap-csv-roundtrip}"); tag="-e1b"
 fi
-profiles=("$pdir"/claude-*.yaml)
-[ "$mode" = smoke-p0 ] && profiles=("$pdir/claude-baseline.yaml")
+# AGENT=codex で Codex 側（profiles-e1b-codex。E1b のみ）。認証は ~/.codex/auth.json の複製（copy_credentials）
+AGENT="${AGENT:-claude}"; base=claude-baseline
+if [ "$AGENT" = codex ]; then
+  [ "$suite" = e1b ] || { echo "AGENT=codex は e1b だけです" >&2; exit 2; }
+  pdir="$here/profiles-e1b-codex"; base=codex-baseline; tag="-e1b-codex"
+fi
+profiles=("$pdir"/$AGENT-*.yaml)
+[ "$mode" = smoke-p0 ] && profiles=("$pdir/$base.yaml")
 
 if [ "$mode" = dry ]; then
   out="$(mktemp -d)"
@@ -46,7 +52,7 @@ if [ "$mode" = dry ]; then
   export FAKE_VERIFY=1
   trials=1; extra=(--tag verify-layer)
 else
-  : "${CLAUDE_CODE_OAUTH_TOKEN:?CLAUDE_CODE_OAUTH_TOKEN が未設定です。外側のシェルで claude setup-token → export してください（値は表示しません）}"
+   [ "$AGENT" = codex ] || : "${CLAUDE_CODE_OAUTH_TOKEN:?CLAUDE_CODE_OAUTH_TOKEN が未設定です。外側のシェルで claude setup-token → export してください（値は表示しません）}"
   out="$OUT_ROOT/$mode$tag"; mkdir -p "$out"
   case "$mode" in
     smoke) trials=1; extra=("${smoke_sel[@]}");;
@@ -68,9 +74,9 @@ if [ "$mode" != dry ]; then
   he doctor --profiles "${profiles[@]}" --out "$out"
 fi
 echo "== 見積もり（モデルを呼ばない）"
-he plan --tasks "${tasks[@]}" --profiles "${profiles[@]}" "${extra[@]}" --trials "$trials" --no-llm --baseline claude-baseline --jobs 2 --max-cost-usd "$cap" "${cache[@]}" --out "$out"
+he plan --tasks "${tasks[@]}" --profiles "${profiles[@]}" "${extra[@]}" --trials "$trials" --no-llm --baseline "$base" --jobs 2 --max-cost-usd "$cap" "${cache[@]}" --out "$out"
 echo "== 実行 → $out"
-he run --tasks "${tasks[@]}" --profiles "${profiles[@]}" "${extra[@]}" --trials "$trials" --no-llm --baseline claude-baseline \
+he run --tasks "${tasks[@]}" --profiles "${profiles[@]}" "${extra[@]}" --trials "$trials" --no-llm --baseline "$base" \
   --jobs 2 --max-cost-usd "$cap" --keep all "${cache[@]}" --out "$out"
 echo "== 完了: $out（作業ツリーと台帳は各試行の workdir に残してあります。集計は次のセッションで）"
 if [ "$mode" = dry ]; then echo "dry の出力先: $out"; fi

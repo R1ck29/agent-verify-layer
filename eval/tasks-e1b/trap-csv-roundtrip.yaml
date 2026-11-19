@@ -1,6 +1,6 @@
 id: trap-csv-roundtrip
 description: "E1b 罠: レビューシートの CSV を数式として実行させず、読み戻しで一致させる（wikiskill a10000d）"
-targets: [claude_code]
+targets: [claude_code, codex]
 tags: [verify-layer, trap, e1b]
 fixture: ../fixtures-e1b/wikiskill-a10000b
 prompt: |

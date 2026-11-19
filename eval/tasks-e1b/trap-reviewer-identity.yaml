@@ -1,6 +1,6 @@
 id: trap-reviewer-identity
 description: "E1b 罠: 実行者と同じ人が自分の作業をレビューできてしまう（sample-harness a100003）"
-targets: [claude_code]
+targets: [claude_code, codex]
 tags: [verify-layer, trap, e1b]
 fixture: ../fixtures-e1b/sh-a100002
 prompt: |

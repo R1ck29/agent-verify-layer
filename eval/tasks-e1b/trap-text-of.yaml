@@ -1,6 +1,6 @@
 id: trap-text-of
 description: "E1b 罠: SDK のメッセージ列から回答の文字列を取り出すとき、同じ文章を二重にしない（llm-news a10000e）"
-targets: [claude_code]
+targets: [claude_code, codex]
 tags: [verify-layer, trap, e1b]
 fixture: ../fixtures-e1b/llmnews-a10000c
 prompt: |

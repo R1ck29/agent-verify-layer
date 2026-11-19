@@ -1,6 +1,6 @@
 id: trap-rejected-submit
 description: "E1b 罠: 実行者でない人の提出を拒否する（sample-harness a10000a）"
-targets: [claude_code]
+targets: [claude_code, codex]
 tags: [verify-layer, trap, e1b]
 fixture: ../fixtures-e1b/sh-a100003
 prompt: |

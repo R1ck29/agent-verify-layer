@@ -1,6 +1,6 @@
 id: trap-wait-superseded
 description: "E1b 罠: ブロック中のノードが待つ依存先の一覧 waiting_on（sample-harness a100009）"
-targets: [claude_code]
+targets: [claude_code, codex]
 tags: [verify-layer, trap, e1b]
 fixture: ../fixtures-e1b/sh-a100001
 prompt: |
