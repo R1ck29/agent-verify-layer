@@ -42,6 +42,10 @@ function summarize(rows, logShas) {
   return {
     commits: { total: commits.length, ...results },
     commits_by_agent: agents,
+    // Weaker and stricter views of the same commits (XREVIEW #8): verified is the design-source
+    // measurement (working-tree hash); these two are kept apart so neither replaces it.
+    stale_paths_match: commits.filter((c) => c.result === 'stale' && c.paths_match === true).length,
+    verified_head_exact: commits.filter((c) => c.result === 'verified' && c.head_tree_match === true).length,
     verified_by_mark: commits.filter((c) => c.result === 'verified' && c.basis === 'mark').length,
     verified_rate_pct: pct(results.verified, judged),
     session_verify_rate_pct: pct(commits.filter((c) => c.session_verify && c.result !== 'skipped' && c.result !== 'unknown').length, judged),
@@ -75,6 +79,7 @@ function formatText(s, meta) {
   L.push('');
   const c = s.commits;
   L.push(`コミット（台帳）: ${c.total} 件 — verified ${c.verified} / stale ${c.stale} / none ${c.none} / skipped ${c.skipped}${c.unknown ? ` / unknown ${c.unknown}（git で変更ファイルを取得できなかった）` : ''}`);
+  L.push(`  （参考）verified のうち、コミットの tree 全体が検証した tree と同じもの: ${s.verified_head_exact} 件 / stale のうち、コミットしたファイルは検証時と同一のもの: ${s.stale_paths_match} 件`);
   L.push(`  verified 率（skipped を除く）: ${s.verified_rate_pct ?? '-'}%`);
   L.push(`  同じセッションで verify があった率: ${s.session_verify_rate_pct ?? '-'}% / code-review があった率: ${s.session_code_review_rate_pct ?? '-'}%`);
   L.push(`  stale の大きさ（コミット内の差のあるファイル数）: 中央値 ${s.stale_files.median ?? '-'} / 最大 ${s.stale_files.max ?? '-'}`);

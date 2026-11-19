@@ -5,6 +5,7 @@ const ledger = require('./ledger');
 const { classify, latestRun } = require('./classify');
 const checklist = require('./checklist');
 const { matchAny } = require('./glob');
+const { analyzeCommit } = require('./commitcmd');
 const { quoteArg } = require('./shellquote');
 
 const RECENT_COMMIT_S = 300;
@@ -130,63 +131,92 @@ function commandText(input) {
   return undefined;
 }
 
-// PostToolUse for a successful `git commit`: judge HEAD and append one ledger row.
+// A commit entry in the HEAD reflog ("commit: …", "commit (amend): …", "commit (initial): …").
+const COMMIT_REFLOG_RE = /^commit\b/;
+
+// PostToolUse for a `git commit` command: record the commit THAT COMMAND made, and only that.
+// Evidence required: the command text has a real `git commit` (not --dry-run, not a read-only
+// command that merely contains the word), it is placed in a repository (-C / cd), and the HEAD
+// reflog's newest entry is a commit made moments ago whose SHA is not recorded yet. What cannot be
+// shown is left out (the report counts it as not captured); nothing from the command is stored.
 function handleCommit(input, { agent: agentFlag } = {}) {
   const t0 = now();
   const agent = resolveAgent(agentFlag, input);
   const command = commandText(input);
-  // Claude filters with `if: Bash(git commit *)`; Codex has no `if`, so filter here (a few ms).
-  if (agent === 'codex' && !(typeof command === 'string' && COMMIT_RE.test(command))) return null;
+  if (typeof command !== 'string') return null;
+  // Claude filters with `if: Bash(git commit *)`; Codex has no `if`: cheap pre-filter for it.
+  if (agent === 'codex' && !COMMIT_RE.test(command)) return null;
   const cfg = loadConfig();
   if (cfg.mode === 'off') return null;
-  const cwd = str(input.cwd) || process.cwd();
+  const found = analyzeCommit(command, str(input.cwd) || process.cwd());
+  if (!found || found.unsupported) return null;
   const opts = { timeout: cfg.timeoutMs };
-  const root = git.repoRoot(cwd, opts);
+  const root = git.repoRoot(found.dir, opts);
   if (!root) return null;
   const head = git.headInfo(root, opts);
-  if (!head) return null;
+  const log = git.reflog(root, opts);
+  if (!head || !log || log[0].sha !== head.sha || !COMMIT_REFLOG_RE.test(log[0].subject)) return null;
+  if (log[0].ts === null || t0 - log[0].ts > RECENT_COMMIT_S) return null;
+  const amend = /^commit \(amend\)/.test(log[0].subject);
+  const oldSha = amend && log[1] ? log[1].sha : null; // the commit this one replaced
 
-  // `if` is best-effort: make sure this is a fresh commit we have not already recorded.
-  const rows = ledger.readAll(root);
-  if (rows.some((r) => r.kind === 'commit' && r.sha === head.sha)) return null;
-  if (head.time !== null && now() - head.time > RECENT_COMMIT_S) return null;
+  // Cheap duplicate check first; the authoritative one is repeated under the lock below.
+  if (ledger.readAll(root).some((r) => r.kind === 'commit' && r.sha === head.sha)) return null;
 
   const paths = git.commitPaths(root, head, opts); // null = unreadable (judged "unknown")
-  // Quoted text (commit messages) is stripped first so `-m "about --amend"` is not an amend.
-  const amend =
-    typeof command === 'string' && /(^|\s)--amend(\s|=|$)/.test(command.replace(/'[^']*'|"[^"]*"/g, ' '));
-  const commitRows = rows.filter((r) => r.kind === 'commit');
-  const prev = amend ? commitRows[commitRows.length - 2] : commitRows[commitRows.length - 1];
-  const run = latestRun(rows, prev ? prev.ts : null);
-
-  const verdict = classify({
-    paths,
-    run,
-    skipGlobs: cfg.skipGlobs,
-    diffNames: (tree) => git.diffTreeToHead(root, tree, opts),
-  });
+  const worktreeTree = git.treeHash(root, opts);
+  const headTree = git.headTree(root, opts);
   const session = str(input.session_id);
-  const sessionRan = (skill) => !!session && rows.some((r) => r.kind === 'run' && r.skill === skill && r.session === session);
   const selfCheck = !!paths && paths.some((p) => matchAny(checklist.SELF_CHECK_GLOBS, p));
 
-  ledger.append(root, {
-    kind: 'commit',
-    ts: t0,
-    sha: head.sha,
-    mode: cfg.mode,
-    agent,
-    result: verdict.result,
-    basis: run ? run.via || null : null,
-    stale_files: verdict.stale_files,
-    since_run_s: run ? Math.round(t0 - run.ts) : null,
-    session_verify: sessionRan('verify'),
-    session_code_review: sessionRan('code-review'),
-    n_files: paths ? paths.length : null,
-    self_check_change: selfCheck,
-    session,
-    ...(verdict.warn ? { warn: verdict.warn } : {}),
-    ms: Math.round((now() - t0) * 1000),
+  const res = ledger.withLock(root, () => {
+    const rows = ledger.readAll(root);
+    if (rows.some((r) => r.kind === 'commit' && r.sha === head.sha)) return false;
+    const commitRows = rows.filter((r) => r.kind === 'commit');
+    // Runs count from the end of the previous commit's window: for an amend that is the window of
+    // the commit it replaces (found by SHA, so repeated amends keep their verification); otherwise
+    // the parent's row, else the latest row.
+    const byTs = (r) => (r ? r.ts : null);
+    const replaced = oldSha ? commitRows.find((r) => r.sha === oldSha) : null;
+    const parent = commitRows.find((r) => r.sha === head.parents[0]);
+    let cut;
+    if (replaced) cut = replaced.cut_ts !== undefined ? replaced.cut_ts : byTs(commitRows[commitRows.indexOf(replaced) - 1]);
+    else if (amend) cut = byTs(commitRows[commitRows.length - 2]);
+    else cut = parent ? parent.ts : byTs(commitRows[commitRows.length - 1]);
+    cut = cut === undefined ? null : cut;
+    const run = latestRun(rows, cut);
+    const verdict = classify({
+      paths,
+      run,
+      skipGlobs: cfg.skipGlobs,
+      worktreeTree,
+      headTree,
+      diffNames: (tree) => git.diffTreeToHead(root, tree, opts),
+    });
+    const sessionRan = (skill) => !!session && rows.some((r) => r.kind === 'run' && r.skill === skill && r.session === session);
+    return ledger.append(root, {
+      kind: 'commit',
+      ts: t0,
+      sha: head.sha,
+      mode: cfg.mode,
+      agent,
+      result: verdict.result,
+      basis: run ? run.via || null : null,
+      stale_files: verdict.stale_files,
+      ...(verdict.paths_match !== undefined ? { paths_match: verdict.paths_match } : {}),
+      ...(verdict.head_tree_match !== undefined ? { head_tree_match: verdict.head_tree_match } : {}),
+      since_run_s: run ? Math.round(t0 - run.ts) : null,
+      cut_ts: cut,
+      session_verify: sessionRan('verify'),
+      session_code_review: sessionRan('code-review'),
+      n_files: paths ? paths.length : null,
+      self_check_change: selfCheck,
+      session,
+      ...(verdict.warn ? { warn: verdict.warn } : {}),
+      ms: Math.round((now() - t0) * 1000),
+    });
   });
+  if (!res.locked || !res.value) return null;
   return selfCheck ? context('PostToolUse', checklist.formatContext([], true)) : null;
 }
 

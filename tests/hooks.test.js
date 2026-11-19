@@ -79,7 +79,7 @@ t('skipGlobs from config.json are honoured', (repo) => {
   assert.equal(repo.lastCommitRow().result, 'skipped');
 });
 
-t('SKILL.md written after verify started does not make a verified commit stale', (repo) => {
+t('SKILL.md written after verify started: stale by the working-tree rule, with paths_match showing the committed file was the verified one', (repo) => {
   seed(repo);
   repo.write('src/a.js', 'two\n');
   repo.verify();
@@ -87,10 +87,12 @@ t('SKILL.md written after verify started does not make a verified commit stale',
   repo.git('add', 'src/a.js');
   repo.git('commit', '-q', '-m', 'only the verified file');
   repo.commitHook();
-  assert.equal(repo.lastCommitRow().result, 'verified');
+  assert.equal(repo.lastCommitRow().result, 'stale'); // the working tree is not the one that was verified (XREVIEW #8)
+  assert.equal(repo.lastCommitRow().paths_match, true);
+  assert.equal(repo.lastCommitRow().stale_files, 0);
 });
 
-t('untracked junk that is not committed does not affect the result', (repo) => {
+t('untracked junk changed after verify: stale by the working-tree rule, paths_match true', (repo) => {
   seed(repo);
   repo.write('src/a.js', 'two\n');
   repo.write('scratch.tmp', 'junk\n');
@@ -99,7 +101,8 @@ t('untracked junk that is not committed does not affect the result', (repo) => {
   repo.git('add', 'src/a.js');
   repo.git('commit', '-q', '-m', 'c');
   repo.commitHook();
-  assert.equal(repo.lastCommitRow().result, 'verified');
+  assert.equal(repo.lastCommitRow().result, 'stale');
+  assert.equal(repo.lastCommitRow().paths_match, true);
 });
 
 t('root commit is judged against the verified tree', (repo) => {
@@ -147,7 +150,8 @@ t('merge commit is judged against its first parent', (repo) => {
   repo.commit('feature');
   repo.git('checkout', '-q', 'main');
   repo.verify();
-  repo.git('merge', '--no-ff', '-q', '-m', 'merge', 'feature');
+  repo.git('merge', '--no-ff', '--no-commit', '-q', 'feature');
+  repo.git('commit', '-q', '-m', 'merge'); // `git commit` finishing the merge: reflog "commit (merge)"
   repo.commitHook();
   const row = repo.lastCommitRow();
   assert.equal(row.n_files, 1);

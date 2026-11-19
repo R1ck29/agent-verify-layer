@@ -63,13 +63,16 @@ test('classify: skipped beats none; none; verified; stale; unreachable tree', ()
   const skipGlobs = ['*.md', 'docs/**'];
   const run = { tree: 'T' };
   const same = () => new Set();
-  assert.deepEqual(classify({ paths: ['README.md', 'docs/a.txt'], run: null, skipGlobs, diffNames: same }), { result: 'skipped', stale_files: 0 });
-  assert.deepEqual(classify({ paths: [], run: null, skipGlobs, diffNames: same }), { result: 'skipped', stale_files: 0 }); // empty commit
-  assert.equal(classify({ paths: ['a.js'], run: null, skipGlobs, diffNames: same }).result, 'none');
-  assert.equal(classify({ paths: ['a.js'], run, skipGlobs, diffNames: same }).result, 'verified');
-  assert.deepEqual(classify({ paths: ['a.js', 'b.js', 'c.js'], run, skipGlobs, diffNames: () => new Set(['a.js', 'c.js', 'zzz.js']) }), { result: 'stale', stale_files: 2 });
-  assert.equal(classify({ paths: ['a.js'], run, skipGlobs, diffNames: () => new Set(['other.js']) }).result, 'verified'); // differences outside the commit are ignored
-  const lost = classify({ paths: ['a.js'], run, skipGlobs, diffNames: () => null });
+  const w = { worktreeTree: 'T', headTree: 'T' };
+  assert.deepEqual(classify({ paths: ['README.md', 'docs/a.txt'], run: null, skipGlobs, diffNames: same, ...w }), { result: 'skipped', stale_files: 0 });
+  assert.deepEqual(classify({ paths: [], run: null, skipGlobs, diffNames: same, ...w }), { result: 'skipped', stale_files: 0 }); // empty commit
+  assert.equal(classify({ paths: ['a.js'], run: null, skipGlobs, diffNames: same, ...w }).result, 'none');
+  assert.equal(classify({ paths: ['a.js'], run, skipGlobs, diffNames: same, ...w }).result, 'verified');
+  const stale = { worktreeTree: 'W', headTree: 'H' };
+  assert.deepEqual(classify({ paths: ['a.js', 'b.js', 'c.js'], run, skipGlobs, diffNames: () => new Set(['a.js', 'c.js', 'zzz.js']), ...stale }), { result: 'stale', stale_files: 2, paths_match: false, head_tree_match: false });
+  const outside = classify({ paths: ['a.js'], run, skipGlobs, diffNames: () => new Set(['other.js']), ...stale });
+  assert.deepEqual([outside.result, outside.paths_match], ['stale', true]); // XREVIEW #8: no longer "verified"
+  const lost = classify({ paths: ['a.js'], run, skipGlobs, diffNames: () => null, ...stale });
   assert.equal(lost.result, 'stale');
   assert.equal(lost.warn, 'tree-unreachable');
 });

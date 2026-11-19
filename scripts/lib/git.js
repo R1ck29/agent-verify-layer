@@ -82,6 +82,24 @@ function headInfo(cwd, opts) {
   return { sha, parents, time: Number.isFinite(time) ? time : null };
 }
 
+// The two newest HEAD reflog entries: [{ sha, ts, subject }] (newest first). A commit made by
+// `git commit` leaves a "commit…" entry; reading commands leave none. null when there is no reflog.
+function reflog(cwd, opts) {
+  const r = git(['reflog', '-2', '--date=unix', '--format=%H%x09%gd%x09%gs', 'HEAD'], { cwd, ...opts });
+  if (!r.ok) return null;
+  const rows = r.out.split('\n').filter(Boolean).map((l) => {
+    const [sha, gd, subject] = l.split('\t');
+    const m = /@\{(\d+)\}/.exec(gd || '');
+    return { sha, ts: m ? Number(m[1]) : null, subject: subject || '' };
+  });
+  return rows.length ? rows : null;
+}
+
+function headTree(cwd, opts) {
+  const r = git(['rev-parse', '--verify', '-q', 'HEAD^{tree}'], { cwd, ...opts });
+  return r.ok ? r.out.trim() : null;
+}
+
 // Files touched by HEAD (first parent for merges, empty tree for the root commit).
 function commitPaths(cwd, head, opts) {
   const r = head.parents.length
@@ -142,6 +160,8 @@ module.exports = {
   hasHead,
   headInfo,
   commitPaths,
+  reflog,
+  headTree,
   treeHash,
   diffTreeToHead,
 };
