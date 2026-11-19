@@ -4,6 +4,8 @@
 
 入力: DESIGN.md 全文、sources/article.md 全文、sources/ の公式ドキュメント（2.1.327 時点の写し）と changelog、この環境の Claude Code 2.1.325 のバイナリ（`strings`）、agent-harness-eval（main、pyproject 上は 0.8.0）、既存ハーネス（~/.claude、プラグイン、$E1B_REPOS_DIR/ の 6 リポジトリ。読むだけ）。モデルを呼ぶ実験はしていない。
 
+**位置づけ（2026-11-20）**: Riku の設計書の原本（[DESIGN-source.md](DESIGN-source.md)）が最上位です。このノートが原本から変えた点（PostToolUse への移動、OTEL の廃止、判定の対象をコミットのファイルに絞ったこと、など）は変更案で、承認されるまで原本が正です。判定の定義は Codex レビューを受けて原本（作業ツリーのハッシュ）に戻しました（末尾の回答を参照）。
+
 凡例: 【確】文書・コード・バイナリで確かめた。【推】推論。行番号は sources/ のファイルの行。
 
 ## 0. 結論の要約
@@ -344,3 +346,43 @@ AHE 0.8.0 の、実在する仕組みだけで組む: タスクの YAML、プロ
 6. SQL 向けの個人用 verify を「採らなかった案」に移し、理由を書く
 7. 「安いチェックから先に」と、Stop hook を採らなかった理由を、第 1.1 節のとおりに直す
 8. 出典の「節ごとの要約を使用」を、全文と照合した旨に直す
+
+## Codex レビュー（11/19）への回答
+
+Codex（gpt-6.2-astra）の独立レビュー（`XREVIEW-codex.md`、VERDICT: CHANGES_REQUESTED、対象は PR #1 の SHA `1c01f24`）への、作者側の回答です。原則: 設計書の原本が最上位で、原本と食い違う過去の判断は、原本に戻すか、変更案として明示して承認を待つ。修正はすべてテストを先に書き、修正前のコードで失敗することを確かめてから直しました。各ノードは独立した reviewer（`graph-reviewer`）が確認しています。
+
+### ブロッキング 12 件
+
+| # | 指摘 | 回答 | 直し方（テスト） |
+| --- | --- | --- | --- |
+| 1 | `doctor` の smoke が親の `GIT_DIR` 等を継承し、利用者の repo を変更し得る | 同意・修正 | smoke の git と子プロセスを隔離環境（`isolatedGitEnv`: リポジトリの場所を指す `GIT_*` を除去、global・system config 無効、`core.hooksPath` は空ディレクトリ）で動かす。別 repo を `GIT_DIR` で指して doctor を実行し、HEAD・コミット数・status・index・refs が不変（`tests/git-safety.test.js`） |
+| 2 | project スコープの設定とバックアップがコミット候補になる | 同意・修正 | 作業ツリー内のファイルのバックアップは `~/.claude/verify-layer/backups/`（0700）に置く。`settings.local.json` が ignore されていない・追跡済みなら `--apply` は exit 2 で何も書かない（`tests/install-safety.test.js`） |
+| 3 | Codex hook にパスをシェル式として埋め込んでいる | 同意・修正 | `lib/shellquote.js`: POSIX は `$`・バッククォート・`"` を含むとき単引用符。Windows は `$`・バッククォート・`%`・改行を書き込み前に拒否。mark の案内と AGENTS.md の行も同じ関数。`sh -c` で `$(touch X)` を含む名前のディレクトリが 1 語として届き、何も評価されないことを確認 |
+| 4 | 他者の hook を自分のものとして外す | 同意・修正 | 所有は完全一致（Codex: PostToolUse・`^Bash$`・statusMessage・`hook commit --agent codex`。Claude: event・matcher・`vl.js hook <sub>`）。他者の同名スクリプトが apply→apply→uninstall の往復で残ることをテスト。独立レビューで Claude 側の matcher の取りこぼしが見つかり、追加で直した |
+| 5 | リポジトリ単位の承認が、リンク経由でリポジトリ外に及ぶ | 同意・修正 | check・apply・uninstall の前に、既存の親ディレクトリとファイルの realpath がリポジトリ内かを確認し、外・ぶら下がりリンクなら変更前に exit 2 |
+| 6 | Codex が作っていないコミットを記録する | 同意・修正 | コマンド本文に本物の `git commit`（`--dry-run` でない）があり、`-C`・`cd` で場所が特定でき、HEAD の reflog の最新が直近の `commit…` で SHA が未記録、かつ結果が失敗でないときだけ記録（`lib/commitcmd.js`）。`git log --grep=commit` 等・別リポジトリ・`--git-dir`・`cd $VAR` では行を増やさない。生のコマンドは台帳に書かない。残る限界: 終了コードを送らない環境で、失敗した `git commit` が直近の未記録コミットを拾い得る |
+| 7 | スナップショット取得失敗が正常な tree、差分取得失敗が skipped になる | 同意・修正 | `treeHash` は `git add -A` の失敗で null。tree が null の run は台帳に書かず、mark は「記録できませんでした」（exit 0）。コミットの変更パスが取れないときは `result: "unknown"`（分母から外して別掲） |
+| 8 | `verified` が原本より弱い | **一部同意**・修正 | 原本（96 行）どおり、`verified` を「検証記録のツリー hash と、コミット直後の作業ツリーの hash の一致」に戻した（REVIEW-NOTES 第 5.1 節の「コミットのファイルだけの差」は原本からの変更案で、承認されていない）。コミットしたファイルの一致は `paths_match`、コミットの tree 全体の一致は `head_tree_match` として台帳に残し、`report` が別掲する。**「HEAD の tree 全体の一致」を `verified` の条件にする提案は採らなかった**: 原本の判定は作業ツリー全体のハッシュで、部分コミットを禁じていない。ただし相互依存する変更の部分コミット（Codex の例）は `verified` でも `head_tree_match: false` で見える。厳しい定義に切り替えるかは、観察の結果を見て Riku が決める（承認待ち）。レビュアーも、この判断は原本と整合すると確認した |
+| 9 | 並行する hook が同じ SHA を重複記録する | 同意・修正 | 台帳に原子的なロック（ディレクトリ作成）。待ちは最大 2.5 秒、15 秒より古いロックは奪取、取れなければ記録せず exit 0。6 プロセス同時で commit 行 1 |
+| 10 | 空白入りファイル名でチェックが落ちる | 同意・修正 | 差分の一括解析をやめ、パターンのある項目が見るファイルごとに `git diff -- :(literal)<path>` で追加行を取る（空白・クォート・非 ASCII・先頭ハイフン・`++ ` で始まる行） |
+| 11 | `mode: off` と実効状態の食い違い（BOM） | 同意・修正 | hook・mark・installer が同じ BOM 対応の読み取りを使う |
+| 12 | 捕捉率とチェックリスト発火数が観察できなかったケースを落とす | 同意・修正 | 期間の起点を `--days` で台帳と git log に共通化し、台帳が空でも git log を数える。mark で提示した項目も経路別（`checklist_fired_by_route`）に数える（同一セッションで hook が既に出した項目は合計で二重に数えない） |
+
+### ブロッキングでない提案
+
+| 観点 | 回答 |
+| --- | --- |
+| 非 Git ディレクトリ | 修正: 「指定した DIR は Git リポジトリ内ではありません」と実際のパスを示す（明示指定で git init の前後をテスト） |
+| Codex の有効状態と信頼 | 修正: プロジェクトの `.codex/config.toml` の `[features] hooks = false` を警告し、調べた範囲を常に表示（実効値は `codex features list`）。信頼の案内は維持 |
+| 部分導入と引数 | 修正: 書き込み対象を先にすべて検査（親ディレクトリの書込み可否を含む）し、途中失敗で AGENTS.md だけ変わる状態を防ぐ。値を取るオプションは値がなければ exit 2 |
+| 連続 amend | 修正: amend 元の SHA で前の行の境界（`cut_ts`）を引き継ぐ。3 回続けても verified。親コミットの行で境界を決める |
+| チェックリストの読み取り範囲と警告 | 修正: 未追跡 symlink は辿らない。自己変更の警告は先頭に置き、切り詰めるのは項目のほう |
+| 既存の Git hook とデータの保持 | 一部修正: スナップショットは `core.hooksPath` を空にして実行。clean filter は正しい hash のために残す。未追跡ファイルの内容がオブジェクト庫に書かれること、台帳の行を消しても残ることは INSTALL_FOR_CLAUDE.md に明記 |
+| 既存ハーネスと配布単位 | 同意（互いの無効化は不要）。Codex の verify スキルが行動の指示（「全部が通っていなければコミットしない」）であることを、部分導入表に明記 |
+| 原本との差と評価 | 同意・修正: README の「食い違いはレビュー・ノート優先」を、原本が最上位という記述に直した。原本からの変更案は本ノートに残し、承認待ち。評価は E1b で Claude 側「有用でない」（PR 本文と README）。個人の観察フェーズと導入先配布の採否は別に判断する |
+| 文書と実機テスト | 同意・修正: README と SMOKE.md の食い違いを解消。Claude で確認済み（Skill hook、commit 行）と、未確認（UserPromptExpansion、PowerShell、Codex の実際の PostToolUse、Windows 実機）を分けて記載。Codex の fixture は文書から作ったもので、実機採取ではないと明記 |
+
+### 同意しなかったこと
+
+- #8 の「HEAD の tree 全体の一致を `verified` の条件にする」だけは採らなかった（上の理由。代わりに別集計で見える化）。それ以外の指摘は、方法を変えたものも含めて採用した。
+

@@ -11,6 +11,17 @@
 
 ### 修正
 
+- 独立レビュー（Codex、`XREVIEW-codex.md`）の指摘 12 件と提案への対応（回答は `docs/REVIEW-NOTES.md` の「Codex レビュー（11/19）への回答」）:
+  - `doctor` の smoke が、親の `GIT_DIR` 等を継承して利用者のリポジトリを変更し得た。隔離環境で実行する
+  - スナップショット（`git add -A`）の失敗が正常な tree になり、変更パスの取得失敗が `skipped` になっていた。`unknown` として分けて数える
+  - project スコープの設定のバックアップがコミット候補になった。ignore されていなければ書かず、バックアップは作業ツリーの外に置く
+  - Codex hook のパスがシェルに評価されていた。引用を共通化し、表現できないパスは書き込み前に拒否
+  - 他者の同名 hook を自分のものとして外していた。event・matcher・コマンド形の完全一致だけを自分のものとする
+  - `--repo-skill` がシンボリックリンクでリポジトリの外に及んでいた。外に解決されるときは何もしない。書き込み対象はすべて先に検査し、値のないオプションは exit 2
+  - Codex が作っていないコミットを記録していた。実際の `git commit`（reflog で確認）だけを記録し、並行する hook は台帳のロックで 1 行に
+  - `verified` を設計書の原本どおり作業ツリーのハッシュの一致に戻した（`paths_match`、`head_tree_match` は別集計）
+  - 空白入りファイル名でチェックリストの追加行が落ちていた、BOM 付き config で hook と installer が食い違っていた、`report` の期間起点と mark 経路の発火数が観察できないケースを落としていた
+
 - `install.js --agent codex --repo-skill` が利用者全体の hook のマージ・削除も一緒に行っていた。リポジトリのスキルだけを扱うようにした
 - `install.js` が `module.exports` より前に `main()` を呼んでいたため、`--agent codex` が毎回「t.removeOwn is not a function」で失敗していた
 - 実機の Claude Code 2.1.325 で、`if: "Skill(verify)"` の PostToolUse hook が起動せず、run 行が台帳に書かれなかった（commit 行が `none` になる）。Skill の hook を `if` なしの `matcher: "Skill"` 1 本（`vl.js hook skill`）にし、スクリプト側で `tool_input.skill` から verify / 入れ子の verify / code-review（別名 `review`）を判定して記録し、ほかのスキルでは何もせず終了するようにした。`hook run <verify|code-review>` は `hook skill` に置き換わった（`install.js --apply` で入れ直すと古い登録は置き換わる）。Bash の `if` は実機で当たったので変更なし。詳細は `docs/SMOKE.md`
