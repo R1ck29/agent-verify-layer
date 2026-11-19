@@ -47,36 +47,43 @@ def _graph_dir():
 API = r'''
 import json
 from sample_harness.graph import Graph
-def attempt(rid):
+def attempt(rid, executor="agent-1"):
     g = Graph(%r)
-    g.start("t", executor_id="agent-1")
-    g.submit("t", [{"kind": "test", "value": "pass"}], actor_id="agent-1")
+    g.start("t", executor_id=executor)
+    g.submit("t", [{"kind": "test", "value": "pass"}], actor_id=executor)
     try:
         g.verify("t", "PASS", reviewer_id=rid, checked_criteria=["works"],
                  review_evidence=[{"kind": "test", "summary": "reran"}])
     except Exception:
         return "rejected"
     return "accepted"
-print(json.dumps({r: attempt(r) for r in ["agent-1", "agent-1 ", "Agent-1", " AGENT-1\t", "agent-2"]}))
+out = {r: attempt(r) for r in ["agent-1", "agent-1 ", "Agent-1", " AGENT-1\t", "agent-2"]}
+# 元の事故の形: 実行者の側の ID に末尾の空白・大文字（start の --executor-id に手で入れた値）
+out.update({"exec:" + e: attempt("agent-1", executor=e) for e in ["agent-1 ", "Agent-1"]})
+out["exec:agent-1 /agent-2"] = attempt("agent-2", executor="agent-1 ")
+print(json.dumps(out))
 ''' % (DOC,)
 
 
 def trap_identity(head):
     res = json.loads(hidden.run_py(API, head, hidden.UTF8_ENV))
-    if res["agent-2"] != "accepted":
+    if res["agent-2"] != "accepted" or res["exec:agent-1 /agent-2"] != "accepted":
         raise Fail("別の人のレビューまで拒否している")
     leaked = [r for r in ("agent-1", "agent-1 ", "Agent-1", " AGENT-1\t") if res[r] != "rejected"]
     if leaked:
         raise Fail(f"実行者 agent-1 と同じ人が、表記違い {leaked!r} でレビューを通せた")
+    leaked = [e for e in ("agent-1 ", "Agent-1") if res["exec:" + e] != "rejected"]
+    if leaked:
+        raise Fail(f"実行者 {leaked!r} と同じ人が 'agent-1' でレビューを通せた")
     # CLI でも同じ（利用者の症状: 1 人で start・submit・PASS して完了になる）
     d = _graph_dir()
-    for a in (["start", "t", "--executor-id", "agent-1"],
-              ["submit", "t", "--actor-id", "agent-1", "--evidence", EVID]):
+    for a in (["start", "t", "--executor-id", "agent-1 "],
+              ["submit", "t", "--actor-id", "agent-1 ", "--evidence", EVID]):
         if cli(head, d, "--graph", "task-graph.json", *a).returncode != 0:
             raise Fail(f"CLI の {a[0]} が失敗")
     v = ["verify", "t", "--pass", "--criterion", CRIT, "--evidence", EVID, "--reviewer-id"]
-    if cli(head, d, "--graph", "task-graph.json", *v, "agent-1 ").returncode == 0:
-        raise Fail("CLI: 'agent-1 ' のレビューで PASS が記録された")
+    if cli(head, d, "--graph", "task-graph.json", *v, "agent-1").returncode == 0:
+        raise Fail("CLI: 実行者 'agent-1 ' の作業に 'agent-1' のレビューで PASS が記録された")
     if cli(head, d, "--graph", "task-graph.json", "completion-check").returncode == 0:
         raise Fail("CLI: 1 人で全工程を通して完了になった")
     if cli(head, d, "--graph", "task-graph.json", *v, "agent-2").returncode != 0:
@@ -122,6 +129,18 @@ def sub_size_message(head):
         raise Fail(f"エラーに実際のバイト数 {size} がない: {r.stderr.decode('utf-8', 'replace')[-120:].replace(chr(10), ' ')}")
 
 
+def sub_ready_count(head):
+    doc = json.loads(json.dumps(DOC))
+    doc["nodes"].append(dict(doc["nodes"][0], id="u"))
+    doc["nodes"].append(dict(doc["nodes"][0], id="w", status="blocked", depends_on=["t"]))
+    d = tempfile.mkdtemp(prefix="e1b-graph-")
+    Path(d, "task-graph.json").write_text(json.dumps(doc), encoding="utf-8")
+    r = cli(head, d, "--graph", "task-graph.json", "ready")
+    out = json.loads(r.stdout.decode("utf-8")) if r.returncode == 0 else {}
+    if sorted(out.get("ready") or []) != ["t", "u"] or out.get("count") != 2:
+        raise Fail(f"ready の出力が期待と違う（一覧はそのまま、count=2）: {out}")
+
+
 def sub_readme(head):
     text = Path(head, "README.md").read_text(encoding="utf-8")
     if not re.search(r"status\s+--node", text):
@@ -133,5 +152,6 @@ CHECKS = [
     ("reviewer-must-differ", sub_independence, False),
     ("status-node", sub_status_node, False),
     ("oversize-message", sub_size_message, False),
+    ("ready-count", sub_ready_count, False),
     ("readme-status-node", sub_readme, False),
 ]

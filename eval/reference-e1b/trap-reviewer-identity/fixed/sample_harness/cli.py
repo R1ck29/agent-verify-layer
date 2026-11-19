@@ -334,7 +334,8 @@ def run(args: argparse.Namespace) -> Any:
         graph = store.load()
         return {"valid": True, "nodes": len(graph.nodes)}
     if args.command == "ready":
-        return {"ready": store.load().ready_node_ids()}
+        ready_ids = store.load().ready_node_ids()
+        return {"ready": ready_ids, "count": len(ready_ids)}
     if args.command == "status":
         summary = store.load().status_summary()
         if args.node is not None:
