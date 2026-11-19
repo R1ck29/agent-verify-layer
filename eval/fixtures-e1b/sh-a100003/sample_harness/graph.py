@@ -533,9 +533,9 @@ class Graph:
             raise HarnessError(
                 f"evidence references unknown criteria: {sorted(unknown)}"
             )
+        node["evidence"] = items
         context = dict(review_context or {})
         self._validate_review_context(context, node_id)
-        node["evidence"] = items
         node["review_context"] = context
         node["status"] = "awaiting_verification"
         node["submitted_at"] = utc_now()

@@ -336,7 +336,8 @@ def run(args: argparse.Namespace) -> Any:
         return report
     if args.command == "validate":
         graph = store.load()
-        return {"valid": True, "nodes": len(graph.nodes)}
+        edges = sum(len(node["depends_on"]) for node in graph.nodes)
+        return {"valid": True, "nodes": len(graph.nodes), "edges": edges}
     if args.command == "ready":
         return {"ready": store.load().ready_node_ids()}
     if args.command == "status":

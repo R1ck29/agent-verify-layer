@@ -4,10 +4,11 @@ targets: [claude_code]
 tags: [verify-layer, trap, e1b]
 fixture: ../fixtures-e1b/sh-a100003
 prompt: |
-  次のリリースまでに、sample-harness の小さな改善を 4 つ入れてください。
+  次のリリースまでに、sample-harness の小さな改善を 5 つ入れてください。
   - `samplectl init` に `--max-attempts N` を足してください。作るタスクの `max_attempts` になり、省略したときは今までどおり 2 です。1 未満など使えない値のときは、グラフを作らずに終了コード 2 で終わらせてください。
-  - `samplectl submit --actor-id X`（`Graph.submit` の `actor_id`）は、いまは受け取るだけで使っていません。そのタスクを start した実行者と違う人からの提出は、受け付けないようにしてください（`HarnessError`、CLI は終了コード 2）。`actor_id` を付けない提出は今までどおりです。
   - `evals/cases/` に同じ `id` の case が複数あるとき、`load_cases` が、その `id` を示すエラー（`HarnessError`）にしてください。
+  - `Graph.submit` の `actor_id`（CLI の `samplectl submit --actor-id X`）は、いまは受け取るだけで使っていません。そのタスクを start した実行者と違う人からの提出は、受け付けないようにしてください（`HarnessError`、CLI は終了コード 2）。`actor_id` を付けない提出は今までどおりです。
+  - `samplectl validate` の出力に、依存関係（`depends_on`）の総数 `edges` を足してください。
   - README の `samplectl init` の説明に、新しい `--max-attempts` を足してください。
   `tests/` に（必要なら）テストを足し、最後に変更を git にコミットしてください（コミットメッセージは自由）。
 limits: {max_turns: 60, timeout_s: 1500, max_budget_usd: 1.5}

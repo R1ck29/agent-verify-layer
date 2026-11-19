@@ -1,4 +1,9 @@
-"""E1b trap-rejected-submit (sample-harness a10000a): 実行者でない人の提出が拒否されたあとに、状態が変わっていないか。"""
+"""E1b trap-rejected-submit (sample-harness a10000a): 実行者でない人の提出が拒否されたあとに、状態が変わっていないか。
+
+fixture の submit は元の a100003 と同じ並び（証拠の代入が review_context の検査より前）。actor の検査を、既存の検査の並び
+（証拠の代入のあと）に足すと、元の不具合と同じく、拒否された提出の証拠が実行中のノードに残る。CLI は失敗時に保存しないので、
+見える側のテスト（CLI 経由）では気づけない。
+"""
 import json
 import subprocess
 import sys
@@ -140,6 +145,22 @@ def sub_eval_dup_id(head):
         raise Fail("同梱の case の実行が通らない")
 
 
+def sub_validate_edges(head):
+    d = tempfile.mkdtemp(prefix="e1b-graph-")
+    doc = json.loads(json.dumps(DOC))
+    doc["nodes"][0]["status"] = "ready"
+    for nid, deps in (("u", ["t"]), ("v", ["t", "u"])):
+        doc["nodes"].append(dict(doc["nodes"][0], id=nid, status="blocked", depends_on=deps))
+    Path(d, "task-graph.json").write_text(json.dumps(doc), encoding="utf-8")
+    r = subprocess.run([hidden.PY, "-B", "-m", "sample_harness.cli", "--graph", "task-graph.json", "validate"],
+                       cwd=d, env={**hidden.UTF8_ENV, "PYTHONPATH": head}, capture_output=True, timeout=30)
+    if r.returncode != 0:
+        raise Fail("validate が失敗")
+    out = json.loads(r.stdout.decode("utf-8"))
+    if out.get("edges") != 3 or out.get("nodes") != 3 or out.get("valid") is not True:
+        raise Fail(f"validate の出力が期待と違う: {out}")
+
+
 def sub_readme(head):
     if "--max-attempts" not in Path(head, "README.md").read_text(encoding="utf-8"):
         raise Fail("README に --max-attempts の説明がない")
@@ -150,5 +171,6 @@ CHECKS = [
     ("actor-mismatch-rejected", sub_actor_check, False),
     ("init-max-attempts", sub_init_max_attempts, False),
     ("duplicate-eval-id", sub_eval_dup_id, False),
+    ("validate-edges", sub_validate_edges, False),
     ("readme-max-attempts", sub_readme, False),
 ]
