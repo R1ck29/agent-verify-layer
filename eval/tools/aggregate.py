@@ -15,6 +15,15 @@ from pathlib import Path
 
 P0, P1, P2 = "claude-baseline", "claude-static-rules", "claude-verify-layer"
 PROFILES = [P0, P1, P2]
+CODEX_PROFILES = ["codex-baseline", "codex-agents-md", "codex-verify-layer"]
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import leak_check  # noqa: E402  答えを見た形跡（INVALID）
+import tamper_check  # noqa: E402  見えているテストの改ざん（合格にしない）
+REPO = Path(__file__).resolve().parents[2]
+# 試行の外でも読んでよいファイル: 層の hook が呼ぶ scripts/vl.js（この checkout と、VL_ALLOW に「:」区切りで足したもの。
+# 過去の実行は別の checkout の vl.js を使っている）
+import os  # noqa: E402
+ALLOW = [str(REPO / "scripts/vl.js")] + [a for a in os.environ.get("VL_ALLOW", "").split(":") if a]
 COMMIT = re.compile(r"\bgit\s+(?:-C\s+\S+\s+|-c\s+\S+\s+)*commit\b")
 VERIFY = re.compile(r"(^|:)verify$")
 # エージェントが評価の中身（隠しテスト・参照解）を読んだ形跡
@@ -78,24 +87,41 @@ def agent_commits(td):
 
 
 def med(xs):
+    xs = [x for x in xs if x is not None]
     return round(st.median(xs), 4) if xs else None
 
 
 def main():
     run = Path(sys.argv[1])
     rows = [json.loads(x) for x in (run / "trials.jsonl").read_text().splitlines()]
+    global P0, P1, P2, PROFILES
+    if any(r["profile_id"] in CODEX_PROFILES for r in rows):
+        P0, P1, P2 = CODEX_PROFILES
+        PROFILES = [P0, P1, P2]
     out = {"run_id": rows[0]["run_id"], "n_trials": len(rows)}
     T = []
     for r in rows:
         ok, reason = hidden_pass(r)
         td = run / "trials" / r["task_id"] / r["profile_id"] / str(r["trial"])
+        if not td.exists() and r.get("trial_dir") and Path(r["trial_dir"]).exists():
+            td = Path(r["trial_dir"])  # 結合した実行（trials.jsonl だけ）では、元の試行ディレクトリを見る
         so = td / "stdout.jsonl"
         peek = bool(PEEK.search(json.dumps(r["tool_calls"], ensure_ascii=False))) or bool(PEEK.search(so.read_text(errors="replace")))
+        # 層の hook が呼ぶ scripts/vl.js（評価のリポジトリの中）は許可。ほかの試行の外の参照は INVALID
+        lk = leak_check.check(td, allow=ALLOW)
+        wd = td / "workdir"
+        try:
+            tm = tamper_check.check(wd) if (wd / ".git").exists() else {"status": "unknown", "findings": []}
+        except Exception as e:  # noqa: BLE001  git が読めないときは不明（合格を取り消さない・印は残す）
+            tm = {"status": "unknown", "findings": [str(e)[:120]]}
+        leaked = lk["status"] == "INVALID"
+        tampered = tm["status"] == "TAMPER"
         t = {"task": r["task_id"], "kind": kind(r["task_id"]), "profile": r["profile_id"], "trial": r["trial"],
-             "env_valid": bool(r["valid"]), "peeked": peek, "valid": bool(r["valid"]) and not peek,
-             "hidden": ok, "reason": reason, "turns": r["num_turns"], "cost": r["cost_usd"], "cost_source": r["cost_source"],
+             "env_valid": bool(r["valid"]), "peeked": peek, "leak": lk["hits"][:5], "leak_warnings": len(lk["warnings"]),
+             "tamper": tm["findings"][:5], "valid": bool(r["valid"]) and not peek and not leaked,
+             "hidden": ok and not tampered, "hidden_raw": ok, "reason": reason if not tampered else f"TAMPER: {tm['findings'][:2]} / {reason}", "turns": r["num_turns"] or 0, "cost": r["cost_usd"] or 0.0, "cost_source": r["cost_source"],
              **classify(r["tool_calls"])}
-        if r["profile_id"] == P2:
+        if r["profile_id"] == P2 and r["agent"] != "codex":
             led = ledger(td)
             t["commit_rows"] = [x["result"] for x in led if x["kind"] == "commit"]
             t["run_rows"] = sum(x["kind"] == "run" for x in led)
@@ -106,8 +132,12 @@ def main():
                      "判定は RESULTS.md の事前基準どおり。基準は結果を見たあとに変えない",
                      "A/B/C/D は Edit/Write だけを編集と数える事前定義。Bash での書き込みを数える classes_bash_aware は参考（正規表現の推定）",
                      "費用は client_estimate（サブスクリプションでの API 単価換算の推定）。モデルは 1 つ、fixture は小さな合成ライブラリ"]
-    out["n"] = {"trials": len(T), "valid": sum(t["valid"] for t in T), "peeked": sum(t["peeked"] for t in T)}
-    out["models"] = sorted({r["meta"]["model"] for r in rows})
+    out["n"] = {"trials": len(T), "valid": sum(t["valid"] for t in T), "peeked": sum(t["peeked"] for t in T),
+                "leak_invalid": sum(bool(t["leak"]) for t in T), "tamper": sum(bool(t["tamper"]) for t in T)}
+    out["cheat_flags"] = {"run_has_leak": any(t["leak"] for t in T), "run_has_tamper": any(t["tamper"] for t in T),
+                          "leaks": [{k: t[k] for k in ("task", "profile", "trial", "leak")} for t in T if t["leak"]],
+                          "tampers": [{k: t[k] for k in ("task", "profile", "trial", "tamper")} for t in T if t["tamper"]]}
+    out["models"] = sorted({str(r["meta"].get("model", r.get("agent"))) for r in rows})
     out["cli"] = sorted({r["cli_version"] for r in rows})
     out["cost_sources"] = sorted({t["cost_source"] for t in T})
     out["invalid"] = [{k: t[k] for k in ("task", "profile", "trial", "env_valid", "peeked")} for t in T if not t["valid"]]

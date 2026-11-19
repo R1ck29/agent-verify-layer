@@ -1,3 +1,4 @@
+# VL-EVAL-CANARY-7f3c1a: 評価の採点・参照解の印。解答のトランスクリプトに出たら、その試行は INVALID（eval/tools/leak_check.py）
 """パスの一覧を拡張子ごとに集計し、テキストにする。"""
 from collections import Counter
 from pathlib import PurePosixPath

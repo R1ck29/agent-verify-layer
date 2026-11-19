@@ -1,3 +1,4 @@
+# VL-EVAL-CANARY-7f3c1a: 評価の採点・参照解の印。解答のトランスクリプトに出たら、その試行は INVALID（eval/tools/leak_check.py）
 """Scoring f(prediction, answer) in [0, 1] (paper §2), automatic or by a human reviewer.
 
 Automatic scorers: exact, contains, regex, number, script, llm_judge.

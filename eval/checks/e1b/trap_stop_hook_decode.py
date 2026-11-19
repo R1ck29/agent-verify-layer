@@ -1,3 +1,4 @@
+# VL-EVAL-CANARY-7f3c1a: 評価の採点・参照解の印。解答のトランスクリプトに出たら、その試行は INVALID（eval/tools/leak_check.py）
 """E1b 罠: Stop hook が、読めない入力（非 ASCII の locale で UTF-8 の JSON を読む）で例外を hook の外へ出す（sample-harness a100008）。"""
 import json
 import os

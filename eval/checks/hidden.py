@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# VL-EVAL-CANARY-7f3c1a: 評価の採点・参照解の印。解答のトランスクリプトに出たら、その試行は INVALID（eval/tools/leak_check.py）
 """隠しテスト。コミットされた HEAD で、不具合が再発していない（かつ依頼の機能がある）かを決定的に判定する。
 
 使い方（AHE の command グレーダーから。作業ディレクトリ = 試行の作業ツリー）:
@@ -16,6 +17,8 @@ import os
 import subprocess
 import sys
 import tarfile
+import contextlib
+import shutil
 import tempfile
 
 PY = sys.executable
@@ -292,7 +295,31 @@ CHECKS = {
 }
 
 
+@contextlib.contextmanager
+def grading_tmp():
+    """採点のあいだだけの一時ディレクトリの根。中で作る一時ディレクトリ（mkdtemp・子プロセスの TMPDIR）もすべてここに入り、
+    終わったら丸ごと消す（以前は /tmp/hidden-head-* などが残り、隠しテストを当てた木が後の試行から読めた）。"""
+    root = tempfile.mkdtemp(prefix="vl-grade-", dir=os.environ.get("VL_GRADE_TMP"))
+    old_dir, old_env = tempfile.tempdir, os.environ.get("TMPDIR")
+    tempfile.tempdir = root
+    os.environ["TMPDIR"] = root
+    try:
+        yield root
+    finally:
+        tempfile.tempdir = old_dir
+        if old_env is None:
+            os.environ.pop("TMPDIR", None)
+        else:
+            os.environ["TMPDIR"] = old_env
+        shutil.rmtree(root, ignore_errors=True)
+
+
 def main(argv):
+    with grading_tmp():
+        return _main(argv)
+
+
+def _main(argv):
     if not argv or argv[0] not in CHECKS:
         print(f"使い方: hidden.py {{{'|'.join(CHECKS)}}} [--workdir DIR]")
         return 2

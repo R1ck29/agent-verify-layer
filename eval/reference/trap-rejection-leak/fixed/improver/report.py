@@ -1,3 +1,4 @@
+# VL-EVAL-CANARY-7f3c1a: 評価の採点・参照解の印。解答のトランスクリプトに出たら、その試行は INVALID（eval/tools/leak_check.py）
 """検査の結果を <out_dir>/improve.json に書く。"""
 import json
 import os

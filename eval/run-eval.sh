@@ -46,10 +46,16 @@ if [ "$mode" = dry ]; then
   for f in "$pdir"/claude-*.yaml; do   # 認証を外し、模擬 CLI を使う。ほかは本物のプロファイルと同じ
     sed -e "s#{profile_dir}#$pdir#g" -e "s#copy: static-rules#copy: $pdir/static-rules#" \
         -e '/^inherit_env:/d' -e '/^billing:/d' -e '/^hash_paths:/d' "$f" > "$prof/$(basename "$f")"
-    printf 'executable: ["%s", "%s"]\n' "$PY" "$here/tools/fake_claude.py" >> "$prof/$(basename "$f")"
+    if [ "${SANDBOX:-}" = dry ]; then  # 隔離の通し確認: 模擬 CLI も bubblewrap の中で動かす
+      printf 'executable: ["%s", "%s", "%s"]\n' "$here/tools/sandbox-run.sh" "$PY" "$here/tools/fake_claude.py" >> "$prof/$(basename "$f")"
+    else
+      printf 'executable: ["%s", "%s"]\n' "$PY" "$here/tools/fake_claude.py" >> "$prof/$(basename "$f")"
+    fi
   done
   profiles=("$prof"/claude-*.yaml)
   export FAKE_VERIFY=1
+  repo="$(cd "$here/.." && pwd)"
+  [ "${SANDBOX:-}" = dry ] && export VL_SANDBOX_RO="$repo/scripts:$repo/hooks:$repo/codex:$repo/rules:$here/tools:$AHE_DIR"
   trials=1; extra=(--tag verify-layer)
 else
    [ "$AGENT" = codex ] || : "${CLAUDE_CODE_OAUTH_TOKEN:?CLAUDE_CODE_OAUTH_TOKEN が未設定です。外側のシェルで claude setup-token → export してください（値は表示しません）}"
@@ -59,6 +65,23 @@ else
     smoke-p0) trials=1; extra=(--tag e1b);;          # E1b の罠だけ（E1 の対照は含めない）
     full) trials="${TRIALS:-2}"; extra=(--tag verify-layer);;
   esac
+fi
+# 解答の隔離（既定 on）: 本物のモデルの試行は tools/sandbox-run.sh（bubblewrap）の中で動かす。評価の中身・他の試行・/workspace の残り・
+# 本物のホームは見えない。層の hook が呼ぶ scripts/・hooks/・codex/・rules/ だけ読み取り専用で見せる。SANDBOX=off は切り分け用（結果は判定に使わない）
+if [ "$mode" != dry ] && [ "${SANDBOX:-on}" != off ]; then
+  command -v bwrap >/dev/null || { echo "bwrap がありません（SANDBOX=off で素通しにできるが、判定には使わない）" >&2; exit 2; }
+  repo="$(cd "$here/.." && pwd)"
+  export VL_SANDBOX_RO="$repo/scripts:$repo/hooks:$repo/codex:$repo/rules"
+  # 隔離版のプロファイルは元と同じディレクトリに隠しファイルで作る（相対パスの install・hash_paths をそのまま使うため。.gitignore 済み）
+  sp=()
+  for f in "${profiles[@]}"; do
+    cli=claude; grep -q '^agent: *codex' "$f" && cli=codex
+    g="$(dirname "$f")/.sbx.$(basename "$f")"
+    { cat "$f"; printf '\nexecutable: ["%s", "%s"]\n' "$here/tools/sandbox-run.sh" "$cli"; } > "$g"
+    sp+=("$g")
+  done
+  profiles=("${sp[@]}")
+  echo "== 解答の隔離: bubblewrap（${profiles[*]}）"
 fi
 # 実行全体の費用の上限（推定額）。E1 は従来どおり 30。E1b は 1 試行の上限 1.5 USD（タスク YAML）に合わせて、smoke 5・smoke-p0 10・full 30
 cap=30

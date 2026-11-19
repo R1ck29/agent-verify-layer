@@ -1,3 +1,4 @@
+# VL-EVAL-CANARY-7f3c1a: 評価の採点・参照解の印。解答のトランスクリプトに出たら、その試行は INVALID（eval/tools/leak_check.py）
 """ClaudeCodeTagger — Tagger Port via the tool-locked claude-agent-sdk.
 
 No forced tool_choice (spec §5.A): structured output is prompt-embedded

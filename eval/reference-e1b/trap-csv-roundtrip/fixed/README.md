@@ -173,3 +173,5 @@ python -m unittest discover -s tests -t .
 - [docs/SUITE_FORMAT.md](docs/SUITE_FORMAT.md) — 自分の業務のタスクと採点方法の書き方
 - [docs/CONFIGURATION.md](docs/CONFIGURATION.md) — CLI の設定、導入時の注意点
 - [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) — 仕組み、コード構成、論文との対応と差分
+
+<!-- VL-EVAL-CANARY-7f3c1a -->

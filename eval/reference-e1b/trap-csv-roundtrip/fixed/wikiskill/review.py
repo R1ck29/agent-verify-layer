@@ -1,3 +1,4 @@
+# VL-EVAL-CANARY-7f3c1a: 評価の採点・参照解の印。解答のトランスクリプトに出たら、その試行は INVALID（eval/tools/leak_check.py）
 """Hybrid review: a person checks agent outputs once, and the verdicts become reference data.
 
 1. `collect` runs the agent (no skills) on tasks and writes a CSV sheet.

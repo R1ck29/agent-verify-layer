@@ -1,3 +1,4 @@
+# VL-EVAL-CANARY-7f3c1a: 評価の採点・参照解の印。解答のトランスクリプトに出たら、その試行は INVALID（eval/tools/leak_check.py）
 """E1b trap-rejected-submit (sample-harness a10000a): 実行者でない人の提出が拒否されたあとに、状態が変わっていないか。
 
 fixture の submit は元の a100003 と同じ並び（証拠の代入が review_context の検査より前）。actor の検査を、既存の検査の並び
