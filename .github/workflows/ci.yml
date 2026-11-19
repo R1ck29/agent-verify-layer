@@ -8,10 +8,16 @@ on:
 permissions:
   contents: read
 
+# A newer push to the same branch supersedes the running checks.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   test:
     name: node ${{ matrix.node }} / ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
     strategy:
       fail-fast: false
       matrix:
@@ -30,3 +36,15 @@ jobs:
         run: node --test
         env:
           CI: 'true'
+      # No Codex on the runners: the Codex part must report and skip, never fail or write.
+      - name: Codex part skips cleanly without Codex
+        shell: bash
+        env:
+          CODEX_HOME: ${{ runner.temp }}/no-codex-home
+          VL_CODEX_BIN: ${{ runner.temp }}/no-codex-bin
+          VL_CONFIG_DIR: ${{ runner.temp }}/vl-config
+        run: |
+          node scripts/install.js --agent codex --check
+          node scripts/vl.js doctor --json > "$RUNNER_TEMP/doctor.json" || true
+          node -e "const d=require(process.argv[1]); const c=d.results.filter(r=>/^Codex/.test(r.msg)); if(c.length!==1||c[0].level!=='info'){console.error(c);process.exit(1)} console.log(c[0].msg)" "$RUNNER_TEMP/doctor.json"
+          node -e "process.exit(require('fs').existsSync(process.env.CODEX_HOME) ? 1 : 0)"
