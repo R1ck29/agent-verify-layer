@@ -229,6 +229,7 @@ function run(flags) {
   checkSettings(add, files);
   checkWiring(add, files);
   checkSkills(add, root);
+  require('./doctor-codex').checkCodex(add, root);
   checkHooksSmoke(add);
 
   const ng = results.filter((r) => r.level === 'ng').length;
