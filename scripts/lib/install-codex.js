@@ -139,6 +139,11 @@ function run(opts) {
   }
   const before = read.data || {};
   const own = codex.ownGroups(opts.node || 'node');
+  const shape = t.hooksShapeError(before, own);
+  if (shape) {
+    report.error = `${hooksFile} の ${shape}。書き換えると中身が失われるため、何も書いていません。直してから再実行してください`;
+    return { code: 2, report };
+  }
   const { settings: stripped, removed } = t.removeOwn(before, codex.isOwnCodexHandler);
   const after = opts.action === 'uninstall' ? stripped : t.addOwn(stripped, own);
   const same = JSON.stringify(after) === JSON.stringify(before);

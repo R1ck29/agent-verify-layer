@@ -183,6 +183,36 @@ t('broken hooks.json: exit 2, file untouched', (c) => {
   assert.equal(fs.readFileSync(c.hooksFile, 'utf8'), '{ not json');
 });
 
+t('hooks or PostToolUse of an unexpected shape: refused with exit 2 for every action, nothing written', (c) => {
+  const shapes = [
+    { hooks: { PostToolUse: { matcher: 'x', hooks: [{ type: 'command', command: 'echo keepme' }] } } },
+    { hooks: { PostToolUse: 'some-string' } },
+    { hooks: [{ matcher: 'x' }] },
+    { hooks: 'str' },
+    { hooks: null },
+  ];
+  for (const doc of shapes) {
+    c.putHooks(doc);
+    const before = fs.readFileSync(c.hooksFile, 'utf8');
+    for (const action of ['--check', '--apply', '--uninstall']) {
+      const r = c.install([action]);
+      assert.equal(r.status, 2, `${action} ${before}`);
+      assert.match(r.stdout, /何も書いていません/);
+    }
+    assert.equal(fs.readFileSync(c.hooksFile, 'utf8'), before);
+    assert.deepEqual(c.backups(), []);
+  }
+});
+
+t('a dangling symlinked hooks.json is refused, not replaced by a regular file', (c) => {
+  if (process.platform === 'win32') return; // symlinks need extra rights on Windows runners
+  c.mkCodexHome();
+  fs.symlinkSync(path.join(c.home, 'gone', 'hooks.json'), c.hooksFile);
+  const r = c.install(['--apply']);
+  assert.equal(r.status, 2);
+  assert.ok(fs.lstatSync(c.hooksFile).isSymbolicLink());
+});
+
 t('allow_managed_hooks_only in requirements.toml stops --apply (exit 3) unless --force; --scope project is refused', (c) => {
   c.mkCodexHome();
   const req = path.join(c.home, 'requirements.toml');
