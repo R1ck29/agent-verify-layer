@@ -31,14 +31,15 @@ const REPO_VARS = /^GIT_(DIR|WORK_TREE|INDEX_FILE|OBJECT_DIRECTORY|ALTERNATE_OBJ
 
 // An environment for running git in a throw-away repository that cannot reach the caller's
 // repository, config or hooks (doctor's smoke test). Pass it as { fullEnv } so nothing inherited
-// is mixed back in. `hooksDir` must be an empty directory.
-function isolatedGitEnv(base, hooksDir) {
+// is mixed back in. `hooksDir` must be an empty directory; pass an empty file as `globalConfig` on
+// Windows (\\.\nul is not a readable config there).
+function isolatedGitEnv(base, hooksDir, globalConfig = os.devNull) {
   const env = {};
   for (const [k, v] of Object.entries(base)) if (!REPO_VARS.test(k)) env[k] = v;
   return {
     ...env,
     GIT_CONFIG_NOSYSTEM: '1',
-    GIT_CONFIG_GLOBAL: os.devNull,
+    GIT_CONFIG_GLOBAL: globalConfig, // an empty file: git on Windows cannot read os.devNull as a config
     GIT_CONFIG_COUNT: '2',
     GIT_CONFIG_KEY_0: 'core.hooksPath',
     GIT_CONFIG_VALUE_0: hooksDir,

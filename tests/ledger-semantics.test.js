@@ -72,12 +72,13 @@ t('XREVIEW #6: a command that reports failure never takes over an older unrecord
 });
 
 test('XREVIEW #6: analyzeCommit reads real commit invocations and refuses what it cannot place', () => {
-  const a = (c) => analyzeCommit(c, '/w');
-  assert.deepEqual(a('git commit -m x'), { dir: '/w' });
-  assert.deepEqual(a('git add -A && git commit -m "x && y"'), { dir: '/w' });
-  assert.deepEqual(a('cd sub && git commit -m x'), { dir: path.resolve('/w', 'sub') });
-  assert.deepEqual(a('git -C ../o -c user.name=x commit -m x'), { dir: path.resolve('/w', '../o') });
-  assert.deepEqual(a('FOO=1 git --no-pager commit --amend'), { dir: '/w' });
+  const w = path.resolve('/w'); // C:\w on Windows
+  const a = (c) => analyzeCommit(c, w);
+  assert.deepEqual(a('git commit -m x'), { dir: w });
+  assert.deepEqual(a('git add -A && git commit -m "x && y"'), { dir: w });
+  assert.deepEqual(a('cd sub && git commit -m x'), { dir: path.resolve(w, 'sub') });
+  assert.deepEqual(a('git -C ../o -c user.name=x commit -m x'), { dir: path.resolve(w, '../o') });
+  assert.deepEqual(a('FOO=1 git --no-pager commit --amend'), { dir: w });
   assert.equal(a('git commit --dry-run'), null);
   assert.equal(a('git log --grep=commit'), null);
   assert.equal(a('git commit-tree abc'), null);
@@ -87,7 +88,7 @@ test('XREVIEW #6: analyzeCommit reads real commit invocations and refuses what i
   assert.equal(a('cd "$REPO" && git commit -m x').unsupported, true);
 });
 
-test('analyzeCommit keeps Windows backslashes in paths (win32 reading) and unescapes them for POSIX', () => {
+test('analyzeCommit keeps Windows backslashes in paths (win32 reading) and unescapes them for POSIX', { skip: process.platform === 'win32' }, () => {
   assert.ok(analyzeCommit('git -C C:\\repo\\sub commit -m x', '/w', false).dir.endsWith('C:\\repo\\sub'));
   assert.ok(analyzeCommit('git -C "C:\\repo\\sub" commit -m x', '/w', false).dir.endsWith('C:\\repo\\sub'));
   assert.ok(analyzeCommit('git -C C:\\repo\\sub commit -m x', '/w', true).dir.endsWith('C:reposub'));

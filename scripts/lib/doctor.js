@@ -159,10 +159,12 @@ function checkHooksSmoke(add) {
   fs.mkdirSync(cfgDir);
   const hooksDir = path.join(dir, 'no-hooks');
   fs.mkdirSync(hooksDir);
+  const emptyConfig = path.join(dir, 'gitconfig');
+  fs.writeFileSync(emptyConfig, '');
   // Nothing of the caller's git environment (GIT_DIR, GIT_INDEX_FILE, config, hooks) may reach
   // the throw-away repo: otherwise `git add`/`commit` below would act on the caller's repository.
   const env = {
-    ...isolatedGitEnv(process.env, hooksDir),
+    ...isolatedGitEnv(process.env, hooksDir, emptyConfig),
     VL_CONFIG_DIR: cfgDir,
     GIT_AUTHOR_NAME: 'doctor', GIT_AUTHOR_EMAIL: 'doctor@example.invalid',
     GIT_COMMITTER_NAME: 'doctor', GIT_COMMITTER_EMAIL: 'doctor@example.invalid',
@@ -171,7 +173,7 @@ function checkHooksSmoke(add) {
   try {
     fs.mkdirSync(repo);
     const sh = (args) => git(args, { cwd: repo, fullEnv: env });
-    sh(['init', '-q', '-b', 'main']);
+    if (!sh(['init', '-q', '-b', 'main']).ok) throw new Error('使い捨てリポジトリを作れませんでした（git init が失敗）');
     fs.writeFileSync(path.join(repo, 'a.js'), 'a\n');
     sh(['add', '-A']);
     sh(['-c', 'commit.gpgsign=false', 'commit', '-qm', 'init']);

@@ -40,7 +40,7 @@ t('XREVIEW #10: an added line in a tracked file whose name has spaces fires the 
 
 t('XREVIEW #10: names with a trailing space, quotes and unicode are matched too', (repo) => {
   seed(repo);
-  const names = ['trail .js', 'q"uote.js', 'ünï cödé.js', "o'neil.js"];
+  const names = ['trail .js', 'ünï cödé.js', "o'neil.js", ...(process.platform === 'win32' ? [] : ['q"uote.js'])]; // no " in Windows names
   for (const n of names) repo.write(n, 'ok();\n');
   repo.commit('more');
   for (const n of names) repo.write(n, 'ok();\neval(y);\n');
