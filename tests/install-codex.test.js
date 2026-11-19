@@ -104,7 +104,8 @@ t('--check is the default and never writes (missing and existing hooks.json)', (
 
   c.putHooks(FOREIGN);
   const before = fs.readFileSync(c.hooksFile, 'utf8');
-  r = c.install(['--agents-md', '--repo-skill', '--project-dir', c.home]);
+  r = c.install(['--agents-md']);
+  c.install(['--repo-skill', '--project-dir', c.home]);
   assert.equal(fs.readFileSync(c.hooksFile, 'utf8'), before);
   assert.equal(fs.existsSync(c.agentsFile), false);
   assert.deepEqual(c.backups(), []);
@@ -305,6 +306,8 @@ t('--repo-skill: check only by default; --apply copies the template; an edited s
     r = c.install(['--apply', '--repo-skill'], { cwd: repo.dir });
     assert.equal(r.status, 0, r.stderr);
     assert.equal(fs.readFileSync(dest, 'utf8'), fs.readFileSync(TEMPLATE, 'utf8'));
+    assert.equal(fs.existsSync(c.hooksFile), false); // its own unit: the user hook is not merged
+    assert.equal(fs.existsSync(c.agentsFile), false);
     assert.match(repo.git('status', '--porcelain'), /\.agents\//); // copied, not committed
 
     fs.appendFileSync(dest, '\n- extra local step\n');
@@ -318,6 +321,29 @@ t('--repo-skill: check only by default; --apply copies the template; an edited s
     fs.copyFileSync(TEMPLATE, dest);
     c.install(['--uninstall', '--repo-skill'], { cwd: repo.dir });
     assert.equal(fs.existsSync(path.join(repo.dir, '.agents')), false);
+  } finally {
+    repo.cleanup();
+  }
+});
+
+t('--repo-skill never touches an installed hook, works under allow_managed_hooks_only, and is not combined with --agents-md', (c) => {
+  c.mkCodexHome();
+  assert.equal(c.install(['--apply']).status, 0);
+  const hooks = fs.readFileSync(c.hooksFile, 'utf8');
+  const req = path.join(c.home, 'requirements.toml');
+  fs.writeFileSync(req, 'allow_managed_hooks_only = true\n');
+  const repo = new Repo();
+  try {
+    repo.write('a.js', '1\n');
+    repo.commit('init');
+    let r = c.install(['--apply', '--repo-skill'], { cwd: repo.dir, env: { VL_CODEX_REQUIREMENTS: req } });
+    assert.equal(r.status, 0, r.stdout + r.stderr);
+    assert.ok(fs.existsSync(path.join(repo.dir, '.agents', 'skills', 'verify', 'SKILL.md')));
+    r = c.install(['--uninstall', '--repo-skill'], { cwd: repo.dir });
+    assert.equal(r.status, 0);
+    assert.equal(fs.existsSync(path.join(repo.dir, '.agents')), false);
+    assert.equal(fs.readFileSync(c.hooksFile, 'utf8'), hooks);
+    assert.equal(c.install(['--apply', '--repo-skill', '--agents-md'], { cwd: repo.dir }).status, 2);
   } finally {
     repo.cleanup();
   }

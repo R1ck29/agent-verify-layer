@@ -1,7 +1,7 @@
 'use strict';
-// `install.js --agent codex`: merges this tool's one hook into $CODEX_HOME/hooks.json, and on
-// request appends the two AGENTS.md lines (--agents-md) and copies the repo verify skill
-// (--repo-skill). Read-only unless --apply / --uninstall. Foreign hooks and lines are never
+// `install.js --agent codex`: merges this tool's one hook into $CODEX_HOME/hooks.json and, on
+// request, appends the two AGENTS.md lines (--agents-md). `--repo-skill` is a separate operation
+// that only copies (or removes) the repo verify skill and leaves hooks.json / AGENTS.md alone. Read-only unless --apply / --uninstall. Foreign hooks and lines are never
 // edited, removed or reordered; a second --apply changes nothing.
 const fs = require('node:fs');
 const path = require('node:path');
@@ -73,7 +73,7 @@ function listFiles(dir, base = dir) {
   return out.sort();
 }
 
-function handleRepoSkill(opts, report, t) {
+function handleRepoSkill(opts, report) {
   const project = repoRoot(path.resolve(opts.projectDir || process.cwd()));
   if (!project) throw new Error('--repo-skill は git リポジトリの中で実行するか、--project-dir で指定してください');
   const dest = path.join(project, '.agents', 'skills', 'verify');
@@ -132,6 +132,22 @@ function run(opts) {
     return { code: opts.action === 'check' ? 0 : 3, report };
   }
 
+  // The repo skill is its own unit (per repository, its own approval): it never touches hooks.json.
+  if (opts.repoSkill) {
+    if (opts.agentsMd || opts.mode) {
+      report.error = '--repo-skill はリポジトリのスキルだけを扱います。--agents-md / --mode とは別に実行してください';
+      return { code: 2, report };
+    }
+    report.settingsFile = 'リポジトリの .agents/skills/verify（hooks.json と AGENTS.md は変更しません）';
+    try {
+      handleRepoSkill(opts, report);
+    } catch (e) {
+      report.error = e.message;
+      return { code: 2, report };
+    }
+    return { code: 0, report };
+  }
+
   const read = readJsonFile(hooksFile);
   if (read.error) {
     report.error = `${hooksFile} を読めません（${read.error}）。何も書いていません。JSON として直してから再実行してください`;
@@ -171,7 +187,6 @@ function run(opts) {
 
   try {
     if (opts.agentsMd) handleAgentsMd(opts, report, t, home);
-    if (opts.repoSkill) handleRepoSkill(opts, report, t);
   } catch (e) {
     report.error = e.message;
     return { code: 2, report };
