@@ -24,3 +24,13 @@ Codex 側: P0 codex-baseline / P1 codex-agents-md / P2 codex-verify-layer（gpt-
 - チェックリスト発火: P2 の罠 12 試行中 4 試行で verify スキル呼び出しあり（(b) に当たらない）。
 - 全プロファイルが落とした罠: trap-stop-hook-decode（0/6）。
 - **判定: 有用でない**（P2 の罠 9 = P0 の罠 9 で「>」を満たさない、改善 1 = 後退 1）。規則により Claude 側は配備しない。
+
+## Codex 側の予備結果（2026-11-19 21:04 JST、各セル 1 試行。判定ではない＝n が小さすぎる）
+
+- 実行: eval-out/eval-out/hard/full-e1b-codex/20261119-210444-946-9d（`TRIALS=1`）。gpt-6.2-sol、隠しチェックのみ。有効 30/30。
+- 罠の合格: P0 codex-baseline 4/6、P1 codex-agents-md 5/6、P2 codex-verify-layer 5/6。対照: 全プロファイル 4/4。
+- P2 vs P0（罠の対）: 改善 1（reviewer-identity）/ 後退 0。P1 vs P0 も同じ（改善 1 / 後退 0）。
+- 全プロファイルが落とした罠: trap-stop-hook-decode（Claude 側と同じ）。
+- トークン（30 試行計）: 入力 6.90M（うちキャッシュ読み 6.21M）、出力 0.069M。API 換算 約 $2.70（本体のみ、判定役 $0）。
+- 注意: verify スキル（.agents/skills/verify）は fixture に入っているため、P0 でも読める（実際に P0 の罠試行でも SKILL.md を読んでいる）。P2 との差は hook と AGENTS.md の 2 行だけ。v0.2 の評価ではベースラインからスキルを外す。
+- 事前規則の n（各セル 2 試行）に届いていないので、判定は出さない。v0.2 の決定的な評価は held-out の罠で行う（docs/V02-DESIGN.md、eval/heldout/PREREG-v02.md）。
