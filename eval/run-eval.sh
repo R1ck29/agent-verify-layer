@@ -57,7 +57,7 @@ else
   case "$mode" in
     smoke) trials=1; extra=("${smoke_sel[@]}");;
     smoke-p0) trials=1; extra=(--tag e1b);;          # E1b の罠だけ（E1 の対照は含めない）
-    full) trials=2; extra=(--tag verify-layer);;
+    full) trials="${TRIALS:-2}"; extra=(--tag verify-layer);;
   esac
 fi
 # 実行全体の費用の上限（推定額）。E1 は従来どおり 30。E1b は 1 試行の上限 1.5 USD（タスク YAML）に合わせて、smoke 5・smoke-p0 10・full 30
