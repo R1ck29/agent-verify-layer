@@ -131,6 +131,23 @@ function commandText(input) {
   return undefined;
 }
 
+// True when the tool result says the command failed (exit code != 0, is_error, error). A failed
+// `git commit` made no commit: an older unrecorded HEAD must not be attributed to it. Shapes that
+// do not say anything (Claude sends no exit code on success) count as "not failed".
+function commandFailed(input) {
+  let r = input && input.tool_response;
+  if (typeof r === 'string') {
+    try {
+      r = JSON.parse(r);
+    } catch {
+      return false;
+    }
+  }
+  if (!r || typeof r !== 'object') return false;
+  for (const k of ['exit_code', 'exitCode', 'code', 'status']) if (typeof r[k] === 'number' && r[k] !== 0) return true;
+  return r.is_error === true || r.success === false || r.interrupted === true;
+}
+
 // A commit entry in the HEAD reflog ("commit: …", "commit (amend): …", "commit (initial): …").
 const COMMIT_REFLOG_RE = /^commit\b/;
 
@@ -143,7 +160,7 @@ function handleCommit(input, { agent: agentFlag } = {}) {
   const t0 = now();
   const agent = resolveAgent(agentFlag, input);
   const command = commandText(input);
-  if (typeof command !== 'string') return null;
+  if (typeof command !== 'string' || commandFailed(input)) return null;
   // Claude filters with `if: Bash(git commit *)`; Codex has no `if`: cheap pre-filter for it.
   if (agent === 'codex' && !COMMIT_RE.test(command)) return null;
   const cfg = loadConfig();

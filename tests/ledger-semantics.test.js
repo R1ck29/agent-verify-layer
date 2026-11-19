@@ -58,6 +58,19 @@ t('XREVIEW #6: -C and cd select the repository that was committed in; a commit e
   }
 });
 
+t('XREVIEW #6: a command that reports failure never takes over an older unrecorded commit', (repo) => {
+  repo.write('src/a.js', 'one\n');
+  repo.commit('manual'); // recent, unrecorded
+  for (const tool_response of [{ exit_code: 1 }, '{"exit_code":1}', { is_error: true }, { success: false }]) {
+    const r = repo.hook(['commit', '--agent', 'codex'], { hook_event_name: 'PostToolUse', tool_name: 'Bash', turn_id: 't', tool_input: { command: 'git commit -m x' }, tool_response });
+    assert.equal(r.status, 0);
+  }
+  assert.equal(commitRows(repo).length, 0);
+  const ok = repo.hook(['commit', '--agent', 'codex'], { hook_event_name: 'PostToolUse', tool_name: 'Bash', turn_id: 't', tool_input: { command: 'git commit -m x' }, tool_response: { exit_code: 0 } });
+  assert.equal(ok.status, 0);
+  assert.equal(commitRows(repo).length, 1);
+});
+
 test('XREVIEW #6: analyzeCommit reads real commit invocations and refuses what it cannot place', () => {
   const a = (c) => analyzeCommit(c, '/w');
   assert.deepEqual(a('git commit -m x'), { dir: '/w' });
@@ -72,6 +85,12 @@ test('XREVIEW #6: analyzeCommit reads real commit invocations and refuses what i
   assert.equal(a('git --git-dir=/x/.git commit -m x').unsupported, true);
   assert.equal(a('GIT_DIR=/x git commit -m x').unsupported, true);
   assert.equal(a('cd "$REPO" && git commit -m x').unsupported, true);
+});
+
+test('analyzeCommit keeps Windows backslashes in paths (win32 reading) and unescapes them for POSIX', () => {
+  assert.ok(analyzeCommit('git -C C:\\repo\\sub commit -m x', '/w', false).dir.endsWith('C:\\repo\\sub'));
+  assert.ok(analyzeCommit('git -C "C:\\repo\\sub" commit -m x', '/w', false).dir.endsWith('C:\\repo\\sub'));
+  assert.ok(analyzeCommit('git -C C:\\repo\\sub commit -m x', '/w', true).dir.endsWith('C:reposub'));
 });
 
 // --- #8 -----------------------------------------------------------------------------------------

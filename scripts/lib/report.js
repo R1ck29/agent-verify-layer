@@ -29,9 +29,24 @@ function summarize(rows, logShas) {
   }
 
   const staleSizes = commits.filter((c) => c.result === 'stale' && Number.isFinite(c.stale_files)).map((c) => c.stale_files);
+  // Items shown to the agent, counted per route. The verify hook shows them at verify start; `mark`
+  // shows them at check time and is the ONLY route on Codex. A mark that repeats an item the hook
+  // already showed in the same session is a second look at the same item: kept in by_route only.
   const fired = {};
-  // Counted at verify start only, as in v0.1 (a mark on the same change would count it twice).
-  for (const r of verifyRuns) for (const id of r.fired || []) fired[id] = (fired[id] || 0) + 1;
+  const byRoute = { hook: {}, mark: {} };
+  const shownByHook = new Set();
+  const sorted = [...allVerify].sort((a, b) => (a.ts || 0) - (b.ts || 0));
+  for (const r of sorted) {
+    const route = r.via === 'mark' ? 'mark' : 'hook';
+    for (const id of r.fired || []) {
+      byRoute[route][id] = (byRoute[route][id] || 0) + 1;
+      const key = `${r.session}|${id}`;
+      if (route === 'hook') {
+        if (r.session) shownByHook.add(key);
+      } else if (r.session && shownByHook.has(key)) continue;
+      fired[id] = (fired[id] || 0) + 1;
+    }
+  }
   const ms = rows.filter((r) => Number.isFinite(r.ms)).map((r) => r.ms);
 
   const recorded = new Set(commits.map((c) => c.sha));
@@ -60,6 +75,7 @@ function summarize(rows, logShas) {
     stale_files: { median: percentile(staleSizes, 0.5), max: staleSizes.length ? Math.max(...staleSizes) : null },
     self_check_change_commits: commits.filter((c) => c.self_check_change).length,
     checklist_fired: fired,
+    checklist_fired_by_route: byRoute,
     checklist_warnings: rows.reduce((n, r) => n + (Number.isFinite(r.checklist_warnings) ? r.checklist_warnings : 0), 0),
     hook_ms: { p50: percentile(ms, 0.5), p95: percentile(ms, 0.95), max: ms.length ? Math.max(...ms) : null },
     reconcile: {
@@ -107,19 +123,24 @@ function run(flags) {
     return 1;
   }
   let rows = ledger.readAll(root);
+  // One start for both sides of the comparison: --days gives the period start; without it the
+  // ledger's first row does. Deriving it from the first ledger row alone hid every commit the
+  // ledger missed before that row (and all commits when the ledger was empty).
+  let from = null;
   if (Number.isFinite(flags.days) && flags.days > 0) {
-    const cut = Date.now() / 1000 - flags.days * 86400;
-    rows = rows.filter((r) => typeof r.ts === 'number' && r.ts >= cut);
+    from = Date.now() / 1000 - flags.days * 86400;
+    rows = rows.filter((r) => typeof r.ts === 'number' && r.ts >= from);
+  } else {
+    from = rows.reduce((m, r) => (typeof r.ts === 'number' && (m === null || r.ts < m) ? r.ts : m), null);
   }
-  const first = rows.reduce((m, r) => (typeof r.ts === 'number' && (m === null || r.ts < m) ? r.ts : m), null);
   let logShas = [];
-  if (first !== null) {
-    const l = git(['log', '--no-merges', `--since=${new Date(first * 1000).toISOString()}`, '--format=%H'], { cwd: root });
-    if (l.ok) logShas = l.out.split('\n').filter(Boolean);
-  }
+  const args = ['log', '--no-merges', '--format=%H'];
+  if (from !== null) args.push(`--since=${new Date(from * 1000).toISOString()}`);
+  const l = git(args, { cwd: root });
+  if (l.ok) logShas = l.out.split('\n').filter(Boolean);
   const summary = summarize(rows, logShas);
-  if (flags.json) process.stdout.write(JSON.stringify({ repo: root, rows: rows.length, from: first, ...summary }, null, 2) + '\n');
-  else process.stdout.write(formatText(summary, { repo: root, rows: rows.length, from: first }) + '\n');
+  if (flags.json) process.stdout.write(JSON.stringify({ repo: root, rows: rows.length, from, ...summary }, null, 2) + '\n');
+  else process.stdout.write(formatText(summary, { repo: root, rows: rows.length, from }) + '\n');
   return 0;
 }
 

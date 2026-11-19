@@ -9,7 +9,7 @@ const os = require('node:os');
 const path = require('node:path');
 
 // Splits into segments of words. Quoted text stays inside its word; separators inside quotes are text.
-function segments(cmd) {
+function segments(cmd, posix = process.platform !== 'win32') {
   const segs = [];
   let words = [];
   let cur = '';
@@ -35,11 +35,12 @@ function segments(cmd) {
       i = end;
     } else if (ch === '"') {
       let j = i + 1;
-      while (j < s.length && s[j] !== '"') j += s[j] === '\\' ? 2 : 1;
-      cur += s.slice(i + 1, j).replace(/\\(["\\$`])/g, '$1');
+      while (j < s.length && s[j] !== '"') j += posix && s[j] === '\\' ? 2 : 1;
+      // POSIX shells unescape \" \\ \$ \` inside double quotes; on Windows a backslash is a path separator.
+      cur += posix ? s.slice(i + 1, j).replace(/\\(["\\$`])/g, '$1') : s.slice(i + 1, j);
       has = true;
       i = j;
-    } else if (ch === '\\' && i + 1 < s.length && s[i + 1] !== '\n') {
+    } else if (posix && ch === '\\' && i + 1 < s.length && s[i + 1] !== '\n') {
       cur += s[++i];
       has = true;
     } else if (ch === '#' && !has) {
@@ -72,10 +73,10 @@ function literalDir(base, p) {
 
 // -> { dir } for the last real `git commit` in the command, null when there is none (read-only
 // commands, --dry-run, other sub-commands), or { unsupported: true } when it cannot be placed.
-function analyzeCommit(command, cwd) {
+function analyzeCommit(command, cwd, posix = process.platform !== 'win32') {
   let dir = path.resolve(cwd);
   let found = null;
-  for (const words of segments(command)) {
+  for (const words of segments(command, posix)) {
     let i = 0;
     while (i < words.length && /^[A-Za-z_][A-Za-z0-9_]*=/.test(words[i])) {
       if (REPO_ENV.test(words[i])) return { unsupported: true };
