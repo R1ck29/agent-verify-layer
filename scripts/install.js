@@ -341,6 +341,6 @@ function main() {
   }
 }
 
-if (require.main === module) main();
-
 module.exports = { buildOwnGroups, removeOwn, addOwn, run, parseArgs, VL, atomicWrite, backup, isWritable, indentOf, printReport };
+
+if (require.main === module) main();

@@ -5,7 +5,6 @@
 // edited, removed or reordered; a second --apply changes nothing.
 const fs = require('node:fs');
 const path = require('node:path');
-const { spawnSync } = require('node:child_process');
 const { readJsonFile } = require('./settings');
 const { repoRoot } = require('./git');
 const { configPath } = require('./config');
@@ -15,9 +14,7 @@ const ROOT = path.resolve(__dirname, '..', '..');
 const SKILL_SRC = path.join(ROOT, 'codex', 'skills', 'verify');
 
 function codexFound(home) {
-  if (fs.existsSync(home)) return true;
-  const r = spawnSync('codex', ['--version'], { encoding: 'utf8', timeout: 8000, windowsHide: true, shell: process.platform === 'win32' });
-  return !r.error && r.status === 0;
+  return fs.existsSync(home) || codex.codexVersion() !== null;
 }
 
 function countHandlers(hooksDoc) {
