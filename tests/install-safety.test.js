@@ -189,18 +189,66 @@ t('--repo-skill on an explicit directory outside git names that directory', (c) 
   assert.equal(c.codexCli(['--repo-skill', '--apply', '--project-dir', dir]).status, 0);
 });
 
-t('a failing hooks.json write does not leave AGENTS.md changed (targets are checked first)', (c) => {
+t('a hooks.json that cannot be replaced does not leave AGENTS.md changed (every target is checked before the first write)', (c) => {
+  if (process.getuid && process.getuid() === 0) return; // root ignores modes
   fs.mkdirSync(c.cx, { recursive: true });
-  fs.writeFileSync(c.hooksFile, '{}\n');
   fs.writeFileSync(path.join(c.cx, 'AGENTS.md'), 'mine\n');
-  fs.chmodSync(c.hooksFile, 0o444);
-  fs.chmodSync(c.cx, 0o555);
+  // the file is writable, its directory is not: the atomic write (and the backup) would fail
+  const ro = path.join(c.home, 'ro');
+  fs.mkdirSync(ro);
+  fs.writeFileSync(path.join(ro, 'hooks.json'), '{}\n');
+  fs.chmodSync(ro, 0o555);
   try {
-    const r = c.codexCli(['--apply', '--agents-md']);
-    if (process.getuid && process.getuid() === 0) return; // root ignores modes
+    const r = c.codexCli(['--apply', '--agents-md', '--hooks-file', path.join(ro, 'hooks.json')]);
     assert.equal(r.status, 2, r.stdout + r.stderr);
     assert.equal(fs.readFileSync(path.join(c.cx, 'AGENTS.md'), 'utf8'), 'mine\n');
+    assert.deepEqual(fs.readdirSync(c.cx).filter((f) => f.includes('backup')), []);
   } finally {
-    fs.chmodSync(c.cx, 0o755);
+    fs.chmodSync(ro, 0o755);
   }
 }, { skip: !posix });
+
+t('XREVIEW #4 (Claude): ownership includes the matcher: a foreign `vl.js hook commit` under another matcher survives', (c) => {
+  const foreign = { hooks: { PostToolUse: [{ matcher: 'Edit', hooks: [{ type: 'command', command: 'node', args: ['/opt/metrics/vl.js', 'hook', 'commit'] }] }] } };
+  fs.mkdirSync(path.dirname(c.settings), { recursive: true });
+  fs.writeFileSync(c.settings, JSON.stringify(foreign, null, 2) + '\n');
+  assert.equal(c.cli(['--apply']).status, 0);
+  assert.equal(c.cli(['--uninstall']).status, 0);
+  assert.deepEqual(JSON.parse(fs.readFileSync(c.settings, 'utf8')), foreign);
+});
+
+test('settings.SUBCOMMANDS equals hooks/hooks.json (event and matcher of every own handler)', () => {
+  const { SUBCOMMANDS, isOwnHandler } = require('../scripts/lib/settings');
+  const tpl = JSON.parse(fs.readFileSync(path.join(ROOT, 'hooks', 'hooks.json'), 'utf8'));
+  let n = 0;
+  for (const [event, groups] of Object.entries(tpl.hooks)) {
+    for (const g of groups) {
+      for (const h of g.hooks) {
+        assert.equal(isOwnHandler(h, event, g), true, `${event} ${g.matcher} ${h.args.join(' ')}`);
+        assert.equal(SUBCOMMANDS[h.args[h.args.length - 1]].matcher, g.matcher);
+        n++;
+      }
+    }
+  }
+  assert.equal(n, 4);
+});
+
+t('--repo-skill --uninstall with .agents/skills linked to a directory inside the repo does not crash half-way', (c) => {
+  fs.mkdirSync(c.cx, { recursive: true });
+  const repo = c.repo();
+  fs.mkdirSync(path.join(repo, 'docs', 'verify'), { recursive: true });
+  fs.copyFileSync(path.join(ROOT, 'codex', 'skills', 'verify', 'SKILL.md'), path.join(repo, 'docs', 'verify', 'SKILL.md'));
+  fs.mkdirSync(path.join(repo, '.agents'));
+  fs.symlinkSync(path.join(repo, 'docs'), path.join(repo, '.agents', 'skills'), 'dir');
+  const r = c.codexCli(['--repo-skill', '--uninstall', '--project-dir', repo]);
+  assert.equal(r.status, 0, r.stdout + r.stderr);
+}, { skip: !posix });
+
+t('an inherited GIT_DIR does not change which repository decides whether settings.local.json is ignored', (c) => {
+  const other = c.repo('other');
+  fs.writeFileSync(path.join(other, '.gitignore'), '.claude/settings.local.json\n');
+  const proj = c.repo('proj'); // does NOT ignore the file
+  const r = run(process.execPath, [INSTALL, '--apply', '--scope', 'project'], { cwd: proj, env: { ...c.env, GIT_DIR: path.join(other, '.git'), GIT_WORK_TREE: other } });
+  assert.equal(r.status, 2, r.stdout + r.stderr);
+  assert.equal(fs.existsSync(path.join(proj, '.claude')), false);
+});

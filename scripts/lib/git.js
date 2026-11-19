@@ -47,6 +47,14 @@ function isolatedGitEnv(base, hooksDir) {
   };
 }
 
+// process.env without the variables that redirect git to another repository, object store or
+// config (for read-only questions about the repository in cwd: is it ignored, where is its root).
+function scrubbedEnv(base = process.env) {
+  const env = {};
+  for (const [k, v] of Object.entries(base)) if (!REPO_VARS.test(k)) env[k] = v;
+  return env;
+}
+
 function splitZ(s) {
   return s.split('\0').filter(Boolean);
 }
@@ -127,6 +135,7 @@ function diffTreeToHead(cwd, tree, opts) {
 module.exports = {
   git,
   isolatedGitEnv,
+  scrubbedEnv,
   splitZ,
   repoRoot,
   gitPath,

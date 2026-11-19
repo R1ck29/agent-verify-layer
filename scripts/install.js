@@ -13,7 +13,7 @@ const crypto = require('node:crypto');
 const fs = require('node:fs');
 const path = require('node:path');
 const { claudeDir, configDir, configPath } = require('./lib/config');
-const { repoRoot, git } = require('./lib/git');
+const { repoRoot, git, scrubbedEnv } = require('./lib/git');
 const { isOwnHandler, readJsonFile, managedSettingsPath } = require('./lib/settings');
 
 const ROOT = path.resolve(__dirname, '..');
@@ -144,7 +144,7 @@ function atomicWrite(file, text) {
 function insideWorkTree(file) {
   let p = path.dirname(path.resolve(file));
   while (!fs.existsSync(p) && path.dirname(p) !== p) p = path.dirname(p);
-  return git(['rev-parse', '--is-inside-work-tree'], { cwd: p }).out.trim() === 'true';
+  return git(['rev-parse', '--is-inside-work-tree'], { cwd: p, fullEnv: scrubbedEnv() }).out.trim() === 'true';
 }
 
 // Backups sit beside the file, except inside a work tree: then they go to the user-private
@@ -171,22 +171,34 @@ function backup(file) {
   throw new Error('バックアップの名前を決められません');
 }
 
+// Replacing a file takes more than write access to it: the atomic write and the backup create new
+// files next to it (or next to the real file behind a symlink). Checked for every target before the
+// first write, so a refusal leaves nothing half-installed.
 function isWritable(file) {
-  // A new file needs write access to its nearest existing ancestor directory.
+  const ok = (p) => {
+    try {
+      fs.accessSync(p, fs.constants.W_OK);
+      return true;
+    } catch {
+      return false;
+    }
+  };
+  let real = null;
+  try {
+    real = fs.realpathSync(file);
+  } catch {
+    /* new file (or dangling link): judged by its nearest existing ancestor */
+  }
+  if (real) return ok(real) && ok(path.dirname(real));
   let p = file;
   while (!fs.existsSync(p) && path.dirname(p) !== p) p = path.dirname(p);
-  try {
-    fs.accessSync(p, fs.constants.W_OK);
-    return true;
-  } catch {
-    return false;
-  }
+  return ok(p);
 }
 
 function resolveTargets(opts) {
   const scope = opts.scope || 'user';
   if (!['user', 'project'].includes(scope)) throw new Error(`--scope は user か project です: ${scope}`);
-  const projectDir = path.resolve(opts.projectDir || repoRoot(process.cwd()) || process.cwd());
+  const projectDir = path.resolve(opts.projectDir || repoRoot(process.cwd(), { fullEnv: scrubbedEnv() }) || process.cwd());
   // The hook path is machine-specific, so project scope uses the git-ignored local file.
   const settingsFile = opts.settingsFile
     ? path.resolve(opts.settingsFile)
@@ -203,10 +215,11 @@ function localFileProblem(file) {
   const cwd = path.dirname(path.resolve(file));
   let dir = cwd;
   while (!fs.existsSync(dir) && path.dirname(dir) !== dir) dir = path.dirname(dir);
-  if (git(['rev-parse', '--is-inside-work-tree'], { cwd: dir }).out.trim() !== 'true') return null;
+  const g = (args) => git(args, { cwd: dir, fullEnv: scrubbedEnv() });
+  if (g(['rev-parse', '--is-inside-work-tree']).out.trim() !== 'true') return null;
   const hint = '.gitignore か .git/info/exclude に `.claude/settings.local.json` を足してから再実行してください';
-  if (git(['ls-files', '--error-unmatch', '--', file], { cwd: dir }).ok) return `${file} は git で追跡されています（コミットに入ります）。追跡から外すか、--scope user を使ってください`;
-  if (!git(['check-ignore', '-q', '--', file], { cwd: dir }).ok) return `${file} は git の除外（ignore）に入っていません。このファイルはこの端末の絶対パスを含み、コミット候補になります。${hint}`;
+  if (g(['ls-files', '--error-unmatch', '--', file]).ok) return `${file} は git で追跡されています（コミットに入ります）。追跡から外すか、--scope user を使ってください`;
+  if (!g(['check-ignore', '-q', '--', file]).ok) return `${file} は git の除外（ignore）に入っていません。このファイルはこの端末の絶対パスを含み、コミット候補になります。${hint}`;
   return null;
 }
 

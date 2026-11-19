@@ -6,7 +6,7 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const { readJsonFile } = require('./settings');
-const { repoRoot } = require('./git');
+const { repoRoot, scrubbedEnv } = require('./git');
 const { configPath } = require('./config');
 const codex = require('./codex');
 
@@ -120,7 +120,7 @@ function assertInsideRepo(project, dest, files) {
 
 function handleRepoSkill(opts, report) {
   const dir = path.resolve(opts.projectDir || process.cwd());
-  const project = repoRoot(dir);
+  const project = repoRoot(dir, { fullEnv: scrubbedEnv() });
   if (!project) {
     throw new Error(opts.projectDir ? `指定した ${dir} は Git リポジトリ内ではありません（--repo-skill はリポジトリ単位です）` : `${dir} は Git リポジトリ内ではありません。--repo-skill はリポジトリの中で実行するか、--project-dir で指定してください`);
   }
@@ -143,7 +143,13 @@ function handleRepoSkill(opts, report) {
       return;
     }
     for (const f of files) fs.unlinkSync(path.join(dest, f));
-    for (let d = dest; d !== project && fs.existsSync(d) && fs.readdirSync(d).length === 0; d = path.dirname(d)) fs.rmdirSync(d);
+    for (let d = dest; d !== project && fs.existsSync(d) && fs.lstatSync(d).isDirectory() && fs.readdirSync(d).length === 0; d = path.dirname(d)) {
+      try {
+        fs.rmdirSync(d);
+      } catch {
+        break; // not ours to remove (a link, or something appeared): leave it
+      }
+    }
     report.wrote.push(`削除: ${dest}`);
     return;
   }

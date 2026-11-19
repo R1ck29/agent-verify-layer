@@ -10,14 +10,22 @@ const path = require('node:path');
 // is never touched. Timeouts and other fields are deliberately not compared (matching on them once
 // caused double registration elsewhere). Shell-form commands are never ours: the installer only
 // writes exec form. `event` is optional for callers that look at a bare handler (sub only).
-const SUBCOMMAND_EVENT = { skill: 'PostToolUse', commit: 'PostToolUse', expand: 'UserPromptExpansion' };
+// Where each sub-command lives in hooks/hooks.json (a test keeps this table equal to the file).
+const SUBCOMMANDS = {
+  skill: { event: 'PostToolUse', matcher: 'Skill' },
+  commit: { event: 'PostToolUse', matcher: 'Bash|PowerShell' },
+  expand: { event: 'UserPromptExpansion', matcher: '(^|:)(verify|code-review|review)$' },
+};
 
-function isOwnHandler(h, event) {
+// `event` / `group` are optional for callers that look at a bare handler (shape and sub-command only).
+function isOwnHandler(h, event, group) {
   if (!h || typeof h !== 'object' || h.type !== 'command' || !Array.isArray(h.args)) return false;
   const i = h.args.findIndex((a) => typeof a === 'string' && path.basename(a.replace(/\\/g, '/')) === 'vl.js');
   if (i < 0 || h.args[i + 1] !== 'hook' || h.args.length !== i + 3) return false;
-  const want = SUBCOMMAND_EVENT[h.args[i + 2]];
-  return want !== undefined && (event === undefined || event === want);
+  const want = SUBCOMMANDS[h.args[i + 2]];
+  if (!want) return false;
+  if (event !== undefined && event !== want.event) return false;
+  return group === undefined || (!!group && group.matcher === want.matcher);
 }
 
 // Reads a JSON settings file. { exists:false } when absent; { error } when unreadable or not JSON.
@@ -58,4 +66,4 @@ function managedSettingsPath() {
   return '/etc/claude-code/managed-settings.json';
 }
 
-module.exports = { isOwnHandler, readJsonFile, allHandlers, managedSettingsPath };
+module.exports = { SUBCOMMANDS, isOwnHandler, readJsonFile, allHandlers, managedSettingsPath };
