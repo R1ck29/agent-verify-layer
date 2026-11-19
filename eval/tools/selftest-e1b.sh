@@ -56,6 +56,9 @@ done
 
 echo "== E1b の fixture"
 "$py" -B "$here/tools/e1b-provenance.py" || bad "fixture が元のリポジトリの写しと食い違う"
+# git に入っていない fixture のファイル（.gitignore や .git/info/exclude に当たって追加し損ねたもの）。別の checkout では欠ける
+untracked="$(git -C "$here" ls-files --others --ignored --exclude-standard -- fixtures-e1b reference-e1b | grep -v -e __pycache__ -e '\.pyc$' | head -5)"
+[ -z "$untracked" ] && ok "fixture・参照解のファイルはすべて git に入っている" || bad "git に入っていない fixture のファイル（git add -f する）: $untracked"
 base=""
 for fx in "$here"/fixtures-e1b/*/; do
   n="$(basename "$fx")"; [[ $n == _* ]] && continue   # _items/ などは fixture ではない
