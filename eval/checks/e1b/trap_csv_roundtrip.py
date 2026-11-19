@@ -1,6 +1,12 @@
-"""E1b trap-csv-roundtrip（wikiskill a10000d）: レビューシートの CSV を、Excel で数式として実行させず、かつ書いた内容と読み戻した内容を一致させる。"""
+"""E1b trap-csv-roundtrip（wikiskill a10000d）: レビューシートの CSV を、Excel で数式として実行させず、かつ書いた内容と読み戻した内容を一致させる。
+
+依頼文は「数式として実行されないように」だけを頼み、読み戻しの一致は頼まない（review-apply がシートを読んで tasks.jsonl に
+入れるのは、既存のコードと README から分かる）。元の不具合は、印を付ける・外す処理はあるが、もとから ' で始まる値
+（"'=x" など）が読み戻しで変わるもの。
+"""
 import json
 import os
+import re
 import subprocess
 import sys
 import tempfile
@@ -129,6 +135,24 @@ def review_apply_dry_run(head):
             raise Fail("--dry-run なしの review-apply が従来どおりに動かない")
 
 
+def review_apply_unknown_rows(head):
+    with tempfile.TemporaryDirectory() as tmp:
+        run_py(_SETUP + _EXTRA_ROWS, head, UTF8_ENV, args=(tmp,))
+        code, out, err = _cli(head, "review-apply", os.path.join(tmp, "suite"), os.path.join(tmp, "sheet.csv"))
+        if code != 0:
+            raise Fail(f"review-apply の終了コードが {code}: {" ".join(err.split())[-100:]}")
+        if not re.search(r"unknown_rows\W{0,3}\s*2\b", out):
+            raise Fail(f"review-apply の内訳に unknown_rows: 2 が出ない: {" ".join(out.split())[-160:]}")
+
+
+_EXTRA_ROWS = r'''
+write_sheet(root / "sheet.csv", COLUMNS, [
+    {"task_id": "id:t1", "verdict": "OK", "agent_answer": "42", "prompt": "q1"},
+    {"task_id": "id:t8", "verdict": "OK", "agent_answer": "1", "prompt": "gone"},
+    {"task_id": "id:t9", "verdict": "NG", "corrected_answer": "2", "prompt": "gone"}])
+'''
+
+
 def readme_documents(head):
     text = open(os.path.join(head, "README.md"), encoding="utf-8").read()
     missing = [w for w in ("--dry-run", "--json") if w not in text]
@@ -141,5 +165,6 @@ CHECKS = [
     ("no_formula_exposed", no_formula_exposed, False),
     ("status_json", status_json, False),
     ("review_apply_dry_run", review_apply_dry_run, False),
+    ("review_apply_unknown_rows", review_apply_unknown_rows, False),
     ("readme", readme_documents, False),
 ]

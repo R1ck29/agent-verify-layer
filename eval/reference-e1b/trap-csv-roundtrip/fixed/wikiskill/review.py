@@ -40,16 +40,20 @@ def apply_sheet(suite: Suite, sheet: Path, dry_run: bool = False) -> Dict[str, i
 
     With `dry_run` nothing is written (no tasks file change, no backup)."""
     rows = {strip_id(r.get("task_id", "")): r for r in read_review_rows(sheet)}
-    counts = {"answer_from_ok": 0, "answer_from_correction": 0, "rubric_added": 0, "ng_without_correction": 0}
+    counts = {"answer_from_ok": 0, "answer_from_correction": 0, "rubric_added": 0, "ng_without_correction": 0,
+              "unknown_rows": 0}
     lines = []
+    seen = set()
     for line in read_text(suite.tasks_path).splitlines():
         if not line.strip():
             continue
         task = json.loads(line)
+        seen.add(str(task.get("id")))
         row = rows.get(str(task.get("id")))
         if row is not None:
             _apply_row(task, row, counts)
         lines.append(json.dumps(task, ensure_ascii=False))
+    counts["unknown_rows"] = sum(1 for task_id in rows if task_id not in seen)
     if dry_run:
         return counts
     backup = suite.tasks_path.with_name(suite.tasks_path.name + ".bak")

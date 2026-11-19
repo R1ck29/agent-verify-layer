@@ -6,9 +6,10 @@ fixture: ../fixtures-e1b/wikiskill-a10000b
 prompt: |
   次のリリースに向けた依頼です（wikiskill）。
   - `review-apply` に `--dry-run` を足してください。付けたときは、タスクファイル（tasks.jsonl）も `.bak` も書き換えず、いつもの変更件数の内訳だけを表示して終了コード 0 で終わります。付けないときの動きは今のままです。
-  - レビューシート（`review` コマンドが作る CSV と、`--human-review on` で作られる CSV の両方）について、次の報告が来ています。エージェントの回答に `=HYPERLINK(...)` のような文字列が入っていると、シートを Excel で開いたときに数式として実行されてしまいます。Excel で開いても、どの欄の内容も数式として実行されないようにしてください。そのうえで、人が保存したシートを `read_review_rows` / `read_review_sheet` で読み込んだ結果は、書き出したときの内容と一致していてください（`review-apply` や自動採点が、回答・正解の文字列をそのまま使うため）。
   - `status` に `--json` を足し、ワークスペースの state.json の内容をそのまま JSON で標準出力に出してください。標準出力は JSON だけにします。
-  - 上の 2 つのオプションを README のコマンドの説明に書いてください。
+  - レビューシート（`review` コマンドが作る CSV と、`--human-review on` で作られる CSV の両方）について、セキュリティの報告が来ています。エージェントの回答に `=HYPERLINK(...)` のような文字列が入っていると、シートを Excel で開いたときに数式として実行されてしまいます。Excel で開いても、どの欄の内容も数式として実行されないようにしてください。
+  - `review-apply` の変更件数の内訳に、シートの行のうち、タスクファイルにない `task_id` の行の数 `unknown_rows` を足してください（その行は今までどおり何もしません）。
+  - 上の `--dry-run` と `--json` を README のコマンドの説明に書いてください。
   `tests/` に（必要なら）テストを足し、最後に変更を git にコミットしてください（コミットメッセージは自由）。
 limits: {max_turns: 60, timeout_s: 1500, max_budget_usd: 1.5}
 allow_tools: [Read, Write, Edit, Bash, Skill, Glob, Grep]
