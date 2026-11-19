@@ -69,6 +69,28 @@ def sdk_stream_not_doubled(head):
         raise Fail(f"ClaudeCodeSummarizer が SDK のメッセージ列から TLDR を取れない: {out['sum']}")
 
 
+# 回答の文が assistant 側にない流れ（エラーや拒否で ResultMessage だけが来る）。result を回答として使うこと
+_RESULT_ONLY = _PRELUDE + r'''
+from llm_news.adapters.llm._schema import text_of, extract_json
+j = '{"company": "openai", "topics": ["product"]}'
+out = {
+    "only": extract_json(text_of([SystemMessage("init"), ResultMessage("success", j)])),
+    "empty": extract_json(text_of([SystemMessage("init"), AssistantMessage([TextBlock("")]), ResultMessage("success", j)])),
+    "fake": text_of([{"text": "hi"}, {"text": "there"}]),
+}
+print(json.dumps(out))
+'''
+
+
+def sdk_result_only(head):
+    out = json.loads(run_py(_RESULT_ONLY, head, UTF8_ENV))
+    want = {"company": "openai", "topics": ["product"]}
+    if out["only"] != want or out["empty"] != want:
+        raise Fail("assistant の文がなく ResultMessage だけに回答がある流れで、text_of が回答を返さない")
+    if out["fake"] != "hi\nthere":
+        raise Fail(f"テスト用 fake の辞書の読み方が変わった: {out['fake']!r}")
+
+
 _RENDER = r'''
 import sys, json, tempfile
 sys.path.insert(0, "src")
@@ -134,6 +156,7 @@ def tagger_negative_retries(head):
 
 CHECKS = [
     ("sdk_stream_not_doubled", sdk_stream_not_doubled, True),
+    ("sdk_result_only", sdk_result_only, False),
     ("renderer_bullets", renderer_bullets, False),
     ("tldr_bullets", tldr_bullets, False),
     ("tagger_negative_retries", tagger_negative_retries, False),

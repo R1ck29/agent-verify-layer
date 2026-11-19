@@ -53,7 +53,12 @@ def text_of(messages: list[Any]) -> str:
     """Flatten the model's textual output from a message stream.
 
     Currently handles the ``{"text": ...}`` dicts that the unit-test fake
-    ``query_fn`` yields; the real claude-agent-sdk messages are not read yet.
+    ``query_fn`` yields.
+
+    TODO(procode): also read the real claude-agent-sdk stream (spec §5.B):
+    ``AssistantMessage`` with ``.content`` = list of blocks that have
+    ``.text`` (``TextBlock``), and ``ResultMessage`` with a ``.result`` str
+    (the final answer — observed 2026-05-16 to carry the model's JSON/prose).
     """
     parts: list[str] = []
     for m in messages:
