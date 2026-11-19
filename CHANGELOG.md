@@ -11,6 +11,7 @@
 
 ### 修正
 
+- `install.js --agent codex --repo-skill` が利用者全体の hook のマージ・削除も一緒に行っていた。リポジトリのスキルだけを扱うようにした
 - `install.js` が `module.exports` より前に `main()` を呼んでいたため、`--agent codex` が毎回「t.removeOwn is not a function」で失敗していた
 - 実機の Claude Code 2.1.325 で、`if: "Skill(verify)"` の PostToolUse hook が起動せず、run 行が台帳に書かれなかった（commit 行が `none` になる）。Skill の hook を `if` なしの `matcher: "Skill"` 1 本（`vl.js hook skill`）にし、スクリプト側で `tool_input.skill` から verify / 入れ子の verify / code-review（別名 `review`）を判定して記録し、ほかのスキルでは何もせず終了するようにした。`hook run <verify|code-review>` は `hook skill` に置き換わった（`install.js --apply` で入れ直すと古い登録は置き換わる）。Bash の `if` は実機で当たったので変更なし。詳細は `docs/SMOKE.md`
 

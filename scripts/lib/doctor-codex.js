@@ -36,12 +36,12 @@ function ownInHooksFile(file) {
 function checkVersion(add, env) {
   const v = codex.codexVersion(env);
   if (v === null) {
-    add('info', 'codex コマンドが見つかりません（版は確認できません）');
+    add('info', 'Codex: codex コマンドが見つかりません（版は確認できません）');
     return;
   }
   const pv = parseVersion(v);
-  if (pv && older(pv, DOCUMENTED_VERSION)) add('warn', `codex ${v}: 0.170 より前の版は、hooks の動きが文書と合っているか確かめていません`);
-  else add('info', `codex ${v}`);
+  if (pv && older(pv, DOCUMENTED_VERSION)) add('warn', `Codex: codex ${v}: 0.170 より前の版は、hooks の動きが文書と合っているか確かめていません`);
+  else add('info', `Codex: codex ${v}`);
 }
 
 // Where our hook is registered (each place runs it once, concurrently).

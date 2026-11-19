@@ -59,12 +59,12 @@ agent-verify-layer（旧名 claude-verify-layer）は、コミットが「verify
 
 ### 部分的に入れる
 
-導入先の環境や方針に合わせて、次の単位で選べます。どれも単独で入れられ、あとから足せます。
+導入先の環境や方針に合わせて、次の単位で選べます。「要るもの」を満たしていれば、どの単位もあとから足せます。Claude と Codex は互いに独立で、Codex のリポジトリのスキルは利用者全体の hook や AGENTS.md に触れません（hook がなくても置けます）。
 
 | 単位 | 入れるもの | 効果 | 要るもの |
 | --- | --- | --- | --- |
 | Claude: 記録 | 第 4 節の A か B | Claude のコミットと verify を記録する | Claude Code、Node、git |
-| Claude: Rules | `--rules`（または `rules/verification.md` のコピー） | verify を使う指示を 2 行足す | Claude: 記録 |
+| Claude: Rules | `--rules`（または `rules/verification.md` のコピー） | 検証の規則を 2 行足す（flaky なテストを skip や再実行で済ませない、verify が 3 回続けて失敗したら止めて報告する） | Claude: 記録 |
 | Codex: 記録 | 第 9 節の `--agent codex --apply` | Codex のコミットを記録する | Codex、Node、git、`/hooks` での信頼 |
 | Codex: 指示 | 第 9 節の `--agents-md` | AGENTS.md に 2 行（`$verify` を使う、確認後に mark する） | Codex: 記録 |
 | Codex: リポジトリのスキル | 第 9 節の `--repo-skill`（リポジトリごと） | `.agents/skills/verify/` に verify スキルを置く | 利用者の承認（コミットするかは利用者が決める） |
@@ -152,7 +152,7 @@ Codex がない端末では、この節を飛ばします（利用者には「Co
 
 | 調べること | 方法 | 結果の意味 |
 | --- | --- | --- |
-| Codex の版 | `codex --version` | 0.170 より前なら、hook の入出力が文書と違う可能性を伝える |
+| Codex の版 | `codex --version` | 0.170 より前なら、hook の入出力が文書と違い記録が動かない可能性がある。そのことを伝え、Codex の部分を入れるかを利用者に決めてもらう |
 | Codex のホーム | `$CODEX_HOME`（未設定なら `~/.codex`） | hook はここの `hooks.json` にマージする |
 | hooks が有効か | `$CODEX_HOME/config.toml` と管理者の `requirements.toml` の `[features] hooks`（旧名 `codex_hooks`） | `false` なら hook は動かない。入れても記録されないと伝える |
 | 管理された hook だけか | `requirements.toml` の `allow_managed_hooks_only = true` | **自分では入れない。** 管理者に `requirements.toml` の `[hooks]` で配ってもらう（コマンドは `install.js --agent codex --check` の出力にある） |
@@ -181,7 +181,7 @@ node <展開先>/scripts/install.js --agent codex --apply --agents-md
 - `node` が Codex の PATH にないときは `--node <node の絶対パス>` を付けます
 - `--scope project`（`.codex/hooks.json`）は使えません。端末ごとの絶対パスをコミットすることになるためです
 
-**hook の信頼**: Codex は、利用者が信頼するまで hook を実行しません。利用者に Codex を起動して `/hooks` を開いてもらい、verify-layer の hook（PostToolUse `^Bash$`）を確認して信頼してもらいます。hook の定義が変わると（入れ直したときを含む）再び確認が要ります。`--dangerously-bypass-hook-trust` は使いません。
+**hook の信頼**: Codex は、利用者が信頼するまで hook を実行しません。利用者に Codex を起動して `/hooks` を開いてもらい、verify-layer の hook（PostToolUse `^Bash$`）を確認して信頼してもらいます。hook の定義（`command` の文字列など）が変わると再び確認が要ります。同じ展開先で入れ直しても定義は変わりませんが、展開先を移したり `--node` を変えたりすると変わります。`--dangerously-bypass-hook-trust` は使いません。
 
 ### 9.3 リポジトリごとの verify スキル（任意。別の承認）
 
@@ -191,18 +191,18 @@ Codex には「コミット前に verify を使う」標準の指示がないた
 node <展開先>/scripts/install.js --agent codex --repo-skill
 ```
 
-承認を得たら `--apply --repo-skill` で写します。既にある `.agents/skills/verify/` は上書きしません。写したファイルをコミットするかは利用者が決めます。
+承認を得たら `--apply --repo-skill` で写します。この操作は `.agents/skills/verify/` だけを扱い、`hooks.json` と AGENTS.md は変更しません（`--agents-md` と同時には使えません）。既にある `.agents/skills/verify/` は上書きしません。写したファイルをコミットするかは利用者が決めます。
 
 ### 9.4 導入後の確認
 
-1. `node <展開先>/scripts/vl.js doctor` の `Codex:` の行を読み、NG・WARN を報告する
+1. `node <展開先>/scripts/vl.js doctor` の `Codex:` で始まる行を読み、NG・WARN を報告する
 2. 任意（モデル費用は 1 回分。別の承認）: 使い捨てのリポジトリで Codex に小さな変更をコミットさせ、`node <展開先>/scripts/vl.js report` で `agent: codex` の commit 行が増えたかを見る。増えなければ、まず `/hooks` の信頼を確かめる
 
 ### 9.5 アンインストール
 
 ```
 node <展開先>/scripts/install.js --agent codex --uninstall --agents-md
-node <展開先>/scripts/install.js --agent codex --uninstall --repo-skill   # 各リポジトリで。雛形から変えたものは残す
+node <展開先>/scripts/install.js --agent codex --uninstall --repo-skill   # 各リポジトリで。スキルだけを外す。雛形から変えたものは残す
 ```
 
 自分の hook と 2 行だけを外します。外した結果 `hooks.json` が空になるときはファイルを消します（バックアップは残ります）。台帳は Claude の部分と共通なので、消すかは利用者に聞きます。

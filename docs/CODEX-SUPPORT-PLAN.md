@@ -116,7 +116,7 @@ WIP（このコミット）: `scripts/lib/install-codex.js`（`install.js --agen
 1. `codex/skills/verify/SKILL.md`（skill-creator の指針で作成。重い評価ループは省いた）。確認の手順は `.claude/skills/verify/SKILL.md` の 1 か所だけに置き、スキル側は最後の手順で AGENTS.md の mark の行を実行する
 2. `tests/install-codex.test.js`（一時 HOME・`CODEX_HOME`・`VL_CODEX_BIN`。本物の `~/.codex` には触れない）。この過程で 2 件を直した。1 件目は `install.js` が `module.exports` より前に `main()` を呼んでいて、`--agent codex` が毎回失敗していたこと。2 件目は、形の違う `hooks` / `hooks.PostToolUse` で他人の hook が消えていたこと。こちらは独立レビューの FAIL で見つかり、Claude 側の settings.json も同じだった
 3. `scripts/lib/doctor-codex.js` と `tests/doctor-codex.test.js`。Codex がなければ 1 行の案内だけを出して飛ばす
-4. `INSTALL_FOR_CLAUDE.md` の第 9 節と「部分的に入れる」、README の「Codex」節、CHANGELOG
+4. `INSTALL_FOR_CLAUDE.md` の第 9 節と「部分的に入れる」、README の「Codex」節、CHANGELOG。文書の独立レビューの FAIL で、`--repo-skill` が利用者全体の hook のマージ・削除も一緒に行っていたと分かった。スキルだけを扱う別の操作に直した
 5. CI に「Codex がない環境で Codex の部分が飛ばされる」手順と concurrency・timeout を足した。PR 本文の追記案は `docs/PR-BODY.md`（`gh pr edit` はしていない）
 
 実機で確かめることは、上の「未確認」と `docs/PR-BODY.md` の「未確認」にある。

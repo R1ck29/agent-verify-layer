@@ -13,7 +13,7 @@ PR #1 の本文の「未確認」の前に、次の節を入れてください�
 - **インストーラ** `install.js --agent codex`:
   - `$CODEX_HOME/hooks.json` へのマージです。既定は確認だけで、2 回目の `--apply` は 1 バイトも変えません。他の hook は変更しません。
   - `--agents-md` は AGENTS.md の末尾に 2 行を足します。空でない `AGENTS.override.md` があれば、そちらに書きます。
-  - `--repo-skill` はリポジトリに verify スキルを写します。既定は確認だけで、既存のものは上書きしません。
+  - `--repo-skill` は別の操作で、リポジトリに verify スキルを写すだけです。`hooks.json` と AGENTS.md には触れません。既定は確認だけで、既存のものは上書きしません。
   - Codex がない端末では何も書かず、Claude の部分だけを入れるよう案内します。
   - `allow_managed_hooks_only` のときは書き込みを止めます。
 - **verify スキルの雛形** `codex/skills/verify/SKILL.md`: skill-creator の指針で作りました。確認の手順は持たず、Claude の `/verify` が記録した `.claude/skills/verify/SKILL.md` に従います（手順は 1 か所）。最後の手順で、AGENTS.md にある mark の行を実行します。Claude のプラグインのスキルにはしていません。
@@ -25,12 +25,13 @@ PR #1 の本文の「未確認」の前に、次の節を入れてください�
 
 - `install.js` が `module.exports` より前に `main()` を呼んでいたため、`--agent codex` が毎回失敗していました（テストを書いて発覚）。
 - `hooks.json` の `hooks` や `hooks.PostToolUse` が想定と違う形（オブジェクトや文字列など）のとき、`--apply` が他人の hook を黙って消していました。Claude 側の settings.json も同じでした。今は両方とも exit 2 で止まり、何も書きません。独立レビューで FAIL になって発覚しました。
+- `--repo-skill` が利用者全体の hook のマージ・削除も一緒に行っていて、「リポジトリのスキルだけ」の承認では使えませんでした（文書の独立レビューの FAIL で発覚）。今はスキルだけを扱います。
 - プロジェクトの信頼を引くパスの比較が、Windows の 8.3 形式の短い名前で外れていました（Windows の CI で発覚）。
 
 ### 検証
 
 - `node --test`: 全件成功（件数は最終の CI を参照）。テストは一時的な HOME・`CODEX_HOME` と、偽の `codex` コマンド（`VL_CODEX_BIN`）だけを使います。本物の `~/.codex`・`~/.claude` には触れません。
-- 各ノード（codex-adapter / codex-installer / codex-skill / doctor-codex / docs / ci）について、独立した reviewer の判定を `task-graph.json` に記録しました。codex-installer は 1 度 FAIL（上の 2 つ目の不具合）になり、直してから再レビューしました。
+- 各ノード（codex-adapter / codex-installer / codex-skill / doctor-codex / docs / ci-push）は、独立した reviewer が判定し、その結果を `task-graph.json` に記録しています。codex-installer（上の 2 つ目の不具合）と docs（上の 3 つ目の不具合と、文書の記述の誤り）は 1 度 FAIL になり、直してから再レビューしました。
 
 ### 未確認（Codex の実機で確かめること）
 
