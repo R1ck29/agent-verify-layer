@@ -74,9 +74,9 @@ if [ "$mode" != dry ]; then
   he doctor --profiles "${profiles[@]}" --out "$out"
 fi
 echo "== 見積もり（モデルを呼ばない）"
-he plan --tasks "${tasks[@]}" --profiles "${profiles[@]}" "${extra[@]}" --trials "$trials" --no-llm --baseline "$base" --jobs 2 --max-cost-usd "$cap" "${cache[@]}" --out "$out"
+he plan --tasks "${tasks[@]}" --profiles "${profiles[@]}" "${extra[@]}" --trials "$trials" --no-llm --baseline "$base" --jobs "${JOBS:-2}" --max-cost-usd "$cap" "${cache[@]}" --out "$out"
 echo "== 実行 → $out"
 he run --tasks "${tasks[@]}" --profiles "${profiles[@]}" "${extra[@]}" --trials "$trials" --no-llm --baseline "$base" \
-  --jobs 2 --max-cost-usd "$cap" --keep all "${cache[@]}" --out "$out"
+  --jobs "${JOBS:-2}" --max-cost-usd "$cap" --keep all "${cache[@]}" --out "$out"
 echo "== 完了: $out（作業ツリーと台帳は各試行の workdir に残してあります。集計は次のセッションで）"
 if [ "$mode" = dry ]; then echo "dry の出力先: $out"; fi
