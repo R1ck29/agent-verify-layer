@@ -73,7 +73,7 @@ function checkWiring(add, files) {
   for (const f of files) {
     if (!f.data) continue;
     for (const { event, group, handler } of allHandlers(f.data)) {
-      if (isOwnHandler(handler)) {
+      if (isOwnHandler(handler, event)) {
         own.push(f.label);
         const hookArgs = Array.isArray(handler.args) ? handler.args : String(handler.command).split(/\s+/);
         seen.add(hookArgs.slice(hookArgs.findIndex((a) => /vl\.js["']?$/.test(a) ) + 1).join(' '));

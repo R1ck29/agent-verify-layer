@@ -5,6 +5,7 @@ const ledger = require('./ledger');
 const { classify, latestRun } = require('./classify');
 const checklist = require('./checklist');
 const { matchAny } = require('./glob');
+const { quoteArg } = require('./shellquote');
 
 const RECENT_COMMIT_S = 300;
 const VL_PATH = require('node:path').resolve(__dirname, '..', 'vl.js');
@@ -39,11 +40,17 @@ function resolveAgent(flag, input) {
 
 // The command an agent runs once its checks pass (see lib/mark.js).
 function markCommand(agent) {
-  return `node "${VL_PATH}" mark verify --agent ${agent}`;
+  return `node ${quoteArg(VL_PATH, { always: true })} mark verify --agent ${agent}`;
 }
 
 function markHint(agent) {
-  return `[verify-layer] verify の確認がすべて通ったら、コミットの前に次を実行して、確認した時点の状態を記録してください（記録だけで、作業は止めません。そのあとファイルを変えたら、確認と記録をやり直してください）: ${markCommand(agent)}`;
+  let cmd;
+  try {
+    cmd = markCommand(agent);
+  } catch {
+    return ''; // a path no shell can carry literally: no hint rather than a command that misfires
+  }
+  return `[verify-layer] verify の確認がすべて通ったら、コミットの前に次を実行して、確認した時点の状態を記録してください（記録だけで、作業は止めません。そのあとファイルを変えたら、確認と記録をやり直してください）: ${cmd}`;
 }
 
 // Records one verify / code-review run with the working-tree hash at this moment and, for verify,

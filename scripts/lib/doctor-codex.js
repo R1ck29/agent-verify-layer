@@ -28,7 +28,7 @@ function ownInHooksFile(file) {
   if (!r.exists) return { exists: false, own: [] };
   if (r.error) return { exists: true, error: r.error, own: [] };
   const own = allHandlers(r.data)
-    .filter(({ handler }) => codex.isOwnCodexHandler(handler))
+    .filter(({ event, group, handler }) => codex.isOwnCodexHandler(handler, event, group))
     .map(({ handler }) => ({ script: codex.ownScriptPath(handler) }));
   return { exists: true, own };
 }

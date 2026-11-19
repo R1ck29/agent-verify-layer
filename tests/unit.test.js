@@ -47,7 +47,10 @@ test('glob: Windows separators are normalised (path.win32)', () => {
 test('isOwnHandler: exec-form vl.js + "hook" only, with POSIX and Windows paths', () => {
   const h = (args, extra = {}) => ({ type: 'command', command: 'node', args, ...extra });
   assert.equal(isOwnHandler(h(['/a/b/scripts/vl.js', 'hook', 'commit'])), true);
-  assert.equal(isOwnHandler(h(['C:\\Users\\me\\vl\\scripts\\vl.js', 'hook', 'run', 'verify'])), true);
+  assert.equal(isOwnHandler(h(['C:\\Users\\me\\vl\\scripts\\vl.js', 'hook', 'expand'])), true);
+  assert.equal(isOwnHandler(h(['/a/b/scripts/vl.js', 'hook', 'expand']), 'PostToolUse'), false); // right shape, wrong event
+  assert.equal(isOwnHandler(h(['/a/b/scripts/vl.js', 'hook', 'audit'])), false);
+  assert.equal(isOwnHandler(h(['/a/b/scripts/vl.js', 'hook', 'skill', '--x'])), false);
   assert.equal(isOwnHandler(h(['/a/b/scripts/vl.js', 'hook', 'commit'], { timeout: 99, if: 'x' })), true); // other fields ignored
   assert.equal(isOwnHandler(h(['/a/b/scripts/vl.js', 'report'])), false);
   assert.equal(isOwnHandler(h(['/a/b/notvl.js', 'hook'])), false);

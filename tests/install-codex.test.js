@@ -143,7 +143,7 @@ t('--apply is idempotent: the second run changes no byte and makes no backup', (
 });
 
 t('an outdated own hook (old path) is replaced, not duplicated', (c) => {
-  const stale = { matcher: '^Bash$', hooks: [{ type: 'command', command: 'node "/old/place/scripts/vl.js" hook commit --agent codex', timeout: 10 }] };
+  const stale = { matcher: '^Bash$', hooks: [{ type: 'command', command: 'node "/old/place/scripts/vl.js" hook commit --agent codex', timeout: 10, statusMessage: 'verify-layer: recording commit' }] };
   c.putHooks({ hooks: { ...FOREIGN.hooks, PostToolUse: [stale, ...FOREIGN.hooks.PostToolUse] } });
   assert.equal(c.install(['--json']).json.status, 'outdated');
   assert.equal(c.install(['--apply']).status, 0);

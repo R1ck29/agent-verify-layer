@@ -42,6 +42,8 @@ function nextAgentsText(current, lines, action) {
   return { text, changed: text !== current };
 }
 
+// Plans the AGENTS.md change (everything that can fail fails here, before any file is written) and
+// returns the function that performs it, or null when there is nothing to write.
 function handleAgentsMd(opts, report, t, home) {
   const file = codex.agentsFile(home);
   const exists = fs.existsSync(file);
@@ -51,14 +53,16 @@ function handleAgentsMd(opts, report, t, home) {
   report.targets.push(`AGENTS.md: ${file}${changed ? '' : '（変更なし）'}`);
   if (opts.action === 'check') {
     if (changed) lines.forEach((l) => report.changes.push(`AGENTS.md に追記: ${l}`));
-    return;
+    return null;
   }
-  if (!changed) return;
+  if (!changed) return null;
   if (!t.isWritable(file)) throw new Error(`${file} に書き込めません。何も書いていません`);
-  const b = t.backup(file);
-  if (b) report.wrote.push(`バックアップ: ${b}`);
-  t.atomicWrite(file, text);
-  report.wrote.push(`${opts.action === 'uninstall' ? '2 行を外しました' : '2 行を追記しました'}: ${file}`);
+  return () => {
+    const b = t.backup(file);
+    if (b) report.wrote.push(`バックアップ: ${b}`);
+    t.atomicWrite(file, text);
+    report.wrote.push(`${opts.action === 'uninstall' ? '2 行を外しました' : '2 行を追記しました'}: ${file}`);
+  };
 }
 
 // --- repo verify skill -----------------------------------------------------------------------
@@ -73,11 +77,56 @@ function listFiles(dir, base = dir) {
   return out.sort();
 }
 
+const lexists = (p) => {
+  try {
+    fs.lstatSync(p);
+    return true;
+  } catch {
+    return false;
+  }
+};
+
+// The approval covers this repository only: every existing parent of the skill directory, and
+// every existing file in it, must resolve (through symlinks) to a place inside the repository.
+function assertInsideRepo(project, dest, files) {
+  const fold = (p) => (process.platform === 'win32' ? p.toLowerCase() : p);
+  const root = fold(fs.realpathSync(project));
+  const inside = (p) => {
+    const r = fold(fs.realpathSync(p)); // a dangling link throws: refused as well
+    return r === root || r.startsWith(root + path.sep);
+  };
+  const outside = (p) => new Error(`${p} はリポジトリの外に解決されます（シンボリックリンク）。リポジトリ単位の承認の範囲外なので、何もしません`);
+  let p = dest;
+  while (!lexists(p) && path.dirname(p) !== p) p = path.dirname(p);
+  let ok;
+  try {
+    ok = inside(p);
+  } catch {
+    ok = false;
+  }
+  if (!ok) throw outside(p);
+  for (const f of files) {
+    const file = path.join(dest, f);
+    if (!lexists(file)) continue;
+    let fileOk;
+    try {
+      fileOk = inside(file);
+    } catch {
+      fileOk = false;
+    }
+    if (!fileOk) throw outside(file);
+  }
+}
+
 function handleRepoSkill(opts, report) {
-  const project = repoRoot(path.resolve(opts.projectDir || process.cwd()));
-  if (!project) throw new Error('--repo-skill は git リポジトリの中で実行するか、--project-dir で指定してください');
+  const dir = path.resolve(opts.projectDir || process.cwd());
+  const project = repoRoot(dir);
+  if (!project) {
+    throw new Error(opts.projectDir ? `指定した ${dir} は Git リポジトリ内ではありません（--repo-skill はリポジトリ単位です）` : `${dir} は Git リポジトリ内ではありません。--repo-skill はリポジトリの中で実行するか、--project-dir で指定してください`);
+  }
   const dest = path.join(project, '.agents', 'skills', 'verify');
   const files = listFiles(SKILL_SRC);
+  assertInsideRepo(project, dest, files);
   const same = files.every((f) => {
     try {
       return fs.readFileSync(path.join(dest, f), 'utf8') === fs.readFileSync(path.join(SKILL_SRC, f), 'utf8');
@@ -154,7 +203,13 @@ function run(opts) {
     return { code: 2, report };
   }
   const before = read.data || {};
-  const own = codex.ownGroups(opts.node || 'node');
+  let own;
+  try {
+    own = codex.ownGroups(opts.node || 'node');
+  } catch (e) {
+    report.error = `${e.message}。何も書いていません（--node か vl.js のパスを、シェルで 1 語として書ける場所にしてください）`;
+    return { code: 2, report };
+  }
   const shape = t.hooksShapeError(before, own);
   if (shape) {
     report.error = `${hooksFile} の ${shape}。書き換えると中身が失われるため、何も書いていません。直してから再実行してください`;
@@ -185,19 +240,22 @@ function run(opts) {
     report.changes.push(`自分の hook ${removed} 件を外す`);
   }
 
+  let writeAgents = null;
   try {
-    if (opts.agentsMd) handleAgentsMd(opts, report, t, home);
+    if (opts.agentsMd) writeAgents = handleAgentsMd(opts, report, t, home);
   } catch (e) {
     report.error = e.message;
     return { code: 2, report };
   }
   if (opts.action === 'check') return { code: 0, report };
 
+  // Every target is checked before the first write, so a failure leaves nothing half-installed.
+  if (!same && !t.isWritable(hooksFile)) {
+    report.error = `${hooksFile} に書き込めません（読み取り専用）。何も書いていません`;
+    return { code: 2, report };
+  }
+  if (writeAgents) writeAgents();
   if (!same) {
-    if (!t.isWritable(hooksFile)) {
-      report.error = `${hooksFile} に書き込めません（読み取り専用）。hooks.json は書いていません`;
-      return { code: 2, report };
-    }
     const b = t.backup(hooksFile);
     if (b) report.wrote.push(`バックアップ: ${b}`);
     if (opts.action === 'uninstall' && Object.keys(after).length === 0 && !fs.lstatSync(hooksFile).isSymbolicLink()) {

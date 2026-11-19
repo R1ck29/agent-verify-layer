@@ -122,7 +122,7 @@ test('Codex hook definition: one PostToolUse ^Bash$ command string with an expli
   assert.ok(codex.isOwnCodexHandler(h));
   assert.equal(codex.ownScriptPath(h), '/opt/vl layer/scripts/vl.js');
   assert.equal(codex.hookCommand('C:\\Program Files\\nodejs\\node.exe', 'C:\\vl\\scripts\\vl.js'), '"C:\\Program Files\\nodejs\\node.exe" "C:\\vl\\scripts\\vl.js" hook commit --agent codex');
-  assert.throws(() => codex.hookCommand('node', '/a"b/vl.js'));
+  assert.throws(() => codex.hookCommand('node', '/a\nb/vl.js'));
   // foreign handlers that merely mention vl.js are not ours
   for (const command of ['node /x/vl.js hook commit', 'echo "vl.js hook commit --agent codex"', 'python3 "/x/vl.js" hook commit --agent claude']) {
     assert.equal(codex.isOwnCodexHandler({ type: 'command', command }), false, command);

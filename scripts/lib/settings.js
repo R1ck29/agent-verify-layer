@@ -4,14 +4,20 @@
 const fs = require('node:fs');
 const path = require('node:path');
 
-// Our hooks are recognised by an exec-form arg whose basename is vl.js followed by "hook".
-// Timeouts and other fields are deliberately not compared (matching on them once caused double
-// registration elsewhere). Shell-form commands are never treated as ours: the installer only
-// writes exec form, and a foreign command that merely mentions vl.js must not be touched.
-function isOwnHandler(h) {
+// Ours = exactly what hooks/hooks.json installs: an exec-form handler `<...>/vl.js hook <sub>` (nothing
+// after <sub>) whose <sub> belongs to the event it sits in (skill/commit: PostToolUse, expand:
+// UserPromptExpansion). A foreign tool's own `vl.js hook audit`, or ours moved to another event,
+// is never touched. Timeouts and other fields are deliberately not compared (matching on them once
+// caused double registration elsewhere). Shell-form commands are never ours: the installer only
+// writes exec form. `event` is optional for callers that look at a bare handler (sub only).
+const SUBCOMMAND_EVENT = { skill: 'PostToolUse', commit: 'PostToolUse', expand: 'UserPromptExpansion' };
+
+function isOwnHandler(h, event) {
   if (!h || typeof h !== 'object' || h.type !== 'command' || !Array.isArray(h.args)) return false;
   const i = h.args.findIndex((a) => typeof a === 'string' && path.basename(a.replace(/\\/g, '/')) === 'vl.js');
-  return i >= 0 && h.args[i + 1] === 'hook';
+  if (i < 0 || h.args[i + 1] !== 'hook' || h.args.length !== i + 3) return false;
+  const want = SUBCOMMAND_EVENT[h.args[i + 2]];
+  return want !== undefined && (event === undefined || event === want);
 }
 
 // Reads a JSON settings file. { exists:false } when absent; { error } when unreadable or not JSON.
