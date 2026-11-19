@@ -1,6 +1,6 @@
 # E1b 結果（実リポジトリの罠）
 
-## 事前に固定した判定基準（2026-11-19 16:15 JST、full の結果を見る前に書いた。結果を見たあとは書き換えない）
+## 事前に固定した判定基準（2026-11-19 16:05 JST、full の結果を見る前に書いた。結果を見たあとは書き換えない）
 
 対象: tasks-e1b の罠 6 件 + E1 の対照 4 件。各セル 2 試行。採点は決定的な隠しチェックだけ（LLM 判定なし）。
 Claude 側: P0 claude-baseline / P1 claude-static-rules / P2 claude-verify-layer（sonnet 5.5）。
