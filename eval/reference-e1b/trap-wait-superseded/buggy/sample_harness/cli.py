@@ -390,6 +390,7 @@ def build_parser() -> argparse.ArgumentParser:
     validate.add_argument("path", nargs="?")
     ready = commands.add_parser("ready", help="list tasks ready to start")
     ready.add_argument("path", nargs="?")
+    ready.add_argument("--role", help="only tasks assigned to this role")
     conform = commands.add_parser(
         "conformance", help="report whether sessions followed the protocol"
     )
@@ -631,7 +632,14 @@ def run(args: argparse.Namespace) -> Any:
         return {"valid": True, "nodes": len(graph.nodes)}
     if args.command == "ready":
         # TODO: page this once graphs grow past a few hundred nodes.
-        ready_ids = store.load().ready_node_ids()
+        graph = store.load()
+        ready_ids = graph.ready_node_ids()
+        if args.role is not None:
+            ready_ids = [
+                node_id
+                for node_id in ready_ids
+                if graph.node(node_id)["assigned_role"] == args.role
+            ]
         return {"ready": ready_ids, "count": len(ready_ids)}
     if args.command == "conformance":
         # Imported here, as `effectiveness` already is: it reaches

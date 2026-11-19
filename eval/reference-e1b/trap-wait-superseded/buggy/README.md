@@ -99,9 +99,11 @@ it depends on. A new node starts `blocked` and becomes `ready` once every
 dependency is verified. Run `samplectl doctor` when setup or a lock appears
 unhealthy.
 
-`samplectl status` lists every node with a `next_action` hint; a blocked node
-names the dependencies it is still waiting for. Add `--node NODE` to show one
-node only, and `samplectl ready` reports how many nodes can start (`count`).
+`samplectl status` lists every node with a `next_action` hint, and
+`waiting_on` lists the dependencies a blocked node is still waiting for
+(empty for other nodes). Add `--node NODE` to show one node only.
+`samplectl ready` reports how many nodes can start (`count`), and
+`samplectl ready --role ROLE` lists only the tasks assigned to that role.
 
 Run every `samplectl` command from the directory that holds `task-graph.json`.
 The workspace is the current directory, so a graph in a parent directory is

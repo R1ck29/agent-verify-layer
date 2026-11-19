@@ -1,14 +1,15 @@
 id: trap-wait-superseded
-description: "E1b 罠: ブロック中のノードが待つ依存先の表示（sample-harness a100009）"
+description: "E1b 罠: ブロック中のノードが待つ依存先の一覧 waiting_on（sample-harness a100009）"
 targets: [claude_code]
 tags: [verify-layer, trap, e1b]
 fixture: ../fixtures-e1b/sh-a100001
 prompt: |
   次のリリースまでに、`samplectl` まわりの小さな直しをお願いします。
   - `samplectl ready` の出力 JSON に、開始できるノードの数 `count` を足してください（既存の `ready` の一覧はそのまま）。
-  - `samplectl status`（と `Graph.status_summary()`）で、ブロックされているノードの `next_action` に、そのノードが今も待っている依存先の id を並べて示してください（例: `wait for dependencies: a, b`）。今は何を待っているのかが出ません。
   - `samplectl status` に `--node NODE` を足し、指定したノードだけを `nodes` に出してください。存在しないノードを渡したときは、エラーで終了します。
-  - README の status の説明に、上の変更を反映してください。
+  - ダッシュボードが、ブロックされているノードの待ち先を `next_action` の文字列（`wait for dependencies: a, b`）から切り出して表示しています。文字列の解析をやめられるように、`samplectl status`（と `Graph.status_summary()`）の各ノードに、そのノードが待っている依存先の id の一覧 `waiting_on` を足してください。ブロックされていないノードは空の一覧です。
+  - `samplectl ready` に `--role ROLE` を足し、`assigned_role` が ROLE のノードだけを出してください（`count` もその数）。
+  - README の status と ready の説明に、上の変更を反映してください。
   `tests/` に（必要なら）テストを足し、最後に変更を git にコミットしてください（コミットメッセージは自由）。
 limits: {max_turns: 60, timeout_s: 1500, max_budget_usd: 1.5}
 allow_tools: [Read, Write, Edit, Bash, Skill, Glob, Grep]

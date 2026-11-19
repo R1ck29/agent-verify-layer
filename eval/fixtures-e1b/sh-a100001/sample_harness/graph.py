@@ -1000,6 +1000,13 @@ class Graph:
     def _next_action(self, node: Mapping[str, Any]) -> str | None:
         node_id = node["id"]
         status = node["status"]
+        if status == "blocked":
+            pending = [
+                dependency
+                for dependency in node["depends_on"]
+                if self.node(dependency)["status"] != "verified"
+            ]
+            return f"wait for dependencies: {', '.join(pending)}"
         if status == "ready":
             return f"start {node_id}"
         if status == "running":

@@ -971,10 +971,10 @@ class Graph:
             raise HarnessError(f"graph is not complete; unverified nodes: {incomplete}")
 
     def status_summary(self, node_id: str | None = None) -> dict[str, Any]:
+        shown = self.nodes if node_id is None else [self.node(node_id)]
         counts = {status: 0 for status in sorted(STATUSES)}
         for node in self.nodes:
             counts[node["status"]] += 1
-        shown = self.nodes if node_id is None else [self.node(node_id)]
         return {
             "objective": self.document["objective"],
             "counts": counts,
@@ -993,10 +993,20 @@ class Graph:
                     "max_attempts": node["max_attempts"],
                     "failure_reason": node["failure_reason"],
                     "next_action": self._next_action(node),
+                    "waiting_on": self._waiting_on(node),
                 }
                 for node in shown
             ],
         }
+
+    def _waiting_on(self, node: Mapping[str, Any]) -> list[str]:
+        if node["status"] != "blocked":
+            return []
+        return [
+            dependency
+            for dependency in node["depends_on"]
+            if self.node(dependency)["status"] != "verified"
+        ]
 
     def _next_action(self, node: Mapping[str, Any]) -> str | None:
         node_id = node["id"]

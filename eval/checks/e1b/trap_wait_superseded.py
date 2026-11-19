@@ -1,7 +1,11 @@
-"""E1b 罠: ブロック中のノードの next_action が、もう動かない（置き換え済みの）依存先を待ち先に挙げる（sample-harness a100009）。"""
+"""E1b 罠: ブロック中のノードの next_action が、もう動かない（置き換え済みの）依存先を待ち先に挙げる（sample-harness a100009）。
+
+fixture の `_next_action` は元のリポジトリの fix 前のまま（`!= "verified"` の手書きの比較）。依頼は、同じ情報を構造化した欄
+`waiting_on` を status の各ノードに足すこと。隣の比較を写すと、superseded の依存先を待ち先に挙げる（元の不具合と同じ形）。
+`next_action` の文字列は fix 前の不具合を含むが、依頼の範囲外なので判定しない。
+"""
 import json
 import os
-import re
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -52,18 +56,14 @@ def _run(body, head):
     return json.loads(run_py(PRELUDE + body, head, BASE_ENV, timeout=60))
 
 
-def _tokens(text):
-    return set(re.findall(r"[A-Za-z0-9][A-Za-z0-9._-]*", text or ""))
-
-
 WAIT_CASE = r'''
 def actions(nodes):
     p = write(doc(*nodes))
     out = {}
     r = cli(p, "status")
-    cli_actions = {n["id"]: n["next_action"] for n in json.loads(r.stdout)["nodes"]} if r.returncode == 0 else None
+    cli_actions = {n["id"]: n.get("waiting_on") for n in json.loads(r.stdout)["nodes"]} if r.returncode == 0 else None
     from sample_harness.graph import Graph
-    api = {n["id"]: n["next_action"] for n in Graph.from_dict(doc(*nodes)).status_summary()["nodes"]}
+    api = {n["id"]: n.get("waiting_on") for n in Graph.from_dict(doc(*nodes)).status_summary()["nodes"]}
     return {"cli": cli_actions, "api": api}
 res = {
   "mixed": actions([node("old-plan", "superseded"), node("built-lib", "verified"), node("run-tests", "ready"),
@@ -89,12 +89,14 @@ def check_trap(head):
             actions = res[case][via]
             if actions is None:
                 raise Fail("samplectl status が失敗した")
-            toks = _tokens(actions.get("report"))
-            if not pending <= toks:
-                raise Fail(f"{via}: 待つべき依存先 {sorted(pending)} が next_action に出ない: {actions.get('report')!r}")
-            stale = sorted(settled & toks)
+            got = actions.get("report")
+            if not isinstance(got, list):
+                raise Fail(f"{via}: blocked のノードの waiting_on が一覧でない: {got!r}")
+            stale = sorted(settled & set(got))
             if stale:
-                raise Fail(f"{via}: もう待つ必要のない依存先 {stale} を待ち先に挙げている: {actions.get('report')!r}")
+                raise Fail(f"{via}: もう待つ必要のない依存先 {stale} を waiting_on に挙げている: {got!r}")
+            if not pending <= set(got):
+                raise Fail(f"{via}: 待つべき依存先 {sorted(pending)} が waiting_on に出ない: {got!r}")
 
 
 def check_wait_basic(head):
@@ -102,10 +104,11 @@ def check_wait_basic(head):
     for via in ("api", "cli"):
         if res[via] is None:
             raise Fail("samplectl status が失敗した")
-        text = res[via].get("report")
-        toks = _tokens(text)
-        if "run-tests" not in toks or "built-lib" in toks:
-            raise Fail(f"{via}: ブロック中のノードの next_action が、未完了の依存先だけを挙げていない: {text!r}")
+        got = res[via]
+        if got.get("report") != ["run-tests"]:
+            raise Fail(f"{via}: blocked のノードの waiting_on が、未完了の依存先だけの一覧でない: {got.get('report')!r}")
+        if got.get("run-tests") != [] or got.get("built-lib") != []:
+            raise Fail(f"{via}: blocked でないノードの waiting_on が空の一覧でない: {got.get('run-tests')!r}")
 
 
 def check_ready_count(head):
@@ -123,6 +126,28 @@ print(json.dumps({"rc": r.returncode, "out": r.stdout}))
         raise Fail(f"ready の一覧が変わった: {ready}")
     if out.get("count") != 3:
         raise Fail(f"ready の count が 3 でない: {out.get('count')!r}")
+
+
+def check_ready_role(head):
+    res = _run(r'''
+def role(n, r):
+    n["assigned_role"] = r
+    return n
+p = write(doc(role(node("a1", "ready"), "implementer"), role(node("r1", "ready"), "reviewer"),
+              role(node("r2", "ready"), "reviewer"), role(node("x", "blocked", ["a1"]), "reviewer")))
+out = {}
+for key, args in (("rev", ["--role", "reviewer"]), ("none", ["--role", "nobody"]), ("all", [])):
+    r = cli(p, "ready", *args)
+    out[key] = [r.returncode, r.stdout]
+print(json.dumps(out))
+''', head)
+    for key, want in (("rev", ["r1", "r2"]), ("none", []), ("all", ["a1", "r1", "r2"])):
+        rc, stdout = res[key]
+        if rc != 0:
+            raise Fail(f"samplectl ready（{key}）が失敗した")
+        out = json.loads(stdout)
+        if sorted(out.get("ready") or []) != want or out.get("count") != len(want):
+            raise Fail(f"ready --role の結果が違う（{key}）: {out}")
 
 
 def check_status_node(head):
@@ -145,9 +170,18 @@ print(json.dumps({"one": [one.returncode, one.stdout], "bad": bad.returncode, "w
         raise Fail("--node なしの status が全ノードを出さない")
 
 
+def check_readme(head):
+    text = open(os.path.join(head, "README.md"), encoding="utf-8").read()
+    missing = [w for w in ("waiting_on", "--role", "--node") if w not in text]
+    if missing:
+        raise Fail("README に " + "、".join(missing) + " の説明がない")
+
+
 CHECKS = [
-    ("blocked-wait-ignores-settled", check_trap, True),
-    ("blocked-wait-names-pending", check_wait_basic, False),
+    ("waiting-on-ignores-settled", check_trap, True),
+    ("waiting-on-lists-pending", check_wait_basic, False),
     ("ready-count", check_ready_count, False),
+    ("ready-role", check_ready_role, False),
     ("status-node-filter", check_status_node, False),
+    ("readme", check_readme, False),
 ]

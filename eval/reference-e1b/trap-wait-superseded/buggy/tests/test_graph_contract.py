@@ -169,12 +169,13 @@ class GraphSchemaAndSchedulingTests(unittest.TestCase):
             )
         )
 
-        actions = {
-            item["id"]: item["next_action"]
+        waiting = {
+            item["id"]: item["waiting_on"]
             for item in task_graph.status_summary()["nodes"]
         }
 
-        self.assertEqual("wait for dependencies: pending", actions["later"])
+        self.assertEqual(["pending"], waiting["later"])
+        self.assertEqual([], waiting["pending"])
 
     def test_status_summary_can_be_limited_to_one_node(self) -> None:
         task_graph = Graph.from_dict(graph(node("a", status="ready"), node("b")))
