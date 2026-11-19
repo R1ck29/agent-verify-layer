@@ -15,9 +15,9 @@ const pct = (n, d) => (d ? Math.round((1000 * n) / d) / 10 : null);
 function summarize(rows, logShas) {
   const commits = rows.filter((r) => r.kind === 'commit');
   const runs = rows.filter((r) => r.kind === 'run');
-  const results = { verified: 0, stale: 0, none: 0, skipped: 0 };
+  const results = { verified: 0, stale: 0, none: 0, skipped: 0, unknown: 0 };
   for (const c of commits) if (c.result in results) results[c.result]++;
-  const judged = results.verified + results.stale + results.none; // skipped is outside the instruction
+  const judged = results.verified + results.stale + results.none; // skipped (outside the instruction) and unknown (git could not tell) stay out of the denominator
   // mark rows (`via: "mark"`) record when the checks passed; they are not extra verify starts.
   const allVerify = runs.filter((r) => r.skill === 'verify');
   const verifyRuns = allVerify.filter((r) => r.via !== 'mark');
@@ -44,8 +44,8 @@ function summarize(rows, logShas) {
     commits_by_agent: agents,
     verified_by_mark: commits.filter((c) => c.result === 'verified' && c.basis === 'mark').length,
     verified_rate_pct: pct(results.verified, judged),
-    session_verify_rate_pct: pct(commits.filter((c) => c.session_verify && c.result !== 'skipped').length, judged),
-    session_code_review_rate_pct: pct(commits.filter((c) => c.session_code_review && c.result !== 'skipped').length, judged),
+    session_verify_rate_pct: pct(commits.filter((c) => c.session_verify && c.result !== 'skipped' && c.result !== 'unknown').length, judged),
+    session_code_review_rate_pct: pct(commits.filter((c) => c.session_code_review && c.result !== 'skipped' && c.result !== 'unknown').length, judged),
     runs: {
       verify: verifyRuns.length,
       verify_via_model: verifyRuns.filter((r) => r.via === 'model').length,
@@ -74,7 +74,7 @@ function formatText(s, meta) {
   L.push(`期間: ${meta.from ? new Date(meta.from * 1000).toISOString().slice(0, 10) : '-'} 〜 今日（台帳 ${meta.rows} 行）`);
   L.push('');
   const c = s.commits;
-  L.push(`コミット（台帳）: ${c.total} 件 — verified ${c.verified} / stale ${c.stale} / none ${c.none} / skipped ${c.skipped}`);
+  L.push(`コミット（台帳）: ${c.total} 件 — verified ${c.verified} / stale ${c.stale} / none ${c.none} / skipped ${c.skipped}${c.unknown ? ` / unknown ${c.unknown}（git で変更ファイルを取得できなかった）` : ''}`);
   L.push(`  verified 率（skipped を除く）: ${s.verified_rate_pct ?? '-'}%`);
   L.push(`  同じセッションで verify があった率: ${s.session_verify_rate_pct ?? '-'}% / code-review があった率: ${s.session_code_review_rate_pct ?? '-'}%`);
   L.push(`  stale の大きさ（コミット内の差のあるファイル数）: 中央値 ${s.stale_files.median ?? '-'} / 最大 ${s.stale_files.max ?? '-'}`);

@@ -53,6 +53,10 @@ function run(flags, env = process.env) {
     process.stderr.write(`[verify-layer] git リポジトリではないため記録しません: ${cwd}\n`);
     return 0;
   }
+  if (r.snapshotFailed) {
+    process.stderr.write('[verify-layer] 記録できませんでした: 作業ツリーのスナップショット（git add -A）に失敗しました（コミット前の空のリポジトリがツリー内にある、読めないファイルがある等）。作業は続けてかまいません\n');
+    return 0;
+  }
   if (!r.written) {
     process.stderr.write('[verify-layer] 台帳に書き込めませんでした（.git が読み取り専用など）。作業は続けてかまいません\n');
     return 0;

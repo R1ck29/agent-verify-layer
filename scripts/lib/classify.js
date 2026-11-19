@@ -7,7 +7,9 @@ const { matchAny } = require('./glob');
 //   diffNames (tree) => Set of paths differing between that tree and HEAD, or null if unreachable
 // skipped wins over none: docs/tests-only commits are outside the standard
 // "run /verify before commit" instruction, so they must not count as unverified.
+// paths === null means the commit's changed paths could not be read: "unknown", never "skipped".
 function classify({ paths, run, skipGlobs, diffNames }) {
+  if (paths === null) return { result: 'unknown', stale_files: null, warn: 'paths-unavailable' };
   if (paths.every((p) => matchAny(skipGlobs, p))) return { result: 'skipped', stale_files: 0 };
   if (!run || !run.tree) return { result: 'none', stale_files: 0 };
   const changed = diffNames(run.tree);

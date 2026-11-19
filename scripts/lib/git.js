@@ -10,7 +10,8 @@ function git(args, opts = {}) {
   const r = spawnSync('git', ['-c', 'core.quotepath=off', ...args], {
     cwd: opts.cwd,
     input: opts.input,
-    env: { ...process.env, GIT_OPTIONAL_LOCKS: '0', GIT_TERMINAL_PROMPT: '0', ...(opts.env || {}) },
+    // opts.fullEnv replaces process.env entirely (see isolatedGitEnv); otherwise opts.env is merged.
+    env: { ...(opts.fullEnv || process.env), GIT_OPTIONAL_LOCKS: '0', GIT_TERMINAL_PROMPT: '0', ...(opts.env || {}) },
     encoding: 'utf8',
     maxBuffer: 256 * 1024 * 1024,
     timeout: opts.timeout || DEFAULT_TIMEOUT,
@@ -22,6 +23,27 @@ function git(args, opts = {}) {
     err: r.stderr || '',
     status: r.status,
     error: r.error || null,
+  };
+}
+
+// Variables that point git at a repository, object store or config other than the one in cwd.
+const REPO_VARS = /^GIT_(DIR|WORK_TREE|INDEX_FILE|OBJECT_DIRECTORY|ALTERNATE_OBJECT_DIRECTORIES|COMMON_DIR|NAMESPACE|PREFIX|CEILING_DIRECTORIES|DISCOVERY_ACROSS_FILESYSTEM|QUARANTINE_PATH|CONFIG|CONFIG_PARAMETERS|CONFIG_COUNT|CONFIG_KEY_\d+|CONFIG_VALUE_\d+|CONFIG_GLOBAL|CONFIG_SYSTEM|CONFIG_NOSYSTEM|REPLACE_REF_BASE|SHALLOW_FILE|GRAFT_FILE)$/;
+
+// An environment for running git in a throw-away repository that cannot reach the caller's
+// repository, config or hooks (doctor's smoke test). Pass it as { fullEnv } so nothing inherited
+// is mixed back in. `hooksDir` must be an empty directory.
+function isolatedGitEnv(base, hooksDir) {
+  const env = {};
+  for (const [k, v] of Object.entries(base)) if (!REPO_VARS.test(k)) env[k] = v;
+  return {
+    ...env,
+    GIT_CONFIG_NOSYSTEM: '1',
+    GIT_CONFIG_GLOBAL: os.devNull,
+    GIT_CONFIG_COUNT: '2',
+    GIT_CONFIG_KEY_0: 'core.hooksPath',
+    GIT_CONFIG_VALUE_0: hooksDir,
+    GIT_CONFIG_KEY_1: 'commit.gpgsign',
+    GIT_CONFIG_VALUE_1: 'false',
   };
 }
 
@@ -80,7 +102,11 @@ function treeHash(cwd, opts) {
       }
     }
     const env = { GIT_INDEX_FILE: tmp };
-    git(['add', '-A'], { cwd, env, ...opts });
+    // Snapshot-only git: no repository hooks (post-index-change). A failed `add -A` (e.g. an
+    // untracked repository without commits inside the tree) must not fall through to
+    // write-tree, which would succeed and return the tree of the OLD index.
+    const add = git(['-c', `core.hooksPath=${os.devNull}`, 'add', '-A'], { cwd, env, ...opts });
+    if (!add.ok) return null;
     const r = git(['write-tree'], { cwd, env, ...opts });
     return r.ok ? r.out.trim() : null;
   } finally {
@@ -100,6 +126,7 @@ function diffTreeToHead(cwd, tree, opts) {
 
 module.exports = {
   git,
+  isolatedGitEnv,
   splitZ,
   repoRoot,
   gitPath,

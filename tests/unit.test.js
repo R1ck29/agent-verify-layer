@@ -110,7 +110,7 @@ test('report.summarize: counts, rates, percentiles and git-log reconciliation', 
     { kind: 'run', skill: 'verify', via: 'model', checklist_warnings: 1 },
   ];
   const s = summarize(rows, ['a', 'b', 'c', 'd', 'e', 'f']);
-  assert.deepEqual(s.commits, { total: 5, verified: 2, stale: 1, none: 1, skipped: 1 });
+  assert.deepEqual(s.commits, { total: 5, verified: 2, stale: 1, none: 1, skipped: 1, unknown: 0 });
   assert.equal(s.verified_rate_pct, 50); // 2 of 4 judged (skipped excluded)
   assert.equal(s.session_verify_rate_pct, 50);
   assert.equal(s.session_code_review_rate_pct, 25);

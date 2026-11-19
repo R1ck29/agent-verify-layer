@@ -67,6 +67,9 @@ function recordRun(kind, cwd, { via, agent, session, cfg }) {
     hits = checklist.matchItems(cl.items, changes, root);
   }
 
+  // No snapshot, no row: a run without a tree would claim a verification of a state we cannot name.
+  if (tree === null) return { root, tree, hits, selfCheck, written: false, snapshotFailed: true };
+
   const written = ledger.append(root, {
     kind: 'run',
     ts: t0,
@@ -141,7 +144,7 @@ function handleCommit(input, { agent: agentFlag } = {}) {
   if (rows.some((r) => r.kind === 'commit' && r.sha === head.sha)) return null;
   if (head.time !== null && now() - head.time > RECENT_COMMIT_S) return null;
 
-  const paths = git.commitPaths(root, head, opts) || [];
+  const paths = git.commitPaths(root, head, opts); // null = unreadable (judged "unknown")
   // Quoted text (commit messages) is stripped first so `-m "about --amend"` is not an amend.
   const amend =
     typeof command === 'string' && /(^|\s)--amend(\s|=|$)/.test(command.replace(/'[^']*'|"[^"]*"/g, ' '));
@@ -157,7 +160,7 @@ function handleCommit(input, { agent: agentFlag } = {}) {
   });
   const session = str(input.session_id);
   const sessionRan = (skill) => !!session && rows.some((r) => r.kind === 'run' && r.skill === skill && r.session === session);
-  const selfCheck = paths.some((p) => matchAny(checklist.SELF_CHECK_GLOBS, p));
+  const selfCheck = !!paths && paths.some((p) => matchAny(checklist.SELF_CHECK_GLOBS, p));
 
   ledger.append(root, {
     kind: 'commit',
@@ -171,7 +174,7 @@ function handleCommit(input, { agent: agentFlag } = {}) {
     since_run_s: run ? Math.round(t0 - run.ts) : null,
     session_verify: sessionRan('verify'),
     session_code_review: sessionRan('code-review'),
-    n_files: paths.length,
+    n_files: paths ? paths.length : null,
     self_check_change: selfCheck,
     session,
     ...(verdict.warn ? { warn: verdict.warn } : {}),
