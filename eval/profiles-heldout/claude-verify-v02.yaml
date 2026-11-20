@@ -1,0 +1,16 @@
+# held-out の P2 = Verify v0.2（強制モード・敵対段 off。PREREG-v02 追補 A）の雛形（Claude 側）。直接は使わない: run-eval.sh（P2=v02）が
+# @V02_DIR@ を VL_V02_DIR（feat/v0.2 の checkout。既定 ../../vl-v02）に置き換えた隠しファイル .v02.*.yaml を作って使う。
+# v0.2 の実装（設定の verifyV2）がその checkout に入るまでは、run-eval.sh が P2=v02 を止める。
+# P0 = ../profiles-e1b/claude-baseline（層を外す）、P1 = ../profiles-e1b/claude-verify-layer（v0.1）。
+id: claude-verify-v02
+agent: claude_code
+model: sonnet
+billing: subscription
+inherit_env: [CLAUDE_CODE_OAUTH_TOKEN]
+install:
+  - run: 'sh {profile_dir}/../profiles/common/seed-git.sh {workdir}'
+  # TODO(v0.2 の実装に合わせる): v0.2 の opt-in 配備のフラグ名（V02-DESIGN §3.1 install.js）。ここでは --v02 と仮置き
+  - run: 'node @V02_DIR@/scripts/install.js --apply --rules --mode observe --v02'
+  # 設定（runner・protectedPaths）は公開 fixture の情報だけから機械的に作る（追補 B で規則を固定）。生成結果は試行ルートの v02-config.json に残る
+  - run: '{python} {profile_dir}/../tools/gen-v02-config.py {workdir} {config_dir}/verify-layer --log {home}/../v02-config.json'
+hash_paths: [@V02_DIR@/scripts, @V02_DIR@/hooks, @V02_DIR@/rules, ../tools/gen-v02-config.py]

@@ -107,6 +107,44 @@ class PlanMode(Base):
         self.assertTrue((self.tmp / "out" / "plan-heldout" / "NOT-FOR-VERDICT.txt").is_file())
 
 
+@unittest.skipUnless(AHE, "AHE（v0.10.0 以上）が見つからない")
+class P2V02(Base):
+    def fake_v02(self, with_impl=True):
+        d = self.tmp / "v02"
+        (d / "scripts" / "lib").mkdir(parents=True)
+        (d / "scripts" / "lib" / "config.js").write_text("// verifyV2\n" if with_impl else "// v0.1\n")
+        return d
+
+    def tearDown(self):
+        super().tearDown()
+        for f in (EVAL / "profiles-heldout").glob(".*.yaml"):
+            f.unlink()
+
+    def test_stops_without_v02_implementation(self):
+        r = self.run_eval("plan", "heldout", env={"P2": "v02", "VL_V02_DIR": str(self.fake_v02(False))}, path_prepend=str(fake_bin(self.tmp / "bin")))
+        self.assertEqual(r.returncode, 2, r.stdout + r.stderr)
+        self.assertIn("v0.2 の実装", r.stderr)
+
+    def test_codex_p2_is_not_available(self):
+        r = self.run_eval("plan", "heldout", env={"P2": "v02", "AGENT": "codex", "VL_V02_DIR": str(self.fake_v02())})
+        self.assertEqual(r.returncode, 2, r.stdout + r.stderr)
+        self.assertIn("linked", r.stderr)
+
+    def test_three_profiles_p0_p1_p2_with_v02_dir_in_sandbox_ro(self):
+        v02 = self.fake_v02()
+        r = self.run_eval("plan", "heldout", env={"P2": "v02", "VL_V02_DIR": str(v02), "TRIALS": "3"}, path_prepend=str(fake_bin(self.tmp / "bin")))
+        out = r.stdout + r.stderr
+        self.assertEqual(r.returncode, 0, out)
+        self.assertIn("プロファイル 3 件", out)
+        self.assertNotIn("[claude-static-rules]", out)
+        y = (EVAL / "profiles-heldout" / ".sbx..v02.claude-verify-v02.yaml").read_text()
+        self.assertIn(f"{v02}/scripts", y)
+        self.assertIn("sandbox: bwrap", y)
+        self.assertNotIn("@V02_DIR@", y)
+        self.assertIn("81 試行", out)
+        self.assertIn("呼び出し 0 回）", out)  # v0.2 の履歴（P2 × 1.3）があり、見積もれない呼び出しがない
+
+
 def trials_of(stdout):
     """dry の出力先の trials.jsonl の行（dict の一覧）。"""
     import json

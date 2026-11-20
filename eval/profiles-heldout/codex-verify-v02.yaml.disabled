@@ -1,0 +1,16 @@
+# held-out の P2 = Verify v0.2 の Codex 側の雛形。今は無効化（拡張子 .disabled。run-eval.sh は読まない）。
+# 認証: copy_credentials は使わない。`credentials: linked` + `codex_auth_home: ~/.codex-eval`（評価専用の Codex ホーム）を前提にする。
+#   → AHE の対応待ち（AHE v0.10.0 の spec.py には linked / codex_auth_home がまだない）。対応後にこのファイルを有効にする。
+# v0.2 の Codex 側は Stop の理由の配送などを V02-DESIGN §3.3 で確認できた構成でだけ強制モードにする。確認できなければ「実施不可」と記録し、観察モードで代用しない。
+id: codex-verify-v02
+agent: codex
+model: gpt-6.2-sol
+billing: subscription
+# credentials: linked
+# codex_auth_home: ~/.codex-eval
+install:
+  - run: 'sh {profile_dir}/../profiles/common/seed-git.sh {workdir}'
+  - run: 'node @V02_DIR@/scripts/install.js --agent codex --apply --agents-md --mode observe --v02'   # TODO: フラグ名は v0.2 の実装に合わせる
+  - run: '{python} {profile_dir}/../tools/gen-v02-config.py {workdir} {home}/.codex-eval-verify-layer --log {home}/../v02-config.json'   # TODO: Codex の VL_CONFIG_DIR の場所を v0.2 の実装に合わせる
+hash_paths: [@V02_DIR@/scripts, @V02_DIR@/hooks, @V02_DIR@/codex, ../tools/gen-v02-config.py]
+codex_sandbox: danger-full-access

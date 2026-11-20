@@ -62,6 +62,20 @@ if [ "$suite" = heldout ]; then
   done
 fi
 
+# P2=v02: PREREG-v02 の 3 プロファイル（P0 = 層なし、P1 = v0.1 の層、P2 = v0.2）にする。claude-static-rules は走らせない。
+# v0.2 は VL_V02_DIR（feat/v0.2 の checkout）から入れる。実装（設定の verifyV2）がまだなければ止める。Codex は AHE の credentials: linked 対応待ち
+V02_DIR=""
+if [ "${P2:-}" = v02 ]; then
+  { [ "$suite" = heldout ] && [ "$AGENT" = claude ]; } || { echo "P2=v02 は heldout の Claude だけです（Codex は AHE の credentials: linked 対応待ち。profiles-heldout/codex-verify-v02.yaml.disabled）" >&2; exit 2; }
+  V02_DIR="$(cd "${VL_V02_DIR:-$here/../../vl-v02}" 2>/dev/null && pwd)" || { echo "VL_V02_DIR（v0.2 の checkout）が見つかりません" >&2; exit 2; }
+  grep -qs verifyV2 "$V02_DIR/scripts/lib/config.js" || { echo "v0.2 の実装が $V02_DIR にまだありません（scripts/lib/config.js に verifyV2 の設定がない）。P2=v02 は実装のあとに" >&2; exit 2; }
+  v02="$here/profiles-heldout/.v02.claude-verify-v02.yaml"
+  sed "s#@V02_DIR@#$V02_DIR#g" "$here/profiles-heldout/claude-verify-v02.yaml" > "$v02"
+  keep=()
+  for f in "${profiles[@]}"; do case "$(basename "$f")" in *static-rules*) ;; *) keep+=("$f");; esac; done
+  [ "$mode" = smoke-p0 ] || profiles=("${keep[@]}" "$v02")
+fi
+
 repo="$(cd "$here/.." && pwd)"
 # 解答の隔離は AHE の sandbox: bwrap（Linux の既定）。見えるのは試行の一時ホーム・作業ツリーと読み取り専用のシステム・CLI 本体だけで、評価の中身・
 # 他の試行・/workspace の残り・本物のホームは見えない。層の hook が呼ぶ scripts/・hooks/・codex/・rules/ は sandbox_ro（読み取り専用）で渡す。
@@ -82,8 +96,8 @@ if [ "$mode" = dry ]; then
   out="$(mktemp -d)"
   prof="$out/profiles"; mkdir -p "$prof"
   for f in "${profiles[@]}"; do   # 認証を外し、模擬 CLI を使う。ほかは本物のプロファイルと同じ（held-out の P0 は層を外した版）
-    n="$(basename "$f")"; n="${n#.p0.}"
-    sed -e "s#{profile_dir}#$pdir#g" -e "s#copy: static-rules#copy: $pdir/static-rules#" \
+    n="$(basename "$f")"; n="${n#.p0.}"; n="${n#.v02.}"
+    sed -e "s#{profile_dir}#$(dirname "$f")#g" -e "s#copy: static-rules#copy: $pdir/static-rules#" \
         -e '/^inherit_env:/d' -e '/^billing:/d' -e '/^hash_paths:/d' "$f" > "$prof/$n"
     if [ "${SANDBOX:-}" = dry ]; then  # 隔離の通し確認: 模擬 CLI も AHE の bwrap の中で動かす（参照解は見えない）。venv の Python はリンクの道筋が隔離の中で切れるのでシステムの python3
       printf 'executable: ["%s", "%s"]\n' "$(command -v python3)" "$here/tools/fake_claude.py" >> "$prof/$n"
@@ -118,7 +132,8 @@ else
   sp=()
   for f in "${profiles[@]}"; do
     g="$(dirname "$f")/.sbx.$(basename "$f")"
-    { cat "$f"; sandbox_lines "$sbx" "${ro_paths[@]}"; } > "$g"
+    extra_ro=(); case "$(basename "$f")" in .v02.*) extra_ro=("$V02_DIR/scripts" "$V02_DIR/hooks" "$V02_DIR/codex" "$V02_DIR/rules" "$V02_DIR/skills");; esac  # v0.2 の hook・スキルの置き場
+    { cat "$f"; sandbox_lines "$sbx" "${ro_paths[@]}" "${extra_ro[@]}"; } > "$g"
     sp+=("$g")
   done
   profiles=("${sp[@]}")
