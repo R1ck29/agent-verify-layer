@@ -53,7 +53,7 @@ class Gen(unittest.TestCase):
         r = self.gen()
         self.assertEqual(r.returncode, 0, r.stderr)
         v = self.config()["verifyV2"]
-        self.assertNotIn("runner", v)  # 強制モードのまま、ランナーを渡さない = v0.2 は「未検証（対応外ランナー）」
+        self.assertEqual(v["runner"], "unsupported")  # V02-DESIGN §3.2・§4.1: 強制モードのまま「未検証（対応外ランナー）」
         self.assertEqual(v["mode"], "enforce")
         self.assertTrue(json.loads((self.cfg / "generated.json").read_text())["unsupported"])
 
@@ -76,7 +76,16 @@ class Gen(unittest.TestCase):
         for want in ("tests", "pytest.ini", "test_root.py"):
             self.assertIn(want, v["protectedPaths"])
         self.assertNotIn("src", v["protectedPaths"])
-        self.assertNotIn("package.json", v["protectedPaths"])  # 存在しない既定項目は入れない
+        self.assertNotIn("package.json", v["protectedPaths"])
+        self.assertNotIn("setup.cfg", v["protectedPaths"])
+
+    def test_multi_purpose_files_are_not_in_protected_paths(self):
+        for rel in ("package.json", "pyproject.toml", "setup.cfg", "tox.ini", "noxfile.py"):
+            self.put(rel, "{}" if rel.endswith("json") else "")
+        self.put("pytest.ini", "[pytest]\n")
+        self.put("conftest.py")
+        self.gen()
+        self.assertEqual(self.config()["verifyV2"]["protectedPaths"], ["conftest.py", "pytest.ini"])  # テスト専用のパスだけ（多用途は §2.4 の項目単位の保護）
 
     def test_deterministic_and_logged(self):
         self.put("pytest.ini", "[pytest]\n")

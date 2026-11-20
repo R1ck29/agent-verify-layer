@@ -8,10 +8,10 @@
 規則（V02-DESIGN §3.2。追補 B で事前登録する）:
   runner:  pytest の設定がある（pytest.ini／setup.cfg の [tool:pytest]／tox.ini の [pytest]／pyproject.toml の [tool.pytest）→ "pytest"
            なければ package.json の scripts.test が `node --test` → "node"
-           どちらでもない（unittest・jest など）→ 対応外ランナー。--on-unsupported unverified（既定）は runner を渡さず強制モードのまま
-           （v0.2 は「未検証（対応外ランナー）」で終わる = 層の費用として数える。追補 B の (b)）、error は終了コード 3（その fixture を除外する運用 (a) 用）
-  protectedPaths: テスト関連の既定の集合（tests・test・package.json・pytest.ini・tox.ini・setup.cfg・pyproject.toml・conftest.py・noxfile.py）のうち
-           fixture に存在するもの + ルート直下の test_*.py・*_test.py。ソート済み
+           どちらでもない（unittest・jest など）→ "unsupported"（V02-DESIGN §3.2・§4.1）。--on-unsupported unverified（既定）は強制モードのまま
+           （v0.2 は「未検証（対応外ランナー）」で終わる = 層の費用として数える。Opus の (b)）、error は終了コード 3（その fixture を除外する運用 (a) 用）
+  protectedPaths: テスト専用の既定の集合（tests・test・pytest.ini・conftest.py）のうち fixture に存在するもの + ルート直下の test_*.py・*_test.py。
+           ソート済み。多用途ファイル（package.json・pyproject.toml・setup.cfg・tox.ini）は入れない（v0.2 が §2.4 の項目単位で保護）
   includePaths: 付けない
   mode: enforce、adversarial: false（PREREG 追補 A）。トップレベルの mode は observe（v0.1 の hook 用。v0.2 の Stop は verifyV2.mode が決める）
 """
@@ -21,7 +21,8 @@ import re
 import sys
 from pathlib import Path
 
-DEFAULT_PROTECTED = ("tests", "test", "package.json", "pytest.ini", "tox.ini", "setup.cfg", "pyproject.toml", "conftest.py", "noxfile.py")
+# テスト専用のパスだけ（V02-DESIGN §4.1-3）。package.json・pyproject.toml・setup.cfg・tox.ini などの多用途ファイルは v0.2 が項目単位で保護する
+DEFAULT_PROTECTED = ("tests", "test", "pytest.ini", "conftest.py")
 ROOT_TEST = re.compile(r"^(test_[^/]+\.py|[^/]+_test\.py)$")
 NODE_TEST = re.compile(r"\bnode\b[^&|;]*--test\b")
 
@@ -71,8 +72,7 @@ def main(argv=None):
         print(f"gen-v02-config: {reason}", file=sys.stderr)
         return 3
     v2 = {"mode": "enforce", "adversarial": False, "protectedPaths": protected_paths(wd)}
-    if runner:
-        v2["runner"] = runner
+    v2["runner"] = runner or "unsupported"
     config = {"mode": "observe", "verifyV2": v2}
     record = {"runner": runner, "unsupported": runner is None, "reason": reason, "config": config}
     cdir = Path(a.config_dir)
