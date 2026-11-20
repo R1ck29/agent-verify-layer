@@ -24,7 +24,7 @@ Codex gpt-6.2-astra の独立レビュー（VERDICT: CHANGES_REQUESTED。ブロ�
 ## 検証
 
 - `node --test`: 180 件、180 件成功（一時 git リポジトリ、一時 HOME・`CODEX_HOME`、偽の `codex` コマンドだけを使用。本物の `~/.codex`・`~/.claude` には触れません）。
-- CI: ubuntu / macos / windows × Node 18 / 22（最終の結果は `gh pr checks 1`）。
+- CI: ubuntu / macos / windows × Node 18 / 22。**最後に実行された CI（4b371bb）は ubuntu・macOS が全件成功、Windows 2 構成が失敗**（doctor の隔離環境が Windows の `os.devNull` を git の config として読めなかった。57c4949 と c3854af で直した）。**その後の push では、GitHub Actions が課金・支出上限でジョブを開始できず（"recent account payments have failed or your spending limit needs to be increased"）、Windows の修正は CI で未確認**です。上限の解除後に `gh run rerun` で再実行してください。Linux ではローカルで 180/180 成功しています。
 
 ## 未確認（隠さずに書きます）
 
@@ -35,7 +35,7 @@ Codex gpt-6.2-astra の独立レビュー（VERDICT: CHANGES_REQUESTED。ブロ�
 ## テスト計画
 
 - [x] `node --test`（180 件）
-- [ ] CI（最終コミットで 6 構成が緑）
+- [ ] CI（最終コミットで 6 構成が緑。Actions の課金上限の解除待ち）
 - [ ] ログイン済みの端末で `docs/SMOKE.md` の手順、Codex の実機確認（レビュー後）
 
 🤖 Generated with [Claude Code](https://claude.com/claude-code)
