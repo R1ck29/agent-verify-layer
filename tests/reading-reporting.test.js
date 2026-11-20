@@ -162,6 +162,6 @@ t('doctor warns when the project .codex/config.toml turns hooks off, and says wh
   const r = run(process.execPath, [VL, 'doctor', '--json'], { cwd: repo.dir, env: repo.env });
   const d = JSON.parse(r.stdout);
   const all = d.results.map((x) => `${x.level} ${x.msg}`).join('\n');
-  assert.match(all, /warn Codex: .*\.codex\/config\.toml.*hooks/);
+  assert.match(all, /warn Codex: .*\.codex[\\/]config\.toml.*hooks/);
   assert.match(all, /調べた範囲/);
 });
