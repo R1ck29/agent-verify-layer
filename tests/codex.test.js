@@ -9,7 +9,12 @@ const codex = require('../scripts/lib/codex');
 const { commandText, resolveAgent, COMMIT_RE } = require('../scripts/lib/hooks');
 
 const FIX = path.join(__dirname, 'fixtures', 'codex');
-const fixture = (name, repo, patch = {}) => ({ ...JSON.parse(fs.readFileSync(path.join(FIX, name), 'utf8')), cwd: repo.dir, ...patch });
+const fixture = (name, repo, patch = {}) => ({
+  ...JSON.parse(fs.readFileSync(path.join(FIX, name), 'utf8')),
+  cwd: repo.dir,
+  ...(name === 'post-tool-use-git-commit.json' ? { tool_response: { output: repo.commitOutput } } : {}),
+  ...patch,
+});
 
 function t(name, fn) {
   test(name, async () => {

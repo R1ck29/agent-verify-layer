@@ -1,57 +1,69 @@
 'use strict';
-// Reads the text of a shell command to find out WHERE a `git commit` ran, so the hook records the
-// commit that command made and nothing else. Only the command's shape is read; nothing from it is
-// stored. Understands: `&&` `||` `;` `|` `&` newline as separators, quotes, leading VAR=value,
-// `git [-C dir] [-c k=v] [--no-pager ...] commit`, and `cd dir` before it. Anything that changes the
-// repository in a way we cannot follow (--git-dir, --work-tree, GIT_DIR=..., `cd $VAR`) is
-// `unsupported`: not recorded (the report counts such commits as not captured).
-const os = require('node:os');
+// Locates a single recognizable git commit in a simple shell command. Git's output must
+// independently identify the resulting SHA before the hook records it.
 const path = require('node:path');
 
-// Splits into segments of words. Quoted text stays inside its word; separators inside quotes are text.
-function segments(cmd, posix = process.platform !== 'win32') {
+// Split simple commands, retaining the operator that connected each command to its predecessor.
+function segments(cmd, posix) {
   const segs = [];
   let words = [];
   let cur = '';
   let has = false;
+  let op = null;
   const endWord = () => {
     if (has) words.push(cur);
     cur = '';
     has = false;
   };
-  const endSeg = () => {
+  const endSeg = (nextOp) => {
     endWord();
-    if (words.length) segs.push(words);
-    words = [];
+    if (words.length) {
+      segs.push({ words, op });
+      words = [];
+      op = nextOp;
+    }
   };
   const s = String(cmd);
   for (let i = 0; i < s.length; i++) {
     const ch = s[i];
     if (ch === "'") {
       const j = s.indexOf("'", i + 1);
-      const end = j < 0 ? s.length : j;
-      cur += s.slice(i + 1, end);
+      if (j < 0) return null;
+      cur += s.slice(i + 1, j);
       has = true;
-      i = end;
+      i = j;
     } else if (ch === '"') {
       let j = i + 1;
-      while (j < s.length && s[j] !== '"') j += posix && s[j] === '\\' ? 2 : 1;
+      while (j < s.length && s[j] !== '"') {
+        if (/[$`]/.test(s[j]) || (!posix && /[%!^]/.test(s[j]))) return null;
+        j += posix && s[j] === '\\' ? 2 : 1;
+      }
+      if (j >= s.length) return null;
       // POSIX shells unescape \" \\ \$ \` inside double quotes; on Windows a backslash is a path separator.
       cur += posix ? s.slice(i + 1, j).replace(/\\(["\\$`])/g, '$1') : s.slice(i + 1, j);
       has = true;
       i = j;
-    } else if (posix && ch === '\\' && i + 1 < s.length && s[i + 1] !== '\n') {
-      cur += s[++i];
-      has = true;
+    } else if (posix && ch === '\\') {
+      if (++i >= s.length) return null;
+      if (s[i] !== '\n') {
+        cur += s[i];
+        has = true;
+      }
     } else if (ch === '#' && !has) {
       while (i < s.length && s[i] !== '\n') i++; // comment to end of line
-      endSeg();
+      endSeg(';');
     } else if (/\s/.test(ch)) {
-      if (ch === '\n') endSeg();
+      if (ch === '\n') endSeg(';');
       else endWord();
     } else if (ch === '&' || ch === '|' || ch === ';') {
-      if ((ch === '&' || ch === '|') && s[i + 1] === ch) i++;
-      endSeg();
+      if (ch === ';') endSeg(';');
+      else {
+        if (s[i + 1] !== ch) return null; // pipeline or background execution
+        i++;
+        endSeg(ch + ch);
+      }
+    } else if (/[()<>{}$`]/.test(ch) || (!posix && /[%!^]/.test(ch))) {
+      return null; // substitutions, redirection, compound commands or Windows expansions
     } else {
       cur += ch;
       has = true;
@@ -61,36 +73,50 @@ function segments(cmd, posix = process.platform !== 'win32') {
   return segs;
 }
 
-const NO_ARG_GLOBALS = new Set(['--no-pager', '-p', '--paginate', '--no-optional-locks', '--literal-pathspecs', '--no-literal-pathspecs', '--glob-pathspecs', '--noglob-pathspecs', '--icase-pathspecs', '--bare', '--no-replace-objects']);
-const REPO_ENV = /^GIT_(DIR|WORK_TREE|INDEX_FILE|OBJECT_DIRECTORY|COMMON_DIR|NAMESPACE)=/;
+const NO_ARG_GLOBALS = new Set(['--no-pager', '-p', '--paginate', '--no-optional-locks', '--literal-pathspecs', '--no-literal-pathspecs', '--glob-pathspecs', '--noglob-pathspecs', '--icase-pathspecs']);
+const SAFE_CONFIG = /^(?:user\.(?:name|email)|commit\.gpgsign)=/i;
+const SUPPORT_COMMANDS = new Set(['add', 'push', 'status']);
 
 function literalDir(base, p) {
-  if (!p || /[$`*?]/.test(p) || p === '-') return null;
-  const expanded = p === '~' || p.startsWith('~/') ? path.join(os.homedir(), p.slice(1)) : p;
-  if (expanded.startsWith('~')) return null;
-  return path.resolve(base, expanded);
+  if (!p || /[$`*?\[\]]/.test(p) || /^[-~]/.test(p)) return null;
+  return path.resolve(base, p);
 }
 
-// -> { dir } for the last real `git commit` in the command, null when there is none (read-only
-// commands, --dry-run, other sub-commands), or { unsupported: true } when it cannot be placed.
+// Only a single candidate is eligible. Known branch outcomes are respected, and shell
+// constructs that could change the candidate's location or supply ambiguous output are declined.
 function analyzeCommit(command, cwd, posix = process.platform !== 'win32') {
+  const parts = segments(command, posix);
+  if (!parts) return { unsupported: true };
   let dir = path.resolve(cwd);
   let found = null;
-  for (const words of segments(command, posix)) {
+  let previous = null;
+  let moved = false;
+  for (const { words, op } of parts) {
+    if ((op === '&&' && previous === false) || (op === '||' && previous === true)) continue;
+    if ((op === '||' && previous === null) || (moved && op !== '&&')) return { unsupported: true };
     let i = 0;
     while (i < words.length && /^[A-Za-z_][A-Za-z0-9_]*=/.test(words[i])) {
-      if (REPO_ENV.test(words[i])) return { unsupported: true };
+      if (/^(?:GIT_|PATH=|CDPATH=)/i.test(words[i])) return { unsupported: true };
       i++;
     }
     const head = words[i];
-    if (head === undefined) continue;
-    if (head === 'cd' || head === 'pushd') {
-      const next = literalDir(dir, words[i + 1]);
-      if (!next) return { unsupported: true };
-      dir = next;
+    if ((head === 'true' || head === ':' || head === 'false') && i === 0 && words.length === 1 && posix) {
+      if (head === 'false') previous = false;
+      else if (op !== '&&' || previous !== null) previous = true;
       continue;
     }
-    if (!/^(?:.*[\\/])?git(?:\.exe)?$/i.test(head)) continue;
+    if (head === 'cd') {
+      const next = literalDir(dir, words[i + 1]);
+      if (!next || i !== 0 || words.length !== 2 || found || op === '||') return { unsupported: true };
+      dir = next;
+      moved = true;
+      previous = null;
+      continue;
+    }
+    if (!head || !/^(?:.*[\\/])?git(?:\.exe)?$/i.test(head)) {
+      if (parts.length > 1) return { unsupported: true };
+      return null;
+    }
     let gitDir = dir;
     let j = i + 1;
     let unsupported = false;
@@ -100,19 +126,26 @@ function analyzeCommit(command, cwd, posix = process.platform !== 'win32') {
         const next = literalDir(gitDir, words[++j]);
         if (!next) unsupported = true;
         else gitDir = next;
-      } else if (w === '-c' || w === '--exec-path' || w === '--namespace') j++;
-      else if (/^--(git-dir|work-tree|super-prefix|exec-path|namespace)(=|$)/.test(w)) {
-        if (/^--(git-dir|work-tree)/.test(w)) unsupported = true;
+      } else if (w === '-c') {
+        if (!SAFE_CONFIG.test(words[++j] || '')) unsupported = true;
+      } else if (/^--(git-dir|work-tree|super-prefix|exec-path|namespace|config-env|bare|no-replace-objects)(=|$)/.test(w)) {
+        unsupported = true;
         if (!w.includes('=')) j++;
-      } else if (NO_ARG_GLOBALS.has(w) || /^--[a-z-]+=/.test(w) || w.startsWith('--')) continue;
+      } else if (NO_ARG_GLOBALS.has(w)) continue;
       else break;
     }
-    if (words[j] !== 'commit') continue;
+    previous = null;
+    if (unsupported) return { unsupported: true };
+    if (words[j] !== 'commit') {
+      if (parts.length > 1 && !SUPPORT_COMMANDS.has(words[j])) return { unsupported: true };
+      continue;
+    }
     const rest = words.slice(j + 1);
-    if (rest.some((w) => w === '--dry-run' || w === '-h' || w === '--help')) continue;
-    found = unsupported ? { unsupported: true } : { dir: gitDir };
+    if (rest.some((w) => ['--dry-run', '--short', '--porcelain', '--long', '-q', '--quiet', '-h', '--help'].includes(w))) continue;
+    if (found) return { unsupported: true };
+    found = { dir: gitDir };
   }
   return found;
 }
 
-module.exports = { analyzeCommit, segments };
+module.exports = { analyzeCommit };

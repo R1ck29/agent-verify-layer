@@ -79,27 +79,28 @@ t('skipGlobs from config.json are honoured', (repo) => {
   assert.equal(repo.lastCommitRow().result, 'skipped');
 });
 
-t('SKILL.md written after verify started: stale by the working-tree rule, with paths_match showing the committed file was the verified one', (repo) => {
+t('SKILL.md added after verify stays outside the fully verified commit', (repo) => {
   seed(repo);
   repo.write('src/a.js', 'two\n');
   repo.verify();
   repo.write('.claude/skills/verify/SKILL.md', '---\nname: verify\n---\nrecipe\n'); // recorded by /verify itself
   repo.git('add', 'src/a.js');
-  repo.git('commit', '-q', '-m', 'only the verified file');
+  repo.git('commit', '-m', 'only the verified file');
   repo.commitHook();
-  assert.equal(repo.lastCommitRow().result, 'stale'); // the working tree is not the one that was verified (XREVIEW #8)
+  assert.equal(repo.lastCommitRow().result, 'verified');
+  assert.equal(repo.lastCommitRow().worktree_tree_match, false);
   assert.equal(repo.lastCommitRow().paths_match, true);
   assert.equal(repo.lastCommitRow().stale_files, 0);
 });
 
-t('untracked junk changed after verify: stale by the working-tree rule, paths_match true', (repo) => {
+t('verified but uncommitted untracked content makes the commit tree stale', (repo) => {
   seed(repo);
   repo.write('src/a.js', 'two\n');
   repo.write('scratch.tmp', 'junk\n');
   repo.verify();
   repo.write('scratch.tmp', 'other junk\n');
   repo.git('add', 'src/a.js');
-  repo.git('commit', '-q', '-m', 'c');
+  repo.git('commit', '-m', 'c');
   repo.commitHook();
   assert.equal(repo.lastCommitRow().result, 'stale');
   assert.equal(repo.lastCommitRow().paths_match, true);
@@ -133,7 +134,7 @@ t('amend keeps the earlier verified run; "--amend" inside a quoted message is no
   repo.verify();
   repo.commit('c1');
   repo.commitHook();
-  repo.git('commit', '-q', '--amend', '-m', 'reworded');
+  repo.git('commit', '--amend', '-m', 'reworded');
   repo.commitHook('git commit --amend -m reworded');
   assert.equal(repo.lastCommitRow().result, 'verified');
 
@@ -151,7 +152,7 @@ t('merge commit is judged against its first parent', (repo) => {
   repo.git('checkout', '-q', 'main');
   repo.verify();
   repo.git('merge', '--no-ff', '--no-commit', '-q', 'feature');
-  repo.git('commit', '-q', '-m', 'merge'); // `git commit` finishing the merge: reflog "commit (merge)"
+  repo.git('commit', '-m', 'merge'); // `git commit` finishing the merge: reflog "commit (merge)"
   repo.commitHook();
   const row = repo.lastCommitRow();
   assert.equal(row.n_files, 1);
@@ -181,8 +182,8 @@ t('linked worktree: ledger lives under the worktree git dir and hooks work', (re
   fs.writeFileSync(path.join(wt, 'src', 'a.js'), 'wt\n');
   repo.hook(['skill'], { tool_input: { skill: 'verify' } }, { cwd: wt });
   g('add', '-A');
-  g('commit', '-q', '-m', 'wt');
-  const r = repo.hook(['commit'], { tool_input: { command: 'git commit -m wt' } }, { cwd: wt });
+  const stdout = g('commit', '-m', 'wt');
+  const r = repo.hook(['commit'], { tool_input: { command: 'git commit -m wt' }, tool_response: { stdout } }, { cwd: wt });
   assert.equal(r.status, 0);
   const ledgerPath = path.resolve(wt, g('rev-parse', '--git-path', 'claude-verify'), 'ledger.jsonl');
   const rows = fs.readFileSync(ledgerPath, 'utf8').split('\n').filter(Boolean).map((l) => JSON.parse(l));
@@ -296,7 +297,7 @@ t('same-size edit in the same second as the index write is seen (racy-git regres
   fs.utimesSync(path.join(repo.dir, '.git', 'index'), past, past); // entry mtime == index mtime: racy
   repo.verify();
   repo.git('add', 'src/a.js');
-  repo.git('commit', '-q', '-m', 'edit');
+  repo.git('commit', '-m', 'edit');
   repo.commitHook();
   assert.equal(repo.lastCommitRow().result, 'verified');
   // the recorded tree really contains the edited content

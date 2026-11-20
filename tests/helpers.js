@@ -59,6 +59,7 @@ class Repo {
   git(...args) {
     const r = run('git', args, { cwd: this.dir, env: this.env });
     if (r.status !== 0) throw new Error(`git ${args.join(' ')} failed: ${r.stderr}`);
+    if (args[0] === 'commit') this.commitOutput = r.stdout;
     return r.stdout.trim();
   }
 
@@ -70,8 +71,9 @@ class Repo {
 
   commit(msg = 'c', env = {}) {
     this.git('add', '-A');
-    const r = run('git', ['commit', '-q', '-m', msg], { cwd: this.dir, env: { ...this.env, ...env } });
+    const r = run('git', ['commit', '-m', msg], { cwd: this.dir, env: { ...this.env, ...env } });
     if (r.status !== 0) throw new Error(`commit failed: ${r.stderr}`);
+    this.commitOutput = r.stdout;
     return this.git('rev-parse', 'HEAD');
   }
 
@@ -102,7 +104,7 @@ class Repo {
   }
 
   commitHook(command = 'git commit -m c', session = this.sessionId) {
-    return this.hook(['commit'], { session_id: session, hook_event_name: 'PostToolUse', tool_name: 'Bash', tool_input: { command }, tool_response: {} });
+    return this.hook(['commit'], { session_id: session, hook_event_name: 'PostToolUse', tool_name: 'Bash', tool_input: { command }, tool_response: { stdout: this.commitOutput } });
   }
 
   ledgerFile() {

@@ -74,13 +74,16 @@ function hasHead(cwd, opts) {
   return git(['rev-parse', '--verify', '-q', 'HEAD^{commit}'], { cwd, ...opts }).ok;
 }
 
-function headInfo(cwd, opts) {
-  const r = git(['rev-list', '--parents', '-n', '1', 'HEAD'], { cwd, ...opts });
+function resolveCommit(cwd, rev, opts) {
+  const r = git(['rev-parse', '--verify', '-q', `${rev}^{commit}`], { cwd, ...opts });
+  return r.ok ? r.out.trim() : null;
+}
+
+function commitInfo(cwd, sha, opts) {
+  const r = git(['rev-list', '--parents', '-n', '1', sha, '--'], { cwd, ...opts });
   if (!r.ok || !r.out.trim()) return null;
-  const [sha, ...parents] = r.out.trim().split(/\s+/);
-  const t = git(['log', '-1', '--format=%ct', 'HEAD'], { cwd, ...opts });
-  const time = t.ok ? Number(t.out.trim()) : NaN;
-  return { sha, parents, time: Number.isFinite(time) ? time : null };
+  const [resolved, ...parents] = r.out.trim().split(/\s+/);
+  return resolved === sha ? { sha, parents } : null;
 }
 
 // The two newest HEAD reflog entries: [{ sha, ts, subject }] (newest first). A commit made by
@@ -96,16 +99,16 @@ function reflog(cwd, opts) {
   return rows.length ? rows : null;
 }
 
-function headTree(cwd, opts) {
-  const r = git(['rev-parse', '--verify', '-q', 'HEAD^{tree}'], { cwd, ...opts });
+function commitTree(cwd, sha, opts) {
+  const r = git(['rev-parse', '--verify', '-q', `${sha}^{tree}`], { cwd, ...opts });
   return r.ok ? r.out.trim() : null;
 }
 
-// Files touched by HEAD (first parent for merges, empty tree for the root commit).
-function commitPaths(cwd, head, opts) {
-  const r = head.parents.length
-    ? git(['diff', '--name-only', '--no-renames', '-z', head.parents[0], 'HEAD'], { cwd, ...opts })
-    : git(['diff-tree', '--root', '--no-commit-id', '--name-only', '-r', '--no-renames', '-z', 'HEAD'], { cwd, ...opts });
+// Files touched by the captured commit (first parent for merges, empty tree for the root).
+function commitPaths(cwd, { sha, parents }, opts) {
+  const r = parents.length
+    ? git(['diff', '--name-only', '--no-renames', '-z', parents[0], sha, '--'], { cwd, ...opts })
+    : git(['diff-tree', '--root', '--no-commit-id', '--name-only', '-r', '--no-renames', '-z', sha, '--'], { cwd, ...opts });
   return r.ok ? splitZ(r.out) : null;
 }
 
@@ -143,9 +146,9 @@ function treeHash(cwd, opts) {
   }
 }
 
-// Set of paths that differ between a tree and HEAD; null when the tree is unreachable.
-function diffTreeToHead(cwd, tree, opts) {
-  const r = git(['diff', '--name-only', '--no-renames', '-z', tree, 'HEAD'], { cwd, ...opts });
+// Set of paths differing between a recorded tree and the captured commit.
+function diffTreeToCommit(cwd, tree, sha, opts) {
+  const r = git(['diff', '--name-only', '--no-renames', '-z', tree, sha, '--'], { cwd, ...opts });
   return r.ok ? new Set(splitZ(r.out)) : null;
 }
 
@@ -157,10 +160,11 @@ module.exports = {
   repoRoot,
   gitPath,
   hasHead,
-  headInfo,
+  resolveCommit,
+  commitInfo,
   commitPaths,
   reflog,
-  headTree,
+  commitTree,
   treeHash,
-  diffTreeToHead,
+  diffTreeToCommit,
 };

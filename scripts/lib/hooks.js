@@ -7,9 +7,10 @@ const checklist = require('./checklist');
 const { matchAny } = require('./glob');
 const { analyzeCommit } = require('./commitcmd');
 const { quoteArg } = require('./shellquote');
+const path = require('node:path');
 
 const RECENT_COMMIT_S = 300;
-const VL_PATH = require('node:path').resolve(__dirname, '..', 'vl.js');
+const VL_PATH = path.resolve(__dirname, '..', 'vl.js');
 const AGENTS = ['claude', 'codex'];
 // Codex hooks have no `if`, so the commit hook sees every shell command: cheap pre-filter.
 const COMMIT_RE = /\bgit\b[\s\S]*\bcommit\b/;
@@ -63,6 +64,7 @@ function recordRun(kind, cwd, { via, agent, session, cfg }) {
   const root = git.repoRoot(cwd, opts);
   if (!root) return null;
 
+  const headSha = git.resolveCommit(root, 'HEAD', opts);
   const tree = git.treeHash(root, opts);
   const changes = checklist.collectChanges(root, opts);
   const selfCheck = checklist.touchesChecks(changes);
@@ -85,6 +87,7 @@ function recordRun(kind, cwd, { via, agent, session, cfg }) {
     via,
     agent,
     tree,
+    ...(headSha ? { head_sha: headSha } : {}),
     session,
     fired: hits.map((h) => h.item.id),
     self_check_change: selfCheck,
@@ -127,69 +130,83 @@ function commandText(input) {
   const ti = input.tool_input && typeof input.tool_input === 'object' ? input.tool_input : {};
   const c = ti.command !== undefined ? ti.command : ti.cmd;
   if (typeof c === 'string') return c;
-  if (Array.isArray(c) && c.every((x) => typeof x === 'string')) return c.join(' ');
+  if (Array.isArray(c) && c.every((x) => typeof x === 'string' && /^[\w./:=+-]+$/.test(x))) return c.join(' ');
   return undefined;
 }
 
-// True when the tool result says the command failed (exit code != 0, is_error, error). A failed
-// `git commit` made no commit: an older unrecorded HEAD must not be attributed to it. Shapes that
-// do not say anything (Claude sends no exit code on success) count as "not failed".
-function commandFailed(input) {
-  let r = input && input.tool_response;
-  if (typeof r === 'string') {
+// Git's summary identifies the commit produced by this tool call. An exit status or a recent
+// reflog entry alone cannot prove that the command ran its commit (or that it made one).
+function reportedCommit(response) {
+  if (typeof response === 'string') {
     try {
-      r = JSON.parse(r);
+      response = JSON.parse(response);
     } catch {
-      return false;
+      // Some tool responses are plain shell output.
     }
   }
-  if (!r || typeof r !== 'object') return false;
-  for (const k of ['exit_code', 'exitCode', 'code', 'status']) if (typeof r[k] === 'number' && r[k] !== 0) return true;
-  return r.is_error === true || r.success === false || r.interrupted === true;
+  let output = str(response);
+  if (response && typeof response === 'object') {
+    for (const k of ['exit_code', 'exitCode', 'code', 'status']) {
+      if (typeof response[k] === 'number' && response[k] !== 0) return null;
+    }
+    if (response.is_error === true || response.success === false || response.interrupted === true || response.error) return null;
+    output = str(response.stdout) || str(response.output);
+  }
+  if (!output || /^(?:Process exited with code|Exit code:)\s+-?[1-9][0-9]*\b/m.test(output)) return null;
+  const summaries = [...output.matchAll(/^\[[^\]\r\n]+ ([a-f0-9]{4,64})\](?=\s|$)/gm)];
+  return summaries.length === 1 ? summaries[0][1] : null;
 }
 
 // A commit entry in the HEAD reflog ("commit: …", "commit (amend): …", "commit (initial): …").
 const COMMIT_REFLOG_RE = /^commit\b/;
 
 // PostToolUse for a `git commit` command: record the commit THAT COMMAND made, and only that.
-// Evidence required: the command text has a real `git commit` (not --dry-run, not a read-only
-// command that merely contains the word), it is placed in a repository (-C / cd), and the HEAD
-// reflog's newest entry is a commit made moments ago whose SHA is not recorded yet. What cannot be
-// shown is left out (the report counts it as not captured); nothing from the command is stored.
+// The tool's Git summary must match a recent commit reflog entry in the command's repository.
+// All further commit reads are pinned to that SHA.
 function handleCommit(input, { agent: agentFlag } = {}) {
   const t0 = now();
   const agent = resolveAgent(agentFlag, input);
   const command = commandText(input);
-  if (typeof command !== 'string' || commandFailed(input)) return null;
+  if (typeof command !== 'string') return null;
   // Claude filters with `if: Bash(git commit *)`; Codex has no `if`: cheap pre-filter for it.
   if (agent === 'codex' && !COMMIT_RE.test(command)) return null;
+  const reported = reportedCommit(input.tool_response);
+  if (!reported) return null;
   const cfg = loadConfig();
   if (cfg.mode === 'off') return null;
-  const found = analyzeCommit(command, str(input.cwd) || process.cwd());
+  const cwd = str(input.cwd) || process.cwd();
+  const workdir = input.tool_input?.workdir;
+  if (workdir !== undefined && !str(workdir)) return null;
+  const found = analyzeCommit(command, workdir ? path.resolve(cwd, workdir) : cwd);
   if (!found || found.unsupported) return null;
   const opts = { timeout: cfg.timeoutMs };
   const root = git.repoRoot(found.dir, opts);
   if (!root) return null;
-  const head = git.headInfo(root, opts);
   const log = git.reflog(root, opts);
-  if (!head || !log || log[0].sha !== head.sha || !COMMIT_REFLOG_RE.test(log[0].subject)) return null;
-  if (log[0].ts === null || t0 - log[0].ts > RECENT_COMMIT_S) return null;
-  const amend = /^commit \(amend\)/.test(log[0].subject);
+  const recent = log?.[0];
+  if (!recent || !COMMIT_REFLOG_RE.test(recent.subject) || !recent.sha.startsWith(reported)) return null;
+  if (recent.ts === null || recent.ts > t0 || t0 - recent.ts > RECENT_COMMIT_S) return null;
+  if (git.resolveCommit(root, reported, opts) !== recent.sha) return null;
+  const head = git.commitInfo(root, recent.sha, opts);
+  if (!head) return null;
+  const amend = /^commit \(amend\)/.test(recent.subject);
   const oldSha = amend && log[1] ? log[1].sha : null; // the commit this one replaced
+  // Reflog time has one-second precision. New runs also identify their base HEAD.
+  const until = Math.min(t0, recent.ts + 1);
 
   // Cheap duplicate check first; the authoritative one is repeated under the lock below.
   if (ledger.readAll(root).some((r) => r.kind === 'commit' && r.sha === head.sha)) return null;
 
   const paths = git.commitPaths(root, head, opts); // null = unreadable (judged "unknown")
   const worktreeTree = git.treeHash(root, opts);
-  const headTree = git.headTree(root, opts);
+  const headTree = git.commitTree(root, head.sha, opts);
   const session = str(input.session_id);
   const selfCheck = !!paths && paths.some((p) => matchAny(checklist.SELF_CHECK_GLOBS, p));
 
   const res = ledger.withLock(root, () => {
     const rows = ledger.readAll(root);
     if (rows.some((r) => r.kind === 'commit' && r.sha === head.sha)) return false;
-    const commitRows = rows.filter((r) => r.kind === 'commit');
+    const commitRows = rows.filter((r) => r.kind === 'commit' && r.ts <= t0);
     // Runs count from the end of the previous commit's window: for an amend that is the window of
     // the commit it replaces (found by SHA, so repeated amends keep their verification); otherwise
     // the parent's row, else the latest row.
@@ -201,16 +218,16 @@ function handleCommit(input, { agent: agentFlag } = {}) {
     else if (amend) cut = byTs(commitRows[commitRows.length - 2]);
     else cut = parent ? parent.ts : byTs(commitRows[commitRows.length - 1]);
     cut = cut === undefined ? null : cut;
-    const run = latestRun(rows, cut);
+    const run = latestRun(rows, cut, until, head.sha);
     const verdict = classify({
       paths,
       run,
       skipGlobs: cfg.skipGlobs,
       worktreeTree,
       headTree,
-      diffNames: (tree) => git.diffTreeToHead(root, tree, opts),
+      diffNames: (tree) => git.diffTreeToCommit(root, tree, head.sha, opts),
     });
-    const sessionRan = (skill) => !!session && rows.some((r) => r.kind === 'run' && r.skill === skill && r.session === session);
+    const sessionRan = (skill) => !!session && rows.some((r) => r.kind === 'run' && r.skill === skill && r.session === session && r.ts < until && r.head_sha !== head.sha);
     return ledger.append(root, {
       kind: 'commit',
       ts: t0,
@@ -222,6 +239,7 @@ function handleCommit(input, { agent: agentFlag } = {}) {
       stale_files: verdict.stale_files,
       ...(verdict.paths_match !== undefined ? { paths_match: verdict.paths_match } : {}),
       ...(verdict.head_tree_match !== undefined ? { head_tree_match: verdict.head_tree_match } : {}),
+      ...(verdict.worktree_tree_match !== undefined ? { worktree_tree_match: verdict.worktree_tree_match } : {}),
       since_run_s: run ? Math.round(t0 - run.ts) : null,
       cut_ts: cut,
       session_verify: sessionRan('verify'),

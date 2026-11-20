@@ -235,7 +235,7 @@ t('the installed command string really runs: a Codex-shaped git commit input wri
     repo.write('a.js', '1\n');
     repo.commit('init');
     const fixture = JSON.parse(fs.readFileSync(path.join(ROOT, 'tests', 'fixtures', 'codex', 'post-tool-use-git-commit.json'), 'utf8'));
-    const r = run(cmd, [], { shell: true, cwd: repo.dir, env: repo.env, input: JSON.stringify({ ...fixture, cwd: repo.dir }) });
+    const r = run(cmd, [], { shell: true, cwd: repo.dir, env: repo.env, input: JSON.stringify({ ...fixture, cwd: repo.dir, tool_response: { output: repo.commitOutput } }) });
     assert.equal(r.status, 0, r.stderr);
     const row = repo.lastCommitRow();
     assert.equal(row && row.agent, 'codex');

@@ -204,9 +204,9 @@ function checkHooksSmoke(add) {
     }
     // commit hook after a real commit
     sh(['add', '-A']);
-    sh(['-c', 'commit.gpgsign=false', 'commit', '-qm', 'second']);
+    const commit = sh(['-c', 'commit.gpgsign=false', 'commit', '-m', 'second']);
     const r = spawnSync(process.execPath, [VL, 'hook', 'commit'], {
-      input: JSON.stringify({ ...base, hook_event_name: 'PostToolUse', tool_name: 'Bash', tool_input: { command: 'git commit -m second' }, tool_response: {} }),
+      input: JSON.stringify({ ...base, hook_event_name: 'PostToolUse', tool_name: 'Bash', tool_input: { command: 'git commit -m second' }, tool_response: { stdout: commit.out } }),
       encoding: 'utf8', env, timeout: 15000, windowsHide: true,
     });
     const ledgerFile = path.join(repo, '.git', 'claude-verify', 'ledger.jsonl');

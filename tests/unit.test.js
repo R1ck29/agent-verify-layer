@@ -69,7 +69,7 @@ test('classify: skipped beats none; none; verified; stale; unreachable tree', ()
   assert.equal(classify({ paths: ['a.js'], run: null, skipGlobs, diffNames: same, ...w }).result, 'none');
   assert.equal(classify({ paths: ['a.js'], run, skipGlobs, diffNames: same, ...w }).result, 'verified');
   const stale = { worktreeTree: 'W', headTree: 'H' };
-  assert.deepEqual(classify({ paths: ['a.js', 'b.js', 'c.js'], run, skipGlobs, diffNames: () => new Set(['a.js', 'c.js', 'zzz.js']), ...stale }), { result: 'stale', stale_files: 2, paths_match: false, head_tree_match: false });
+  assert.deepEqual(classify({ paths: ['a.js', 'b.js', 'c.js'], run, skipGlobs, diffNames: () => new Set(['a.js', 'c.js', 'zzz.js']), ...stale }), { result: 'stale', stale_files: 2, paths_match: false, head_tree_match: false, worktree_tree_match: false });
   const outside = classify({ paths: ['a.js'], run, skipGlobs, diffNames: () => new Set(['other.js']), ...stale });
   assert.deepEqual([outside.result, outside.paths_match], ['stale', true]); // XREVIEW #8: no longer "verified"
   const lost = classify({ paths: ['a.js'], run, skipGlobs, diffNames: () => null, ...stale });
