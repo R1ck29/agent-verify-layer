@@ -7,7 +7,7 @@
 //   node scripts/install.js --agent codex [--check|--apply|--uninstall] [--agents-md] [--repo-skill]
 //     (Codex CLI: $CODEX_HOME/hooks.json; see scripts/lib/install-codex.js)
 // Other options: --settings-file PATH, --project-dir DIR, --node PATH, --force
-// Own hooks are recognised by the vl.js path in their args (see lib/settings.js);
+// Own hooks are recognised by the current or previously installed absolute vl.js path;
 // foreign hooks are never edited, removed or reordered.
 const crypto = require('node:crypto');
 const fs = require('node:fs');
@@ -49,7 +49,7 @@ function buildOwnGroups(nodeCmd) {
 // Returns { settings, removed } without mutating the input. `isOwn` recognises our handlers
 // (Claude exec form by default; the Codex installer passes its own predicate). The predicate also
 // sees the event and group the handler sits in: ownership is by position as well as by shape.
-function removeOwn(settings, isOwn = isOwnHandler) {
+function removeOwn(settings, isOwn) {
   const next = JSON.parse(JSON.stringify(settings));
   let removed = 0;
   if (!next.hooks || typeof next.hooks !== 'object') return { settings: next, removed };
@@ -115,60 +115,125 @@ function timestamp() {
   return `${d.getFullYear()}${p(d.getMonth() + 1)}${p(d.getDate())}${p(d.getHours())}${p(d.getMinutes())}${p(d.getSeconds())}`;
 }
 
-// Writes through symlinks (dotfile managers) and keeps the original file mode. A dangling symlink
-// is refused rather than replaced by a regular file.
-function atomicWrite(file, text) {
-  let target = file;
-  let mode;
+// Resolve existing files and ancestors of new files before checking or changing them.
+function writeTarget(file) {
+  const abs = path.resolve(file);
   try {
-    target = fs.realpathSync(file);
-    mode = fs.statSync(target).mode & 0o777;
-  } catch {
-    let link = false;
-    try {
-      link = fs.lstatSync(file).isSymbolicLink();
-    } catch {
-      /* new file */
-    }
-    if (link) throw new Error(`${file} はリンク先のないシンボリックリンクです。何も書いていません`);
+    return fs.realpathSync(abs);
+  } catch (e) {
+    if (e.code !== 'ENOENT') throw e;
   }
+  try {
+    fs.lstatSync(abs);
+  } catch (e) {
+    const parent = path.dirname(abs);
+    if (e.code !== 'ENOENT' || parent === abs) throw e;
+    return path.join(writeTarget(parent), path.basename(abs));
+  }
+  throw new Error(`${file} はリンク先のないシンボリックリンクです。何も書いていません`);
+}
+
+// The caller can pass the same resolved target it validated before any writes.
+function atomicWrite(file, text, target = writeTarget(file)) {
+  const st = fs.lstatSync(target, { throwIfNoEntry: false });
+  const mode = st && (st.mode & 0o777);
   fs.mkdirSync(path.dirname(target), { recursive: true });
   const tmp = `${target}.vl-tmp-${process.pid}`;
-  fs.writeFileSync(tmp, text, mode !== undefined ? { mode } : undefined);
-  if (mode !== undefined) fs.chmodSync(tmp, mode);
+  fs.writeFileSync(tmp, text, st ? { mode } : undefined);
+  if (st) fs.chmodSync(tmp, mode);
   fs.renameSync(tmp, target);
 }
 
-// A file that lives inside a git work tree (project-scope settings.local.json) must not get a
-// sibling backup: `git add -A` would pick it up together with whatever secrets the file holds.
-function insideWorkTree(file) {
-  let p = path.dirname(path.resolve(file));
-  while (!fs.existsSync(p) && path.dirname(p) !== p) p = path.dirname(p);
-  return git(['rev-parse', '--is-inside-work-tree'], { cwd: p, fullEnv: scrubbedEnv() }).out.trim() === 'true';
+// A path can belong to more than one worktree. Check outward even when the closest Git
+// context is bare, and treat discovery errors other than "not a git repository" as unsafe.
+function* containingWorkTrees(directory) {
+  let cwd = path.resolve(directory);
+  while (!fs.existsSync(cwd) && path.dirname(cwd) !== cwd) cwd = path.dirname(cwd);
+  const fullEnv = scrubbedEnv();
+  const env = { LC_ALL: 'C', GIT_DISCOVERY_ACROSS_FILESYSTEM: '1' };
+  const discoveryError = () => new Error(`${directory} が Git 作業ツリーの内側か確認できません。何も書いていません`);
+  for (;;) {
+    const r = git(['rev-parse', '--is-inside-work-tree'], { cwd, fullEnv, env });
+    if (r.status === 128 && /^fatal: not a git repository\b/m.test(r.err)) return;
+    if (!r.ok) throw discoveryError();
+    let boundary = cwd;
+    if (r.out.trim() === 'true') {
+      const root = repoRoot(cwd, { fullEnv, env });
+      if (!root) throw discoveryError();
+      const rel = path.relative(root, cwd);
+      if (rel === '..' || rel.startsWith(`..${path.sep}`) || path.isAbsolute(rel)) throw discoveryError();
+      yield root;
+      boundary = root;
+    } else if (r.out.trim() !== 'false') {
+      throw discoveryError();
+    }
+    const parent = path.dirname(boundary);
+    if (parent === boundary) return;
+    cwd = parent;
+  }
 }
 
-// Backups sit beside the file, except inside a work tree: then they go to the user-private
-// <config>/backups directory. Never overwrites an earlier backup, even within the same second.
-function backup(file) {
-  if (!fs.existsSync(file)) return null;
+function insideWorkTree(dir) {
+  return !containingWorkTrees(dir).next().done;
+}
+
+function assertOutsideWorkTree(dir) {
+  if (insideWorkTree(dir)) throw new Error(`${dir} は Git 作業ツリーの内側です。作業ツリー外の保存先を指定してください。何も書いていません`);
+}
+
+function privateWriteTarget(file) {
+  const target = writeTarget(file);
+  assertOutsideWorkTree(path.dirname(target));
+  return target;
+}
+
+// A different checkout can replace a path we installed for this settings file and agent.
+// Without registration evidence only this checkout's absolute path is eligible.
+function hookRegistration(agent, settingsTarget) {
+  const key = crypto.createHash('sha256').update(settingsTarget).digest('hex');
+  const file = path.join(configDir(), `hooks-${agent}-${key}.json`);
+  const recorded = readJsonFile(file).data?.script;
+  const previous = typeof recorded === 'string' && path.isAbsolute(recorded) &&
+    !insideWorkTree(path.dirname(writeTarget(file))) ? recorded : null;
+  return { file, previous, paths: new Set(previous ? [VL, previous] : [VL]) };
+}
+
+function planRegistration(registration, action, changed) {
+  const { file, previous } = registration;
+  if (action === 'uninstall') return previous ? () => fs.rmSync(file, { force: true }) : null;
+  if (!changed || previous === VL) return null;
+  const target = privateWriteTarget(file);
+  if (!isWritable(target)) throw new Error(`${target} に書き込めません。何も書いていません`);
+  return () => atomicWrite(file, JSON.stringify({ script: VL }) + '\n', target);
+}
+
+// Validate the real backup destination before any writes. A work-tree settings file must never
+// get a sibling backup, whether the caller used the actual path or a symlink.
+function planBackup(file, target = writeTarget(file)) {
+  if (!fs.existsSync(target)) return () => null;
   let dir = path.dirname(file);
   let name = path.basename(file);
-  if (insideWorkTree(file)) {
+  const local = insideWorkTree(dir) || insideWorkTree(path.dirname(target));
+  if (local) {
     dir = path.join(configDir(), 'backups');
-    fs.mkdirSync(dir, { recursive: true, mode: 0o700 });
     name = `${crypto.createHash('sha1').update(path.resolve(file)).digest('hex').slice(0, 8)}-${name}`;
   }
-  const base = path.join(dir, `${name}.verify-layer-backup-${timestamp()}`);
-  for (let n = 0; n < 1000; n++) {
-    const dest = n === 0 ? base : `${base}-${n}`;
-    try {
-      fs.copyFileSync(file, dest, fs.constants.COPYFILE_EXCL);
-      return dest;
-    } catch (e) {
-      if (e.code !== 'EEXIST') throw e;
+  dir = writeTarget(dir);
+  assertOutsideWorkTree(dir);
+  return () => {
+    if (local) fs.mkdirSync(dir, { recursive: true, mode: 0o700 });
+    const base = path.join(dir, `${name}.verify-layer-backup-${timestamp()}`);
+    for (let n = 0; n < 1000; n++) {
+      const dest = n === 0 ? base : `${base}-${n}`;
+      try {
+        fs.copyFileSync(target, dest, fs.constants.COPYFILE_EXCL);
+        return dest;
+      } catch (e) {
+        if (e.code !== 'EEXIST') throw e;
+      }
     }
-  }
-  throw new Error('バックアップの名前を決められません');
+    throw new Error('バックアップの名前を決められません');
+  };
 }
 
 // Replacing a file takes more than write access to it: the atomic write and the backup create new
@@ -211,15 +276,18 @@ function resolveTargets(opts) {
 
 // settings.local.json holds this machine's absolute paths (and often local permissions or
 // credentials): it may only be written where git will not offer it for commit.
-function localFileProblem(file) {
-  const cwd = path.dirname(path.resolve(file));
-  let dir = cwd;
-  while (!fs.existsSync(dir) && path.dirname(dir) !== dir) dir = path.dirname(dir);
-  const g = (args) => git(args, { cwd: dir, fullEnv: scrubbedEnv() });
-  if (g(['rev-parse', '--is-inside-work-tree']).out.trim() !== 'true') return null;
+function localFileProblem(file, target) {
   const hint = '.gitignore か .git/info/exclude に `.claude/settings.local.json` を足してから再実行してください';
-  if (g(['ls-files', '--error-unmatch', '--', file]).ok) return `${file} は git で追跡されています（コミットに入ります）。追跡から外すか、--scope user を使ってください`;
-  if (!g(['check-ignore', '-q', '--', file]).ok) return `${file} は git の除外（ignore）に入っていません。このファイルはこの端末の絶対パスを含み、コミット候補になります。${hint}`;
+  const fullEnv = scrubbedEnv();
+  for (const p of new Set([file, target])) {
+    for (const cwd of containingWorkTrees(path.dirname(p))) {
+      const g = (args) => git(args, { cwd, fullEnv });
+      const tracked = g(['--literal-pathspecs', 'ls-files', '--error-unmatch', '--', p]);
+      if (tracked.ok) return `${p} は git で追跡されています（コミットに入ります）。追跡から外すか、--scope user を使ってください`;
+      if (tracked.status !== 1) return `${p} の Git 追跡状態を確認できません`;
+      if (!g(['check-ignore', '-q', '--', p]).ok) return `${p} は git の除外（ignore）に入っていません。このファイルはこの端末の絶対パスを含み、コミット候補になります。${hint}`;
+    }
+  }
   return null;
 }
 
@@ -276,14 +344,13 @@ function run(opts) {
     report.error = `${t.settingsFile} を読めません（${read.error}）。何も書いていません。JSON として直してから再実行してください`;
     return { code: 2, report };
   }
-  if (t.scope === 'project') {
-    const problem = localFileProblem(t.settingsFile);
-    if (problem && opts.action === 'apply') {
-      report.error = `${problem}。何も書いていません`;
-      return { code: 2, report };
-    }
-    if (problem) report.notes.push(problem);
+  const target = writeTarget(t.settingsFile);
+  const problem = t.scope === 'project' ? localFileProblem(t.settingsFile, target) : null;
+  if (problem && opts.action === 'apply') {
+    report.error = `${problem}。何も書いていません`;
+    return { code: 2, report };
   }
+  if (problem) report.notes.push(problem);
   const before = read.data || {};
   const nodeCmd = opts.node || 'node';
   const ownGroups = buildOwnGroups(nodeCmd);
@@ -292,7 +359,8 @@ function run(opts) {
     report.error = `${t.settingsFile} の ${shape}。書き換えると中身が失われるため、何も書いていません。直してから再実行してください`;
     return { code: 2, report };
   }
-  const { settings: stripped, removed } = removeOwn(before);
+  const registration = hookRegistration('claude', target);
+  const { settings: stripped, removed } = removeOwn(before, (h, event, group) => isOwnHandler(h, event, group, registration.paths));
   report.installedHandlers = removed;
   report.foreignHandlers = (() => {
     let n = 0;
@@ -302,6 +370,10 @@ function run(opts) {
 
   const after = opts.action === 'uninstall' ? stripped : addOwn(stripped, ownGroups);
   const same = JSON.stringify(after) === JSON.stringify(before);
+  if (problem && opts.action === 'uninstall' && !same) {
+    report.error = `${problem}。何も書いていません`;
+    return { code: 2, report };
+  }
   report.upToDate = same;
   if (opts.action === 'check') {
     report.status = removed === 0 ? 'not-installed' : same ? 'installed' : 'outdated';
@@ -324,30 +396,33 @@ function run(opts) {
     report.changes = removed ? [`自分の hook ${removed} 件を外す`] : [];
   }
 
+  const cfg = opts.action === 'apply' ? readJsonFile(configPath()) : null;
+  const configTarget = cfg && (!cfg.exists || opts.mode) ? privateWriteTarget(configPath()) : null;
+  const writeRegistration = planRegistration(registration, opts.action, !same);
   if (!same) {
     if (!isWritable(t.settingsFile)) {
       report.error = `${t.settingsFile} に書き込めません（読み取り専用）。何も書いていません`;
       return { code: 2, report };
     }
-    const b = backup(t.settingsFile);
+    const b = planBackup(t.settingsFile, target)();
     if (b) report.wrote.push(`バックアップ: ${b}`);
     if (opts.action === 'uninstall' && Object.keys(after).length === 0 && !fs.lstatSync(t.settingsFile).isSymbolicLink()) {
-      fs.unlinkSync(fs.realpathSync(t.settingsFile)); // we emptied it: nothing else lived there
+      fs.unlinkSync(target); // we emptied it: nothing else lived there
       report.wrote.push(`削除: ${t.settingsFile}（空になったため。バックアップあり）`);
     } else {
-      atomicWrite(t.settingsFile, JSON.stringify(after, null, indentOf(read.text)) + '\n');
+      atomicWrite(t.settingsFile, JSON.stringify(after, null, indentOf(read.text)) + '\n', target);
       report.wrote.push(`更新: ${t.settingsFile}`);
     }
   } else {
     report.notes.push('settings は既に目的の状態です（書き込みなし）');
   }
+  if (writeRegistration) writeRegistration();
 
   if (opts.action === 'apply') {
-    const cfg = readJsonFile(configPath());
-    if (!cfg.exists || opts.mode) {
+    if (configTarget) {
       const data = { ...(cfg.data || {}) };
       data.mode = opts.mode || data.mode || 'observe';
-      atomicWrite(configPath(), JSON.stringify(data, null, 2) + '\n');
+      atomicWrite(configPath(), JSON.stringify(data, null, 2) + '\n', configTarget);
       report.wrote.push(`設定: ${configPath()}（mode=${data.mode}）`);
     }
     if (opts.rules) handleRulesApply(t, opts, report);
@@ -424,6 +499,6 @@ function main() {
   }
 }
 
-module.exports = { buildOwnGroups, removeOwn, addOwn, hooksShapeError, run, parseArgs, VL, atomicWrite, backup, isWritable, indentOf, printReport };
+module.exports = { buildOwnGroups, removeOwn, addOwn, hooksShapeError, run, parseArgs, VL, atomicWrite, writeTarget, privateWriteTarget, planBackup, hookRegistration, planRegistration, isWritable, indentOf, printReport };
 
 if (require.main === module) main();

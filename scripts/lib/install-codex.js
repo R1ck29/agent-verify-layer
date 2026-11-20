@@ -57,10 +57,12 @@ function handleAgentsMd(opts, report, t, home) {
   }
   if (!changed) return null;
   if (!t.isWritable(file)) throw new Error(`${file} に書き込めません。何も書いていません`);
+  const target = t.writeTarget(file);
+  const backup = t.planBackup(file, target);
   return () => {
-    const b = t.backup(file);
+    const b = backup();
     if (b) report.wrote.push(`バックアップ: ${b}`);
-    t.atomicWrite(file, text);
+    t.atomicWrite(file, text, target);
     report.wrote.push(`${opts.action === 'uninstall' ? '2 行を外しました' : '2 行を追記しました'}: ${file}`);
   };
 }
@@ -221,7 +223,9 @@ function run(opts) {
     report.error = `${hooksFile} の ${shape}。書き換えると中身が失われるため、何も書いていません。直してから再実行してください`;
     return { code: 2, report };
   }
-  const { settings: stripped, removed } = t.removeOwn(before, codex.isOwnCodexHandler);
+  const target = t.writeTarget(hooksFile);
+  const registration = t.hookRegistration('codex', target);
+  const { settings: stripped, removed } = t.removeOwn(before, (h, event, group) => codex.isOwnCodexHandler(h, event, group, registration.paths));
   const after = opts.action === 'uninstall' ? stripped : t.addOwn(stripped, own);
   const same = JSON.stringify(after) === JSON.stringify(before);
   report.installedHandlers = removed;
@@ -260,25 +264,29 @@ function run(opts) {
     report.error = `${hooksFile} に書き込めません（読み取り専用）。何も書いていません`;
     return { code: 2, report };
   }
+  const backup = same ? null : t.planBackup(hooksFile, target);
+  const configTarget = opts.action === 'apply' && opts.mode ? t.privateWriteTarget(configPath()) : null;
+  const writeRegistration = t.planRegistration(registration, opts.action, !same);
   if (writeAgents) writeAgents();
   if (!same) {
-    const b = t.backup(hooksFile);
+    const b = backup();
     if (b) report.wrote.push(`バックアップ: ${b}`);
     if (opts.action === 'uninstall' && Object.keys(after).length === 0 && !fs.lstatSync(hooksFile).isSymbolicLink()) {
-      fs.unlinkSync(fs.realpathSync(hooksFile));
+      fs.unlinkSync(target);
       report.wrote.push(`削除: ${hooksFile}（空になったため。バックアップあり）`);
     } else {
-      t.atomicWrite(hooksFile, JSON.stringify(after, null, t.indentOf(read.text)) + '\n');
+      t.atomicWrite(hooksFile, JSON.stringify(after, null, t.indentOf(read.text)) + '\n', target);
       report.wrote.push(`更新: ${hooksFile}`);
     }
   } else {
     report.notes.push('hooks.json は既に目的の状態です（書き込みなし）');
   }
+  if (writeRegistration) writeRegistration();
   if (opts.action === 'apply') {
-    if (opts.mode) {
+    if (configTarget) {
       const cfg = readJsonFile(configPath());
       const data = { ...(cfg.data || {}), mode: opts.mode };
-      t.atomicWrite(configPath(), JSON.stringify(data, null, 2) + '\n');
+      t.atomicWrite(configPath(), JSON.stringify(data, null, 2) + '\n', configTarget);
       report.wrote.push(`設定: ${configPath()}（mode=${opts.mode}。Claude と共通）`);
     }
     report.notes.push('Codex を起動して /hooks を開き、verify-layer の hook（PostToolUse ^Bash$）を確認して信頼してください。信頼するまで実行されません。hook の定義が変わると（--apply で入れ直したときを含む）再び確認が要ります');

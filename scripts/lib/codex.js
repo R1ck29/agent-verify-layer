@@ -40,7 +40,8 @@ function ownGroups(nodeCmd, vlPath) {
 // Ours = exactly what ownGroups writes: PostToolUse, matcher ^Bash$, our statusMessage and a
 // command of the form `<node> <path>/vl.js hook commit --agent codex`. A handler that only looks
 // similar (another event, another sub-command, another matcher) belongs to somebody else and is
-// never touched. `event` / `group` are optional only for callers that look at a bare handler.
+// never touched. The installer also supplies the exact registered paths; diagnostics can
+// inspect the shape on its own.
 function commandWords(h) {
   if (!h || typeof h !== 'object' || h.type !== 'command' || typeof h.command !== 'string') return null;
   const w = splitCommand(h.command);
@@ -48,8 +49,9 @@ function commandWords(h) {
   return ok ? w : null;
 }
 
-function isOwnCodexHandler(h, event, group) {
-  if (!commandWords(h) || h.statusMessage !== STATUS_MESSAGE) return false;
+function isOwnCodexHandler(h, event, group, scriptPaths) {
+  const script = ownScriptPath(h);
+  if (!script || h.statusMessage !== STATUS_MESSAGE || (scriptPaths && !scriptPaths.has(script))) return false;
   if (event === undefined) return true;
   return event === 'PostToolUse' && !!group && group.matcher === MATCHER;
 }

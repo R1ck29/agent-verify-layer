@@ -142,14 +142,14 @@ t('--apply is idempotent: the second run changes no byte and makes no backup', (
   assert.equal(c.install(['--json']).json.status, 'installed');
 });
 
-t('an outdated own hook (old path) is replaced, not duplicated', (c) => {
+t('an unregistered old path does not count as an installed Codex hook', (c) => {
   const stale = { matcher: '^Bash$', hooks: [{ type: 'command', command: 'node "/old/place/scripts/vl.js" hook commit --agent codex', timeout: 10, statusMessage: 'verify-layer: recording commit' }] };
   c.putHooks({ hooks: { ...FOREIGN.hooks, PostToolUse: [stale, ...FOREIGN.hooks.PostToolUse] } });
-  assert.equal(c.install(['--json']).json.status, 'outdated');
+  assert.equal(c.install(['--json']).json.status, 'not-installed');
   assert.equal(c.install(['--apply']).status, 0);
   const own = ownHandlers(c.readHooks());
-  assert.equal(own.length, 1);
-  assert.equal(codex.ownScriptPath(own[0].h), VL);
+  assert.equal(own.length, 2);
+  assert.deepEqual(own.map(({ h }) => codex.ownScriptPath(h)), ['/old/place/scripts/vl.js', VL]);
   assert.deepEqual(withoutOwn(c.readHooks()), FOREIGN);
 });
 

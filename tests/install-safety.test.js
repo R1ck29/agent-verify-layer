@@ -151,6 +151,46 @@ t('XREVIEW #4 (Claude): a foreign vl.js hook (other event, other sub-command) su
   assert.deepEqual(JSON.parse(fs.readFileSync(c.settings, 'utf8')), foreign);
 });
 
+for (const agent of ['claude', 'codex']) {
+  t(`XREVIEW #4 (${agent}): a foreign hook with the same matcher, command shape and basename survives apply and uninstall`, (c) => {
+    const other = path.join(c.home, 'other tool', 'scripts', 'vl.js');
+    const group = agent === 'codex' ? codex.ownGroups('node', other)[0].group
+      : { matcher: 'Bash|PowerShell', hooks: [{ type: 'command', command: 'node', args: [other, 'hook', 'commit'] }] };
+    const value = { hooks: { PostToolUse: [group] } };
+    const [file, install] = agent === 'codex' ? [c.hooksFile, c.codexCli] : [c.settings, c.cli];
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    fs.writeFileSync(file, JSON.stringify(value) + '\n');
+    assert.equal(install(['--apply']).status, 0);
+    assert.deepEqual(JSON.parse(fs.readFileSync(file, 'utf8')).hooks.PostToolUse[0], value.hooks.PostToolUse[0]);
+    assert.equal(install(['--uninstall']).status, 0);
+    assert.deepEqual(JSON.parse(fs.readFileSync(file, 'utf8')), value);
+  });
+}
+
+t('XREVIEW #4: both installers replace a path actually registered by a previous checkout', (c) => {
+  const old = path.join(c.home, 'old-install');
+  for (const dir of ['scripts', 'hooks']) fs.cpSync(path.join(ROOT, dir), path.join(old, dir), { recursive: true });
+  const oldInstall = path.join(old, 'scripts', 'install.js');
+  fs.mkdirSync(c.cx, { recursive: true });
+  for (const agent of ['claude', 'codex']) {
+    const args = [oldInstall, '--agent', agent, '--apply'];
+    const r = run(process.execPath, args, { cwd: c.home, env: c.env });
+    assert.equal(r.status, 0, r.stdout + r.stderr);
+  }
+  const oldPath = path.join(old, 'scripts', 'vl.js');
+  const oldScript = JSON.stringify(oldPath).slice(1, -1);
+  fs.rmSync(oldPath);
+  for (const [file, install] of [[c.settings, c.cli], [c.hooksFile, c.codexCli]]) {
+    const read = () => fs.readFileSync(file, 'utf8');
+    assert.ok(read().includes(oldScript));
+    const check = install(['--check', '--json']);
+    assert.equal(JSON.parse(check.stdout).status, 'outdated');
+    assert.equal(install(['--apply']).status, 0);
+    assert.ok(!read().includes(oldScript));
+    assert.ok(read().includes(JSON.stringify(VL).slice(1, -1)));
+  }
+});
+
 // --- #2 project scope ---------------------------------------------------------------------------
 t('XREVIEW #2: project-scope apply with an ignored settings.local.json leaves no backup or secret in the work tree', (c) => {
   const repo = c.repo();
@@ -177,6 +217,113 @@ t('XREVIEW #2: project-scope apply into a repo that does not ignore settings.loc
   assert.equal(fs.existsSync(path.join(repo, '.claude')), false);
   assert.deepEqual(c.untracked(repo), []);
 });
+
+t('XREVIEW #2: project apply refuses a backup directory inside the work tree before copying settings', (c) => {
+  const repo = c.repo();
+  fs.writeFileSync(path.join(repo, '.gitignore'), '.claude/settings.local.json\n');
+  const file = path.join(repo, '.claude', 'settings.local.json');
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  const initial = '{"env":{"NAME":"local-only"}}\n';
+  fs.writeFileSync(file, initial);
+  const unsafeConfig = path.join(repo, 'local-config');
+  const r = run(process.execPath, [INSTALL, '--apply', '--scope', 'project'], {
+    env: { ...c.env, VL_CONFIG_DIR: unsafeConfig }, cwd: repo,
+  });
+  assert.equal(r.status, 2, r.stdout + r.stderr);
+  assert.equal(fs.readFileSync(file, 'utf8'), initial);
+  assert.equal(fs.existsSync(unsafeConfig), false);
+});
+
+t('XREVIEW #2: project apply resolves a backup directory symlink before creating a backup', (c) => {
+  const repo = c.repo();
+  fs.writeFileSync(path.join(repo, '.gitignore'), '.claude/settings.local.json\n');
+  const file = path.join(repo, '.claude', 'settings.local.json');
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  const initial = '{"env":{"NAME":"local-only"}}\n';
+  fs.writeFileSync(file, initial);
+  fs.mkdirSync(c.env.VL_CONFIG_DIR);
+  fs.symlinkSync(repo, path.join(c.env.VL_CONFIG_DIR, 'backups'), 'dir');
+  const r = c.cli(['--apply', '--scope', 'project'], repo);
+  assert.equal(r.status, 2, r.stdout + r.stderr);
+  assert.equal(fs.readFileSync(file, 'utf8'), initial);
+  assert.deepEqual(c.untracked(repo), ['.gitignore']);
+  assert.equal(fs.existsSync(path.join(c.env.VL_CONFIG_DIR, 'config.json')), false);
+}, { skip: !posix });
+
+t('XREVIEW #2: a bare repository cannot hide a backup path inside the enclosing work tree', (c) => {
+  const repo = c.repo();
+  fs.writeFileSync(path.join(repo, '.gitignore'), '.claude/settings.local.json\n');
+  const file = path.join(repo, '.claude', 'settings.local.json');
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  const original = '{"env":{"NAME":"local-only"}}\n';
+  fs.writeFileSync(file, original);
+  const nested = path.join(repo, 'nested-bare');
+  const init = run('git', ['init', '--bare', '-q', nested], { cwd: repo, env: c.env });
+  assert.equal(init.status, 0, init.stderr);
+  fs.mkdirSync(c.env.VL_CONFIG_DIR);
+  fs.symlinkSync(nested, path.join(c.env.VL_CONFIG_DIR, 'backups'), 'dir');
+  const r = c.cli(['--apply', '--scope', 'project'], repo);
+  assert.equal(r.status, 2, r.stdout + r.stderr);
+  assert.equal(fs.readFileSync(file, 'utf8'), original);
+  assert.equal(c.untracked(repo).some((name) => name.includes('verify-layer-backup')), false);
+}, { skip: !posix });
+
+t('XREVIEW #2: an ignored project settings link cannot update a tracked settings file', (c) => {
+  const repo = c.repo();
+  fs.writeFileSync(path.join(repo, '.gitignore'), '.claude/settings.local.json\nactual.json\n');
+  const file = path.join(repo, '.claude', 'settings.local.json');
+  const actual = path.join(repo, 'actual.json');
+  const initial = '{"env":{"NAME":"local-only"}}\n';
+  fs.writeFileSync(actual, initial);
+  assert.equal(run('git', ['add', '-f', '--', actual], { cwd: repo, env: c.env }).status, 0);
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  fs.symlinkSync(actual, file);
+  const r = c.cli(['--apply', '--scope', 'project'], repo);
+  assert.equal(r.status, 2, r.stdout + r.stderr);
+  assert.match(r.stdout + r.stderr, /追跡されています/);
+  assert.equal(fs.readFileSync(actual, 'utf8'), initial);
+  assert.equal(fs.existsSync(c.env.VL_CONFIG_DIR), false);
+}, { skip: !posix });
+
+t('XREVIEW #2: every enclosing work tree must exclude the real project settings file', (c) => {
+  const outer = c.repo();
+  const nested = path.join(outer, 'nested');
+  fs.mkdirSync(nested);
+  fs.writeFileSync(path.join(outer, '.gitignore'), '.claude/settings.local.json\n');
+  const real = path.join(nested, 'actual.json');
+  const original = '{"env":{"NAME":"local-only"}}\n';
+  fs.writeFileSync(real, original);
+  let git = run('git', ['add', 'nested/actual.json'], { cwd: outer, env: c.env });
+  assert.equal(git.status, 0, git.stderr);
+  git = run('git', ['init', '-q'], { cwd: nested, env: c.env });
+  assert.equal(git.status, 0, git.stderr);
+  fs.appendFileSync(path.join(nested, '.git', 'info', 'exclude'), '\nactual.json\n');
+  const link = path.join(outer, '.claude', 'settings.local.json');
+  fs.mkdirSync(path.dirname(link));
+  fs.symlinkSync(real, link);
+  const result = c.cli(['--apply', '--scope', 'project'], outer);
+  assert.equal(result.status, 2, result.stdout + result.stderr);
+  assert.match(result.stdout + result.stderr, /追跡/);
+  assert.equal(fs.readFileSync(real, 'utf8'), original);
+  assert.equal(fs.existsSync(c.env.VL_CONFIG_DIR), false);
+}, { skip: !posix });
+
+t('XREVIEW #2: project uninstall refuses to rewrite a tracked settings target', (c) => {
+  const repo = c.repo();
+  fs.writeFileSync(path.join(repo, '.gitignore'), '.claude/settings.local.json\nactual.json\n');
+  const file = path.join(repo, '.claude', 'settings.local.json');
+  const actual = path.join(repo, 'actual.json');
+  fs.writeFileSync(actual, '{"env":{"NAME":"local-only"}}\n');
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  fs.symlinkSync(actual, file);
+  assert.equal(c.cli(['--apply', '--scope', 'project'], repo).status, 0);
+  assert.equal(run('git', ['add', '-f', '--', actual], { cwd: repo, env: c.env }).status, 0);
+  const before = fs.readFileSync(actual, 'utf8');
+  const r = c.cli(['--uninstall', '--scope', 'project'], repo);
+  assert.equal(r.status, 2, r.stdout + r.stderr);
+  assert.match(r.stdout + r.stderr, /追跡されています/);
+  assert.equal(fs.readFileSync(actual, 'utf8'), before);
+}, { skip: !posix });
 
 // --- #5 repo skill containment ------------------------------------------------------------------
 t('XREVIEW #5: --repo-skill refuses when .agents/skills resolves outside the repository (apply and uninstall write and delete nothing there)', (c) => {

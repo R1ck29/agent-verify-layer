@@ -17,11 +17,13 @@ const SUBCOMMANDS = {
   expand: { event: 'UserPromptExpansion', matcher: '(^|:)(verify|code-review|review)$' },
 };
 
-// `event` / `group` are optional for callers that look at a bare handler (shape and sub-command only).
-function isOwnHandler(h, event, group) {
+// Diagnostics can look for the shape alone. Installers supply the exact registered paths.
+function isOwnHandler(h, event, group, scriptPaths) {
   if (!h || typeof h !== 'object' || h.type !== 'command' || !Array.isArray(h.args)) return false;
-  const i = h.args.findIndex((a) => typeof a === 'string' && path.basename(a.replace(/\\/g, '/')) === 'vl.js');
-  if (i < 0 || h.args[i + 1] !== 'hook' || h.args.length !== i + 3) return false;
+  const i = h.args.length - 3;
+  const script = h.args[i];
+  if (typeof script !== 'string' || h.args[i + 1] !== 'hook') return false;
+  if (scriptPaths ? !scriptPaths.has(script) : path.basename(script.replace(/\\/g, '/')) !== 'vl.js') return false;
   const want = SUBCOMMANDS[h.args[i + 2]];
   if (!want) return false;
   if (event !== undefined && event !== want.event) return false;

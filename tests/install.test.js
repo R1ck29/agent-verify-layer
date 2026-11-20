@@ -157,13 +157,13 @@ t('foreign handlers that merely mention vl.js (shell form, other tools) are neve
   assert.deepEqual(c.read(), foreign);
 });
 
-t('an outdated own hook (old install path) is replaced, not duplicated', (c) => {
+t('an unregistered old path does not count as an installed Claude hook', (c) => {
   c.put({ hooks: { PostToolUse: [{ matcher: 'Skill', hooks: [{ type: 'command', command: 'node', args: ['/old/place/scripts/vl.js', 'hook', 'skill'] }] }] } });
-  assert.match(c.install('--check').stdout, /古い/);
+  assert.match(c.install('--check').stdout, /未導入/);
   c.install('--apply');
   const raw = fs.readFileSync(c.settings, 'utf8');
-  assert.equal(raw.includes('/old/place'), false);
-  assert.equal(ownCount(c.read()), 4);
+  assert.ok(raw.includes('/old/place/scripts/vl.js'));
+  assert.equal(ownCount(c.read()), 5);
 });
 
 t('JSON that cannot be parsed (or is not an object) is refused and left untouched', (c) => {
