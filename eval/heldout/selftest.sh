@@ -4,6 +4,7 @@
 #   2. 見える側のテスト: fixture のまま・参照解を当てたあとで通る（naive のときの結果は参考として出す）
 #   3. fixture が上流の base の写しで、上流の手がかり（URL・修正の SHA）・.git・カナリアを含まない（tools/build_fixtures.py check）
 #   4. 隠しテスト・参照解のすべてのファイルにカナリアがある。fixture・参照解のファイルはすべて git に入っている
+#   4b. 採点の入口: 追加テストファイルを除いた新しいコピーで、隠しテストと元の公開テストをパス明示で動かす（tools/test_grading.py）
 #   5. P0 の手順（tools/strip-layer.sh）で層の部品が消える。fixture は 600 KB 以下
 # 使い方: heldout/selftest.sh [TASK...]   （終了コード 0 = すべて期待どおり）
 set -u
@@ -50,6 +51,9 @@ for task in "${tasks[@]}"; do
     else bad "浅い直しが期待どおりでない: ${r:0:300}"; fi
   fi
 done
+
+echo "== 採点の入口（追加テストを取り除いた新しいコピー・公開テストをパス明示で）"
+"$py" -B "$here/tools/test_grading.py" >/dev/null 2>&1 && ok "追加テスト（同名 basename・import 時の副作用）は結果を変えない／公開テストが落ちれば不合格／seed のない履歴は採点しない" || bad "tools/test_grading.py が落ちる"
 
 echo "== held-out の fixture・参照解"
 "$py" -B "$here/tools/build_fixtures.py" check || bad "fixture が上流の写しと食い違う・上流の手がかりがある"
