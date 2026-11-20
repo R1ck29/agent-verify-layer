@@ -16,6 +16,7 @@
   "pyproject.toml",
   "more_itertools/*",
   "tests/__init__.py",
+  "tests/test_more.py",
   "tests/test_recipes.py"
  ],
  "upstream": [
@@ -29,7 +30,8 @@
  "changed": [
   "README.rst",
   "more_itertools/recipes.py",
-  "pyproject.toml"
+  "pyproject.toml",
+  "tests/test_more.py"
  ],
  "added": [
   ".claude/skills/verify/SKILL.md",
