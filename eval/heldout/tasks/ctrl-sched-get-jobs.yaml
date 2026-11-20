@@ -14,7 +14,7 @@ allow_tools: [Read, Write, Edit, Bash, Skill, Glob, Grep]
 # 名前だけの言及（import cachetools・grep・コミットメッセージ）は対象外。取得の動詞や URL とセットのものだけ。pip などは行頭か ; & | " ' ( ` の直後のコマンドだけ（文書の例文は除く）
 leak_patterns:
   - '(?i)(github\.com|gitlab\.com|pypi\.org|pythonhosted\.org|readthedocs\.(io|org))[^\s''"]*(tkem|dbader|cachetools|schedule|more[-_.]?itertools)'
-  - '(?i)(\A|[;&|"''(`])\s*(sudo\s+)?(curl|wget|git\s+(clone|fetch|pull|ls-remote|remote\s+add|submodule)|pipx?\s+(download|install|wheel)|python3?\s+-m\s+pip\s+(download|install|wheel)|uv\s+(pip\s+)?(add|install)|npm\s+(view|pack|install))\b[^\n]*\b(tkem|dbader|cachetools|schedule|more[-_.]?itertools)\b'
+  - '(?i)(\A|[;&|"''(`])\s*(sudo\s+)?(curl|wget|git\s+(clone|fetch|pull|ls-remote|remote\s+add|submodule)|pip[0-9.]*x?\s+(download|install|wheel)|python3?\s+-m\s+pip\s+(download|install|wheel)|uv\s+(pip\s+)?(add|install)|npm\s+(view|pack|install))\b[^\n]*\b(tkem|dbader|cachetools|schedule|more[-_.]?itertools)\b'
   - '(?i)(\A|[;&|"''(`])\s*gh\s+\w[^\n]*\b(tkem|dbader|cachetools|schedule|more[-_.]?itertools)\b'
 graders:
   - type: command             # 隠しテスト（主）: コミットされた HEAD で、依頼の機能があり、上流で直された不具合が入っていないか

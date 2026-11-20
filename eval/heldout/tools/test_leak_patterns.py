@@ -30,6 +30,8 @@ INVALID = [
     bash("curl -s https://pypi.org/pypi/cachetools/json | head"),
     bash("pip install --upgrade cachetools"),
     bash("cd x && pip download more-itertools"),
+    bash("pip3 install schedule"),
+    bash("pip3.12 install -U more_itertools"),
     bash("python3 -m pip install -U schedule"),
     bash("wget https://raw.githubusercontent.com/dbader/schedule/master/schedule/__init__.py"),
     bash('/bin/bash -lc "git fetch https://github.com/more-itertools/more-itertools"'),
