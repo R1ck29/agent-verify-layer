@@ -113,29 +113,27 @@ function commitPaths(cwd, head, opts) {
 // Works on a copy of the real index so the real index and index.lock are never touched.
 function treeHash(cwd, opts) {
   const idx = gitPath(cwd, 'index', opts);
+  if (!idx) return null;
   const tmp = path.join(os.tmpdir(), `vl-index-${process.pid}-${Date.now()}-${Math.random().toString(36).slice(2)}`);
   try {
-    if (idx) {
-      try {
-        fs.copyFileSync(idx, tmp);
-        // Keep the original index mtime (minus 2 us): git decides "racily clean" entries by
-        // comparing file mtimes with the index mtime. A fresh mtime on the copy would make a
-        // file edited right after the last index write look unchanged and give a stale tree.
-        const st = fs.statSync(idx, { bigint: true });
-        const sec = Number(st.mtimeNs / 1000n) / 1e6 - 0.000002;
-        fs.utimesSync(tmp, sec, sec);
-      } catch {
-        /* no index yet: start from an empty one */
-      }
+    // Only an absent index can start empty. lstat keeps a dangling symlink in the read-error path.
+    if (fs.lstatSync(idx, { throwIfNoEntry: false })) {
+      fs.copyFileSync(idx, tmp);
+      // Preserve the original index mtime (minus 2 us) for Git's "racily clean" check.
+      const st = fs.statSync(idx, { bigint: true });
+      const sec = Number(st.mtimeNs / 1000n) / 1e6 - 0.000002;
+      fs.utimesSync(tmp, sec, sec);
     }
-    const env = { GIT_INDEX_FILE: tmp };
+    const snapshotOpts = { cwd, ...opts, env: { ...opts?.env, GIT_INDEX_FILE: tmp } };
     // Snapshot-only git: no repository hooks (post-index-change). A failed `add -A` (e.g. an
     // untracked repository without commits inside the tree) must not fall through to
     // write-tree, which would succeed and return the tree of the OLD index.
-    const add = git(['-c', `core.hooksPath=${os.devNull}`, 'add', '-A'], { cwd, env, ...opts });
+    const add = git(['-c', `core.hooksPath=${os.devNull}`, 'add', '-A'], snapshotOpts);
     if (!add.ok) return null;
-    const r = git(['write-tree'], { cwd, env, ...opts });
+    const r = git(['write-tree'], snapshotOpts);
     return r.ok ? r.out.trim() : null;
+  } catch {
+    return null;
   } finally {
     try {
       fs.unlinkSync(tmp);

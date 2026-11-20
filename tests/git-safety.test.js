@@ -75,6 +75,46 @@ test('XREVIEW #7: treeHash returns null when git add -A fails (untracked repo wi
   }
 });
 
+test('XREVIEW r2 #7: only a missing index can start an empty snapshot', (context) => {
+  const repo = new Repo();
+  try {
+    repo.write('tracked.js', 'one\n');
+    assert.match(git.treeHash(repo.dir, { fullEnv: repo.env }), /^[a-f0-9]{40}$/);
+    repo.commit('init');
+    repo.write('.gitignore', 'tracked.js\n');
+    const copy = fs.copyFileSync;
+    const fail = (code) => { throw Object.assign(new Error(code), { code }); };
+    context.mock.method(fs, 'copyFileSync', () => fail('EACCES'));
+    const unreadable = git.treeHash(repo.dir, { fullEnv: repo.env });
+    fs.copyFileSync.mock.restore();
+    const stat = fs.statSync;
+    const index = path.join(repo.dir, '.git', 'index');
+    context.mock.method(fs, 'statSync', (file, opts) => file === index ? fail('ENOENT') : stat(file, opts));
+    assert.equal(git.treeHash(repo.dir, { fullEnv: repo.env }), null, 'an index that vanished after copying is unavailable');
+    assert.equal(unreadable, null, 'a read error is not an unborn index');
+    assert.equal(fs.existsSync(index), true);
+  } finally {
+    repo.cleanup();
+  }
+});
+
+test('XREVIEW r2 git env: treeHash snapshots into a temporary copy of the caller index', () => {
+  const repo = new Repo();
+  try {
+    repo.write('a.js', 'one\n');
+    repo.commit('init');
+    const alternate = path.join(repo.home, 'alternate-index');
+    fs.copyFileSync(path.join(repo.dir, '.git', 'index'), alternate);
+    const before = fs.readFileSync(alternate);
+    repo.write('new.js', 'two\n');
+    const tree = git.treeHash(repo.dir, { fullEnv: repo.env, env: { GIT_INDEX_FILE: alternate } });
+    assert.equal(tree, git.treeHash(repo.dir, { fullEnv: repo.env }));
+    assert.deepEqual(fs.readFileSync(alternate), before);
+  } finally {
+    repo.cleanup();
+  }
+});
+
 test('XREVIEW #7: a run whose snapshot failed is not recorded as a verify of some tree; mark says so', () => {
   const repo = new Repo();
   try {
