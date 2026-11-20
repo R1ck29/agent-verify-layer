@@ -146,12 +146,59 @@ t('XREVIEW #12: --days counts commits from before the first ledger row as not re
 test('XREVIEW #12: checklist items shown at mark time (the only route on Codex) are counted per route', () => {
   const rows = [
     { kind: 'run', skill: 'verify', via: 'mark', agent: 'codex', ts: 1, fired: ['a', 'b'] },
-    { kind: 'run', skill: 'verify', via: 'model', agent: 'claude', ts: 2, fired: ['a'], session: 's1' },
-    { kind: 'run', skill: 'verify', via: 'mark', agent: 'claude', ts: 3, fired: ['a'], session: 's1' }, // same item, same session: not counted twice
+    { kind: 'run', skill: 'verify', via: 'model', agent: 'claude', ts: 2, fired: ['a'], session: 's1', tree: 'same-tree' },
+    { kind: 'run', skill: 'verify', via: 'mark', agent: 'claude', ts: 3, fired: ['a'], session: 's1', tree: 'same-tree' },
+    { kind: 'run', skill: 'verify', via: 'mark', agent: 'claude', ts: 4, fired: ['a'], session: 's1', tree: 'other-tree' },
   ];
   const s = summarize(rows, []);
-  assert.deepEqual(s.checklist_fired, { a: 2, b: 1 });
-  assert.deepEqual(s.checklist_fired_by_route, { hook: { a: 1 }, mark: { a: 2, b: 1 } });
+  assert.deepEqual(s.checklist_fired, { a: 3, b: 1 });
+  assert.deepEqual(s.checklist_fired_by_route, { hook: { a: 1 }, mark: { a: 3, b: 1 } });
+});
+
+t('XREVIEW report: unavailable git log is distinct from successfully reading zero commits', (repo) => {
+  repo.write('src/a.js', 'one\n');
+  const date = '2000-01-01T12:00:00Z';
+  repo.commit('old', { GIT_AUTHOR_DATE: date, GIT_COMMITTER_DATE: date });
+  const available = runReport(repo, ['--days', '1']);
+  assert.equal(available.reconcile.git_log_commits, 0);
+  assert.equal(available.reconcile.not_recorded, 0);
+
+  const emptyObjects = path.join(repo.home, 'empty-objects');
+  fs.mkdirSync(emptyObjects);
+  const env = { ...repo.env, GIT_OBJECT_DIRECTORY: emptyObjects };
+  const json = run(process.execPath, [VL, 'report', '--json'], { cwd: repo.dir, env });
+  assert.equal(json.status, 0, json.stderr);
+  assert.deepEqual(JSON.parse(json.stdout).reconcile, {
+    git_log_commits: null, recorded_in_log: null, not_recorded: null,
+    capture_rate_pct: null, recorded_not_in_log: null,
+  });
+  const text = run(process.execPath, [VL, 'report'], { cwd: repo.dir, env });
+  assert.equal(text.status, 0, text.stderr);
+  assert.match(text.stdout, /git log.*取得不能/);
+});
+
+test('XREVIEW #8: report counts working-tree matches independently of verified commits', () => {
+  const rows = [
+    { kind: 'commit', result: 'stale', worktree_tree_match: true },
+    { kind: 'commit', result: 'verified', head_tree_match: true, worktree_tree_match: false },
+    { kind: 'commit', result: 'verified', head_tree_match: true, worktree_tree_match: null },
+  ];
+  const s = summarize(rows, []);
+  assert.equal(s.worktree_tree_match, 1);
+  assert.equal(s.commits.verified, 2);
+});
+
+test('XREVIEW #8: prior verified rows with a known different commit tree count as stale', () => {
+  const rows = [
+    { kind: 'commit', sha: 'a', result: 'verified', basis: 'mark', head_tree_match: false, stale_files: 0, paths_match: true },
+    { kind: 'commit', sha: 'b', result: 'verified', basis: 'mark' },
+  ];
+  const s = summarize(rows, ['a', 'b']);
+  assert.deepEqual(s.commits, { total: 2, verified: 1, stale: 1, none: 0, skipped: 0, unknown: 0 });
+  assert.equal(s.verified_rate_pct, 50);
+  assert.equal(s.verified_by_mark, 1);
+  assert.equal(s.stale_paths_match, 0);
+  assert.deepEqual(s.stale_files, { median: null, max: null });
 });
 
 // --- Codex doctor: project config ---------------------------------------------------------------
