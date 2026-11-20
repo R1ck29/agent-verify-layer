@@ -1,3 +1,4 @@
+# VL-EVAL-CANARY-7f3c1a: 評価の採点・参照解の印。解答のトランスクリプトに出たら、その試行は INVALID（eval/tools/leak_check.py）
 """Pure schema parsing/validation shared by all LLM adapters (spec §5.D/§5.E).
 
 Lifted from ClaudeHaiku{Tagger,Summarizer}._extract so a second adapter

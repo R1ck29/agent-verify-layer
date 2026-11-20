@@ -1,3 +1,4 @@
+# VL-EVAL-CANARY-7f3c1a: 評価の採点・参照解の印。解答のトランスクリプトに出たら、その試行は INVALID（eval/tools/leak_check.py）
 """E1b trap-csv-roundtrip（wikiskill a10000d）: レビューシートの CSV を、Excel で数式として実行させず、かつ書いた内容と読み戻した内容を一致させる。
 
 依頼文は「数式として実行されないように」だけを頼み、読み戻しの一致は頼まない（review-apply がシートを読んで tasks.jsonl に

@@ -131,3 +131,5 @@ See `docs/evaluation.md`.
 
 The identity, filesystem, and sandbox boundary is documented in
 `docs/security.md`.
+
+<!-- VL-EVAL-CANARY-7f3c1a -->

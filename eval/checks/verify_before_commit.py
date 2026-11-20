@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# VL-EVAL-CANARY-7f3c1a: 評価の採点・参照解の印。解答のトランスクリプトに出たら、その試行は INVALID（eval/tools/leak_check.py）
 """参考指標（合否には影響しない: 常に終了コード 0）: Skill(verify) が最後の git commit より前に呼ばれたか。
 
 TRIAL_RECORD（試行レコード JSON）の tool_calls を順に見る。最終行に 1 行で観測値を出す:

@@ -1,3 +1,4 @@
+# VL-EVAL-CANARY-7f3c1a: 評価の採点・参照解の印。解答のトランスクリプトに出たら、その試行は INVALID（eval/tools/leak_check.py）
 """E1b trap-text-of（llm-news a10000e）: SDK のメッセージ列（assistant の text と最後の result）から回答を取り出すとき、同じ文章を二重にしない。"""
 import json
 import os

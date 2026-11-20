@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# VL-EVAL-CANARY-7f3c1a: 評価の採点・参照解の印。解答のトランスクリプトに出たら、その試行は INVALID（eval/tools/leak_check.py）
 """E1b の隠しテスト。コミットされた HEAD で、チケットの各作業が動くか・元の不具合が再発していないかを決定的に判定する。
 
 使い方（AHE の command グレーダーから。作業ディレクトリ = 試行の作業ツリー）:
@@ -49,6 +50,11 @@ def run(task, head):
 
 
 def main(argv):
+    with hidden.grading_tmp():
+        return _main(argv)
+
+
+def _main(argv):
     if not argv or argv[0] not in TASKS:
         print(f"使い方: hidden_e1b.py {{{'|'.join(TASKS)}}} [--workdir DIR]")
         return 2
@@ -56,13 +62,15 @@ def main(argv):
     workdir = os.environ.get("TRIAL_WORKDIR", os.getcwd())
     if "--workdir" in argv:
         workdir = argv[argv.index("--workdir") + 1]
-    try:
-        head = tempfile.mkdtemp(prefix="hidden-head-")
-        hidden.export_head(workdir, head)
-    except hidden.Fail as e:
-        print(f"FAIL {task}: {e}")
-        return 1
-    passed, failed = run(task, head)
+    # 取り出し先は採点のあいだだけ置き、必ず消す（以前は /tmp/hidden-head-* が残り、隠しテストを当てた木が後の試行から読めた）。
+    # 置き場所は hidden.grading_tmp() の中（VL_GRADE_TMP で変更可）。解答側は bwrap で /tmp を別にしてあるので、ここは見えない
+    with tempfile.TemporaryDirectory(prefix="hidden-head-") as head:
+        try:
+            hidden.export_head(workdir, head)
+        except hidden.Fail as e:
+            print(f"FAIL {task}: {e}")
+            return 1
+        passed, failed = run(task, head)
     if failed:
         print(f"FAIL {task}: " + " | ".join(f"{k}: {v}" for k, v in failed))
         return 1

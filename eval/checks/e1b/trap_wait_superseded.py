@@ -1,3 +1,4 @@
+# VL-EVAL-CANARY-7f3c1a: 評価の採点・参照解の印。解答のトランスクリプトに出たら、その試行は INVALID（eval/tools/leak_check.py）
 """E1b 罠: ブロック中のノードの next_action が、もう動かない（置き換え済みの）依存先を待ち先に挙げる（sample-harness a100009）。
 
 fixture の `_next_action` は元のリポジトリの fix 前のまま（`!= "verified"` の手書きの比較）。依頼は、同じ情報を構造化した欄
