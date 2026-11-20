@@ -1,0 +1,39 @@
+{
+ "fixture": "moreit-cb75bb9",
+ "repo": "more-itertools",
+ "url": "https://github.com/more-itertools/more-itertools",
+ "license": "MIT（LICENSE をそのまま残す）",
+ "base": "cb75bb9c55f7ed3e77ce599097e1ba8da411746d",
+ "fix": "d992be0de9383ddcaae3a24866a2d96b52132b07",
+ "fix_subject": "Fix stability in running_min and running_max",
+ "tasks": [
+  "trap-running-minmax-ties",
+  "ctrl-moreit-running-range"
+ ],
+ "keep": [
+  "LICENSE",
+  "README.rst",
+  "pyproject.toml",
+  "more_itertools/*",
+  "tests/__init__.py",
+  "tests/test_recipes.py"
+ ],
+ "upstream": [
+  "github\\.com/more-itertools",
+  "github\\.com/erikrose",
+  "more-itertools\\.readthedocs\\.io",
+  "readthedocs\\.org/projects/more-itertools",
+  "pypi\\.org/project/more-itertools"
+ ],
+ "replace": {},
+ "changed": [
+  "README.rst",
+  "more_itertools/recipes.py",
+  "pyproject.toml"
+ ],
+ "added": [
+  ".claude/skills/verify/SKILL.md",
+  ".agents/skills/verify/SKILL.md",
+  ".claude/verification/checklist.json"
+ ]
+}

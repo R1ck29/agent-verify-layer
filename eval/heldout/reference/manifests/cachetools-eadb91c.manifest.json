@@ -1,0 +1,40 @@
+{
+ "fixture": "cachetools-eadb91c",
+ "repo": "cachetools",
+ "url": "https://github.com/tkem/cachetools",
+ "license": "MIT（LICENSE をそのまま残す）",
+ "base": "eadb91cc9d54a57d6738386bc5c575ff3c7d22ec",
+ "fix": "bcf9e8176ebe16da58751fce971c98ffe045ede1",
+ "fix_subject": "Fix #423: Detect an empty RRCache before calling choice.",
+ "tasks": [
+  "trap-rr-empty-choice"
+ ],
+ "keep": [
+  "LICENSE",
+  "README.rst",
+  "pyproject.toml",
+  "docs/index.rst",
+  "src/*",
+  "tests/*"
+ ],
+ "upstream": [
+  "github\\.com/tkem",
+  "codecov\\.io/gh/tkem",
+  "cachetools\\.readthedocs\\.io",
+  "readthedocs\\.org/projects/cachetools",
+  "pypi\\.org/project/cachetools",
+  "pypi\\.python\\.org/pypi/cachetools",
+  "img\\.shields\\.io/\\S*cachetools"
+ ],
+ "replace": {},
+ "changed": [
+  "README.rst",
+  "pyproject.toml",
+  "tests/test_cachedmethod.py"
+ ],
+ "added": [
+  ".claude/skills/verify/SKILL.md",
+  ".agents/skills/verify/SKILL.md",
+  ".claude/verification/checklist.json"
+ ]
+}

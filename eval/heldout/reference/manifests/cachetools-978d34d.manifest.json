@@ -1,0 +1,40 @@
+{
+ "fixture": "cachetools-978d34d",
+ "repo": "cachetools",
+ "url": "https://github.com/tkem/cachetools",
+ "license": "MIT（LICENSE をそのまま残す）",
+ "base": "978d34d40cdbf3b4cbfce104f3166032cc4ea028",
+ "fix": "c0fdf6abab38040947d6fe2e38c507401d5e2350",
+ "fix_subject": "Fix TLRUCache silently keeping stale value on expired overwrite",
+ "tasks": [
+  "trap-tlru-expired-set"
+ ],
+ "keep": [
+  "LICENSE",
+  "README.rst",
+  "pyproject.toml",
+  "docs/index.rst",
+  "src/*",
+  "tests/*"
+ ],
+ "upstream": [
+  "github\\.com/tkem",
+  "codecov\\.io/gh/tkem",
+  "cachetools\\.readthedocs\\.io",
+  "readthedocs\\.org/projects/cachetools",
+  "pypi\\.org/project/cachetools",
+  "pypi\\.python\\.org/pypi/cachetools",
+  "img\\.shields\\.io/\\S*cachetools"
+ ],
+ "replace": {},
+ "changed": [
+  "README.rst",
+  "pyproject.toml",
+  "tests/test_cachedmethod.py"
+ ],
+ "added": [
+  ".claude/skills/verify/SKILL.md",
+  ".agents/skills/verify/SKILL.md",
+  ".claude/verification/checklist.json"
+ ]
+}

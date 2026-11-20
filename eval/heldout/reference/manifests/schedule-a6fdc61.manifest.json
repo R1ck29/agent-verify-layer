@@ -1,0 +1,50 @@
+{
+ "fixture": "schedule-a6fdc61",
+ "repo": "schedule",
+ "url": "https://github.com/dbader/schedule",
+ "license": "MIT（LICENSE.txt をそのまま残す）",
+ "base": "a6fdc61af08da7553ed0d8239444a7976dd39a92",
+ "fix": "f19998bcfc4f3bb593af8a82b6d93385c57b6eec",
+ "fix_subject": "Bugfix: tuesday.at('HH:MM:SS') where HMS=now+10s doesn't run today #331 (#337)",
+ "tasks": [
+  "trap-weekday-at-today",
+  "ctrl-sched-get-jobs"
+ ],
+ "keep": [
+  "LICENSE.txt",
+  "README.rst",
+  "setup.py",
+  "schedule/*",
+  "test_schedule.py"
+ ],
+ "upstream": [
+  "github\\.com/dbader",
+  "schedule\\.readthedocs\\.io",
+  "pypi\\.python\\.org/pypi/schedule",
+  "pypi\\.org/project/schedule",
+  "travis-ci\\.org/dbader",
+  "coveralls\\.io/\\S*dbader",
+  "twitter\\.com/dbader\\w*",
+  "dbader\\.org/?(?![\\w@])",
+  "img\\.shields\\.io/pypi/v/schedule"
+ ],
+ "replace": {
+  "test_schedule.py": [
+   [
+    "^import mock$",
+    "from unittest import mock"
+   ]
+  ]
+ },
+ "changed": [
+  "README.rst",
+  "schedule/__init__.py",
+  "setup.py",
+  "test_schedule.py"
+ ],
+ "added": [
+  ".claude/skills/verify/SKILL.md",
+  ".agents/skills/verify/SKILL.md",
+  ".claude/verification/checklist.json"
+ ]
+}

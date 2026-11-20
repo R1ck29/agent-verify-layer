@@ -1,0 +1,41 @@
+{
+ "fixture": "cachetools-5af4208",
+ "repo": "cachetools",
+ "url": "https://github.com/tkem/cachetools",
+ "license": "MIT（LICENSE をそのまま残す）",
+ "base": "5af4208d6c182176b7d620ec04632664ec6e30a2",
+ "fix": "e142483178d6bfe522b54ec4b1ed59c7c48adf68",
+ "fix_subject": "Fix #482: Fix modifying TTLCache and TLRUCache while iterating over them.",
+ "tasks": [
+  "trap-cache-iter-update"
+ ],
+ "keep": [
+  "LICENSE",
+  "README.rst",
+  "pyproject.toml",
+  "docs/index.rst",
+  "src/*",
+  "tests/*"
+ ],
+ "upstream": [
+  "github\\.com/tkem",
+  "codecov\\.io/gh/tkem",
+  "cachetools\\.readthedocs\\.io",
+  "readthedocs\\.org/projects/cachetools",
+  "pypi\\.org/project/cachetools",
+  "pypi\\.python\\.org/pypi/cachetools",
+  "img\\.shields\\.io/\\S*cachetools"
+ ],
+ "replace": {},
+ "changed": [
+  "README.rst",
+  "pyproject.toml",
+  "tests/test_cached.py",
+  "tests/test_cachedmethod.py"
+ ],
+ "added": [
+  ".claude/skills/verify/SKILL.md",
+  ".agents/skills/verify/SKILL.md",
+  ".claude/verification/checklist.json"
+ ]
+}
