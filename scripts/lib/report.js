@@ -15,9 +15,9 @@ const pct = (n, d) => (d ? Math.round((1000 * n) / d) / 10 : null);
 function summarize(rows, logShas) {
   const commits = rows.filter((r) => r.kind === 'commit');
   const runs = rows.filter((r) => r.kind === 'run');
-  const results = { verified: 0, stale: 0, none: 0, skipped: 0 };
+  const results = { verified: 0, stale: 0, none: 0, skipped: 0, unknown: 0 };
   for (const c of commits) if (c.result in results) results[c.result]++;
-  const judged = results.verified + results.stale + results.none; // skipped is outside the instruction
+  const judged = results.verified + results.stale + results.none; // skipped (outside the instruction) and unknown (git could not tell) stay out of the denominator
   // mark rows (`via: "mark"`) record when the checks passed; they are not extra verify starts.
   const allVerify = runs.filter((r) => r.skill === 'verify');
   const verifyRuns = allVerify.filter((r) => r.via !== 'mark');
@@ -29,9 +29,24 @@ function summarize(rows, logShas) {
   }
 
   const staleSizes = commits.filter((c) => c.result === 'stale' && Number.isFinite(c.stale_files)).map((c) => c.stale_files);
+  // Items shown to the agent, counted per route. The verify hook shows them at verify start; `mark`
+  // shows them at check time and is the ONLY route on Codex. A mark that repeats an item the hook
+  // already showed in the same session is a second look at the same item: kept in by_route only.
   const fired = {};
-  // Counted at verify start only, as in v0.1 (a mark on the same change would count it twice).
-  for (const r of verifyRuns) for (const id of r.fired || []) fired[id] = (fired[id] || 0) + 1;
+  const byRoute = { hook: {}, mark: {} };
+  const shownByHook = new Set();
+  const sorted = [...allVerify].sort((a, b) => (a.ts || 0) - (b.ts || 0));
+  for (const r of sorted) {
+    const route = r.via === 'mark' ? 'mark' : 'hook';
+    for (const id of r.fired || []) {
+      byRoute[route][id] = (byRoute[route][id] || 0) + 1;
+      const key = `${r.session}|${id}`;
+      if (route === 'hook') {
+        if (r.session) shownByHook.add(key);
+      } else if (r.session && shownByHook.has(key)) continue;
+      fired[id] = (fired[id] || 0) + 1;
+    }
+  }
   const ms = rows.filter((r) => Number.isFinite(r.ms)).map((r) => r.ms);
 
   const recorded = new Set(commits.map((c) => c.sha));
@@ -42,10 +57,14 @@ function summarize(rows, logShas) {
   return {
     commits: { total: commits.length, ...results },
     commits_by_agent: agents,
+    // Weaker and stricter views of the same commits (XREVIEW #8): verified is the design-source
+    // measurement (working-tree hash); these two are kept apart so neither replaces it.
+    stale_paths_match: commits.filter((c) => c.result === 'stale' && c.paths_match === true).length,
+    verified_head_exact: commits.filter((c) => c.result === 'verified' && c.head_tree_match === true).length,
     verified_by_mark: commits.filter((c) => c.result === 'verified' && c.basis === 'mark').length,
     verified_rate_pct: pct(results.verified, judged),
-    session_verify_rate_pct: pct(commits.filter((c) => c.session_verify && c.result !== 'skipped').length, judged),
-    session_code_review_rate_pct: pct(commits.filter((c) => c.session_code_review && c.result !== 'skipped').length, judged),
+    session_verify_rate_pct: pct(commits.filter((c) => c.session_verify && c.result !== 'skipped' && c.result !== 'unknown').length, judged),
+    session_code_review_rate_pct: pct(commits.filter((c) => c.session_code_review && c.result !== 'skipped' && c.result !== 'unknown').length, judged),
     runs: {
       verify: verifyRuns.length,
       verify_via_model: verifyRuns.filter((r) => r.via === 'model').length,
@@ -56,6 +75,7 @@ function summarize(rows, logShas) {
     stale_files: { median: percentile(staleSizes, 0.5), max: staleSizes.length ? Math.max(...staleSizes) : null },
     self_check_change_commits: commits.filter((c) => c.self_check_change).length,
     checklist_fired: fired,
+    checklist_fired_by_route: byRoute,
     checklist_warnings: rows.reduce((n, r) => n + (Number.isFinite(r.checklist_warnings) ? r.checklist_warnings : 0), 0),
     hook_ms: { p50: percentile(ms, 0.5), p95: percentile(ms, 0.95), max: ms.length ? Math.max(...ms) : null },
     reconcile: {
@@ -74,7 +94,8 @@ function formatText(s, meta) {
   L.push(`期間: ${meta.from ? new Date(meta.from * 1000).toISOString().slice(0, 10) : '-'} 〜 今日（台帳 ${meta.rows} 行）`);
   L.push('');
   const c = s.commits;
-  L.push(`コミット（台帳）: ${c.total} 件 — verified ${c.verified} / stale ${c.stale} / none ${c.none} / skipped ${c.skipped}`);
+  L.push(`コミット（台帳）: ${c.total} 件 — verified ${c.verified} / stale ${c.stale} / none ${c.none} / skipped ${c.skipped}${c.unknown ? ` / unknown ${c.unknown}（git で変更ファイルを取得できなかった）` : ''}`);
+  L.push(`  （参考）verified のうち、コミットの tree 全体が検証した tree と同じもの: ${s.verified_head_exact} 件 / stale のうち、コミットしたファイルは検証時と同一のもの: ${s.stale_paths_match} 件`);
   L.push(`  verified 率（skipped を除く）: ${s.verified_rate_pct ?? '-'}%`);
   L.push(`  同じセッションで verify があった率: ${s.session_verify_rate_pct ?? '-'}% / code-review があった率: ${s.session_code_review_rate_pct ?? '-'}%`);
   L.push(`  stale の大きさ（コミット内の差のあるファイル数）: 中央値 ${s.stale_files.median ?? '-'} / 最大 ${s.stale_files.max ?? '-'}`);
@@ -102,19 +123,24 @@ function run(flags) {
     return 1;
   }
   let rows = ledger.readAll(root);
+  // One start for both sides of the comparison: --days gives the period start; without it the
+  // ledger's first row does. Deriving it from the first ledger row alone hid every commit the
+  // ledger missed before that row (and all commits when the ledger was empty).
+  let from = null;
   if (Number.isFinite(flags.days) && flags.days > 0) {
-    const cut = Date.now() / 1000 - flags.days * 86400;
-    rows = rows.filter((r) => typeof r.ts === 'number' && r.ts >= cut);
+    from = Date.now() / 1000 - flags.days * 86400;
+    rows = rows.filter((r) => typeof r.ts === 'number' && r.ts >= from);
+  } else {
+    from = rows.reduce((m, r) => (typeof r.ts === 'number' && (m === null || r.ts < m) ? r.ts : m), null);
   }
-  const first = rows.reduce((m, r) => (typeof r.ts === 'number' && (m === null || r.ts < m) ? r.ts : m), null);
   let logShas = [];
-  if (first !== null) {
-    const l = git(['log', '--no-merges', `--since=${new Date(first * 1000).toISOString()}`, '--format=%H'], { cwd: root });
-    if (l.ok) logShas = l.out.split('\n').filter(Boolean);
-  }
+  const args = ['log', '--no-merges', '--format=%H'];
+  if (from !== null) args.push(`--since=${new Date(from * 1000).toISOString()}`);
+  const l = git(args, { cwd: root });
+  if (l.ok) logShas = l.out.split('\n').filter(Boolean);
   const summary = summarize(rows, logShas);
-  if (flags.json) process.stdout.write(JSON.stringify({ repo: root, rows: rows.length, from: first, ...summary }, null, 2) + '\n');
-  else process.stdout.write(formatText(summary, { repo: root, rows: rows.length, from: first }) + '\n');
+  if (flags.json) process.stdout.write(JSON.stringify({ repo: root, rows: rows.length, from, ...summary }, null, 2) + '\n');
+  else process.stdout.write(formatText(summary, { repo: root, rows: rows.length, from }) + '\n');
   return 0;
 }
 

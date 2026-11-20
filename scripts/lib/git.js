@@ -10,7 +10,8 @@ function git(args, opts = {}) {
   const r = spawnSync('git', ['-c', 'core.quotepath=off', ...args], {
     cwd: opts.cwd,
     input: opts.input,
-    env: { ...process.env, GIT_OPTIONAL_LOCKS: '0', GIT_TERMINAL_PROMPT: '0', ...(opts.env || {}) },
+    // opts.fullEnv replaces process.env entirely (see isolatedGitEnv); otherwise opts.env is merged.
+    env: { ...(opts.fullEnv || process.env), GIT_OPTIONAL_LOCKS: '0', GIT_TERMINAL_PROMPT: '0', ...(opts.env || {}) },
     encoding: 'utf8',
     maxBuffer: 256 * 1024 * 1024,
     timeout: opts.timeout || DEFAULT_TIMEOUT,
@@ -23,6 +24,36 @@ function git(args, opts = {}) {
     status: r.status,
     error: r.error || null,
   };
+}
+
+// Variables that point git at a repository, object store or config other than the one in cwd.
+const REPO_VARS = /^GIT_(DIR|WORK_TREE|INDEX_FILE|OBJECT_DIRECTORY|ALTERNATE_OBJECT_DIRECTORIES|COMMON_DIR|NAMESPACE|PREFIX|CEILING_DIRECTORIES|DISCOVERY_ACROSS_FILESYSTEM|QUARANTINE_PATH|CONFIG|CONFIG_PARAMETERS|CONFIG_COUNT|CONFIG_KEY_\d+|CONFIG_VALUE_\d+|CONFIG_GLOBAL|CONFIG_SYSTEM|CONFIG_NOSYSTEM|REPLACE_REF_BASE|SHALLOW_FILE|GRAFT_FILE)$/;
+
+// An environment for running git in a throw-away repository that cannot reach the caller's
+// repository, config or hooks (doctor's smoke test). Pass it as { fullEnv } so nothing inherited
+// is mixed back in. `hooksDir` must be an empty directory; pass an empty file as `globalConfig` on
+// Windows (\\.\nul is not a readable config there).
+function isolatedGitEnv(base, hooksDir, globalConfig = os.devNull) {
+  const env = {};
+  for (const [k, v] of Object.entries(base)) if (!REPO_VARS.test(k)) env[k] = v;
+  return {
+    ...env,
+    GIT_CONFIG_NOSYSTEM: '1',
+    GIT_CONFIG_GLOBAL: globalConfig, // an empty file: git on Windows cannot read os.devNull as a config
+    GIT_CONFIG_COUNT: '2',
+    GIT_CONFIG_KEY_0: 'core.hooksPath',
+    GIT_CONFIG_VALUE_0: hooksDir,
+    GIT_CONFIG_KEY_1: 'commit.gpgsign',
+    GIT_CONFIG_VALUE_1: 'false',
+  };
+}
+
+// process.env without the variables that redirect git to another repository, object store or
+// config (for read-only questions about the repository in cwd: is it ignored, where is its root).
+function scrubbedEnv(base = process.env) {
+  const env = {};
+  for (const [k, v] of Object.entries(base)) if (!REPO_VARS.test(k)) env[k] = v;
+  return env;
 }
 
 function splitZ(s) {
@@ -50,6 +81,24 @@ function headInfo(cwd, opts) {
   const t = git(['log', '-1', '--format=%ct', 'HEAD'], { cwd, ...opts });
   const time = t.ok ? Number(t.out.trim()) : NaN;
   return { sha, parents, time: Number.isFinite(time) ? time : null };
+}
+
+// The two newest HEAD reflog entries: [{ sha, ts, subject }] (newest first). A commit made by
+// `git commit` leaves a "commit…" entry; reading commands leave none. null when there is no reflog.
+function reflog(cwd, opts) {
+  const r = git(['reflog', '-2', '--date=unix', '--format=%H%x09%gd%x09%gs', 'HEAD'], { cwd, ...opts });
+  if (!r.ok) return null;
+  const rows = r.out.split('\n').filter(Boolean).map((l) => {
+    const [sha, gd, subject] = l.split('\t');
+    const m = /@\{(\d+)\}/.exec(gd || '');
+    return { sha, ts: m ? Number(m[1]) : null, subject: subject || '' };
+  });
+  return rows.length ? rows : null;
+}
+
+function headTree(cwd, opts) {
+  const r = git(['rev-parse', '--verify', '-q', 'HEAD^{tree}'], { cwd, ...opts });
+  return r.ok ? r.out.trim() : null;
 }
 
 // Files touched by HEAD (first parent for merges, empty tree for the root commit).
@@ -80,7 +129,11 @@ function treeHash(cwd, opts) {
       }
     }
     const env = { GIT_INDEX_FILE: tmp };
-    git(['add', '-A'], { cwd, env, ...opts });
+    // Snapshot-only git: no repository hooks (post-index-change). A failed `add -A` (e.g. an
+    // untracked repository without commits inside the tree) must not fall through to
+    // write-tree, which would succeed and return the tree of the OLD index.
+    const add = git(['-c', `core.hooksPath=${os.devNull}`, 'add', '-A'], { cwd, env, ...opts });
+    if (!add.ok) return null;
     const r = git(['write-tree'], { cwd, env, ...opts });
     return r.ok ? r.out.trim() : null;
   } finally {
@@ -100,12 +153,16 @@ function diffTreeToHead(cwd, tree, opts) {
 
 module.exports = {
   git,
+  isolatedGitEnv,
+  scrubbedEnv,
   splitZ,
   repoRoot,
   gitPath,
   hasHead,
   headInfo,
   commitPaths,
+  reflog,
+  headTree,
   treeHash,
   diffTreeToHead,
 };

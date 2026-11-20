@@ -1,0 +1,3 @@
+.vl-artifacts/
+task-graph*.json
+task-graph*.json.*

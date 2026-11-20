@@ -158,7 +158,7 @@ t('foreign handlers that merely mention vl.js (shell form, other tools) are neve
 });
 
 t('an outdated own hook (old install path) is replaced, not duplicated', (c) => {
-  c.put({ hooks: { PostToolUse: [{ matcher: 'Skill', hooks: [{ type: 'command', command: 'node', args: ['/old/place/scripts/vl.js', 'hook', 'run', 'verify'] }] }] } });
+  c.put({ hooks: { PostToolUse: [{ matcher: 'Skill', hooks: [{ type: 'command', command: 'node', args: ['/old/place/scripts/vl.js', 'hook', 'skill'] }] }] } });
   assert.match(c.install('--check').stdout, /古い/);
   c.install('--apply');
   const raw = fs.readFileSync(c.settings, 'utf8');
@@ -199,6 +199,7 @@ t('--scope project targets .claude/settings.local.json inside the repo and unins
   const repo = path.join(c.home, 'proj');
   fs.mkdirSync(repo);
   assert.equal(run('git', ['init', '-q'], { cwd: repo, env: c.env }).status, 0);
+  fs.writeFileSync(path.join(repo, '.gitignore'), '.claude/settings.local.json\n'); // required: the file must not become a commit candidate
   const file = path.join(repo, '.claude', 'settings.local.json');
   let r = run(process.execPath, [INSTALL, '--apply', '--scope', 'project'], { cwd: repo, env: c.env });
   assert.equal(r.status, 0, r.stderr);

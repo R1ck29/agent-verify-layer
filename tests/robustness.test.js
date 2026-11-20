@@ -101,7 +101,7 @@ t('ledger rows contain only the documented fields', (repo) => {
   const run = repo.ledger().find((r) => r.kind === 'run');
   const commit = repo.ledger().find((r) => r.kind === 'commit');
   const allowedRun = ['v', 'kind', 'ts', 'skill', 'via', 'agent', 'tree', 'session', 'fired', 'self_check_change', 'checklist_warnings', 'ms'];
-  const allowedCommit = ['v', 'kind', 'ts', 'sha', 'mode', 'agent', 'result', 'basis', 'stale_files', 'since_run_s', 'session_verify', 'session_code_review', 'n_files', 'self_check_change', 'session', 'warn', 'ms'];
+  const allowedCommit = ['v', 'kind', 'ts', 'sha', 'mode', 'agent', 'result', 'basis', 'stale_files', 'paths_match', 'head_tree_match', 'cut_ts', 'since_run_s', 'session_verify', 'session_code_review', 'n_files', 'self_check_change', 'session', 'warn', 'ms'];
   for (const k of Object.keys(run)) assert.ok(allowedRun.includes(k), `run.${k}`);
   for (const k of Object.keys(commit)) assert.ok(allowedCommit.includes(k), `commit.${k}`);
   assert.equal(run.v, 1);

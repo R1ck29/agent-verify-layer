@@ -67,7 +67,14 @@ agent-verify-layer（旧名 claude-verify-layer）は、コミットが「verify
 | Claude: Rules | `--rules`（または `rules/verification.md` のコピー） | 検証の規則を 2 行足す（flaky なテストを skip や再実行で済ませない、verify が 3 回続けて失敗したら止めて報告する） | Claude: 記録 |
 | Codex: 記録 | 第 9 節の `--agent codex --apply` | Codex のコミットを記録する | Codex、Node、git、`/hooks` での信頼 |
 | Codex: 指示 | 第 9 節の `--agents-md` | AGENTS.md に 2 行（`$verify` を使う、確認後に mark する） | Codex: 記録 |
-| Codex: リポジトリのスキル | 第 9 節の `--repo-skill`（リポジトリごと） | `.agents/skills/verify/` に verify スキルを置く | 利用者の承認（コミットするかは利用者が決める） |
+| Codex: リポジトリのスキル | 第 9 節の `--repo-skill`（リポジトリごと） | `.agents/skills/verify/` に verify スキルを置く。**これは記録ではなく行動の指示**: スキルの手順は「確認がすべて通っていなければコミットしない」で、記録だけを選ぶ利用者は入れなくてよい | 利用者の承認（コミットするかは利用者が決める）。置き先がリポジトリの外に解決される（シンボリックリンク）ときは何もしない |
+
+### 動作条件とデータの扱い
+
+- Git: `doctor` の smoke は `GIT_CONFIG_COUNT`（2.31 以降）と `GIT_CONFIG_GLOBAL`（2.32 以降）を使います。2.32 以上を勧めます。
+- スナップショット（作業ツリーのハッシュ）は、一時 index への `git add -A` で求めます。リポジトリの Git hook（`post-index-change` など）は動かしません（`core.hooksPath` を空にして実行）。一方、設定済みの clean filter は、正しいハッシュのために動きます。
+- **未追跡で ignore されていないファイルの内容は、このハッシュの計算で通常の Git オブジェクト庫（`.git/objects`）に書かれます**（コミットはされません）。台帳の行を消しても、オブジェクトは `git gc` で未参照として消えるまで残ります。秘密を含む未追跡ファイルは `.gitignore` に入れてください。
+- 台帳に書くのは件数・ハッシュ・ID・時刻だけです（プロンプト、コマンド、ファイル名は書かない）。
 
 ## 4. 導入する（承認後）
 
@@ -102,7 +109,7 @@ node <展開先>/scripts/install.js --apply --rules
 - JSON として読んで書きます（文字列の置換はしません）。読めない JSON なら何も書かずに止まります（コメント付きの JSON も止まります）。
 - 自分の hook は、`vl.js` の絶対パスを持つ exec 形式の handler だけで見分けます。2 回実行しても結果は同じで、パスが古ければ置き換えます。他の hook の削除・並べ替え・書き換えはしません。
 - 書き込む前に `settings.json.verify-layer-backup-<日時>` を作ります。書き込めないファイルや、管理設定が hook を止めているときは、何も書かずに止まります。
-- `--scope project` は、絶対パスが端末ごとに違うため、コミットされない `.claude/settings.local.json` に書きます。対象リポジトリの中で実行してください（外ではカレントディレクトリが対象になります）。
+- `--scope project` は、絶対パスが端末ごとに違うため、コミットされない `.claude/settings.local.json` に書きます。**そのファイルが git の ignore に入っていない（または追跡されている）と、`--apply` は何も書かずに止まります**（`.gitignore` か `.git/info/exclude` に `.claude/settings.local.json` を足してから再実行）。作業ツリーの中のファイルのバックアップは、コミット候補にならないよう `~/.claude/verify-layer/backups/`（利用者だけが読める）に置きます。対象リポジトリの中で実行してください（外ではカレントディレクトリが対象になります）。
 - `node` が Claude Code の PATH にない（nvm など）ときは `--node <node の絶対パス>` を付けます。
 - `--rules` は `rules/verification.md` を `~/.claude/rules/` に置きます（`--scope project` のときは `<repo>/.claude/rules/` で、こちらは git の管理下に入る。コミットするかは利用者が決める）。既存の別内容のファイルは上書きしません。
 - 観察モードの設定 `~/.claude/verify-layer/config.json` を `{"mode":"observe"}` で作ります。
@@ -176,7 +183,7 @@ node <展開先>/scripts/install.js --agent codex --check --agents-md
 node <展開先>/scripts/install.js --agent codex --apply --agents-md
 ```
 
-- `$CODEX_HOME/hooks.json` を JSON として読み、自分の hook（`node "<絶対パス>/vl.js" hook commit --agent codex`、`timeout: 10`）だけを足します。2 回実行しても同じ結果です。読めない JSON なら何も書かずに止まります。書き込む前にバックアップを取ります
+- `$CODEX_HOME/hooks.json` を JSON として読み、自分の hook（`node "<絶対パス>/vl.js" hook commit --agent codex`、`timeout: 10`。パスに `$` やバッククォートがあれば単引用符で包み、シェルが評価しない 1 語にします。Windows でシェルが評価する文字を含むパスは、書き込む前に拒否します）だけを足します。自分のものと見なすのは、PostToolUse の `^Bash$` で、statusMessage とコマンドの形が完全に一致するものだけです（ほかのツールの `vl.js` は残します）。2 回実行しても同じ結果です。読めない JSON なら何も書かずに止まります。書き込む前にバックアップを取ります
 - `--agents-md` は、AGENTS.md（空でない `AGENTS.override.md` があればそちら）の末尾に 2 行を足します。既存の行は変えません
 - `node` が Codex の PATH にないときは `--node <node の絶対パス>` を付けます
 - `--scope project`（`.codex/hooks.json`）は使えません。端末ごとの絶対パスをコミットすることになるためです

@@ -9,10 +9,11 @@
 // Other options: --settings-file PATH, --project-dir DIR, --node PATH, --force
 // Own hooks are recognised by the vl.js path in their args (see lib/settings.js);
 // foreign hooks are never edited, removed or reordered.
+const crypto = require('node:crypto');
 const fs = require('node:fs');
 const path = require('node:path');
 const { claudeDir, configDir, configPath } = require('./lib/config');
-const { repoRoot } = require('./lib/git');
+const { repoRoot, git, scrubbedEnv } = require('./lib/git');
 const { isOwnHandler, readJsonFile, managedSettingsPath } = require('./lib/settings');
 
 const ROOT = path.resolve(__dirname, '..');
@@ -46,7 +47,8 @@ function buildOwnGroups(nodeCmd) {
 }
 
 // Returns { settings, removed } without mutating the input. `isOwn` recognises our handlers
-// (Claude exec form by default; the Codex installer passes its own predicate).
+// (Claude exec form by default; the Codex installer passes its own predicate). The predicate also
+// sees the event and group the handler sits in: ownership is by position as well as by shape.
 function removeOwn(settings, isOwn = isOwnHandler) {
   const next = JSON.parse(JSON.stringify(settings));
   let removed = 0;
@@ -60,7 +62,7 @@ function removeOwn(settings, isOwn = isOwnHandler) {
         kept.push(g);
         continue;
       }
-      const handlers = g.hooks.filter((h) => !isOwn(h));
+      const handlers = g.hooks.filter((h) => !isOwn(h, event, g));
       const gone = g.hooks.length - handlers.length;
       removed += gone;
       if (gone && handlers.length === 0) continue; // the group only existed for us
@@ -137,10 +139,26 @@ function atomicWrite(file, text) {
   fs.renameSync(tmp, target);
 }
 
-// Never overwrites an earlier backup, even within the same second.
+// A file that lives inside a git work tree (project-scope settings.local.json) must not get a
+// sibling backup: `git add -A` would pick it up together with whatever secrets the file holds.
+function insideWorkTree(file) {
+  let p = path.dirname(path.resolve(file));
+  while (!fs.existsSync(p) && path.dirname(p) !== p) p = path.dirname(p);
+  return git(['rev-parse', '--is-inside-work-tree'], { cwd: p, fullEnv: scrubbedEnv() }).out.trim() === 'true';
+}
+
+// Backups sit beside the file, except inside a work tree: then they go to the user-private
+// <config>/backups directory. Never overwrites an earlier backup, even within the same second.
 function backup(file) {
   if (!fs.existsSync(file)) return null;
-  const base = `${file}.verify-layer-backup-${timestamp()}`;
+  let dir = path.dirname(file);
+  let name = path.basename(file);
+  if (insideWorkTree(file)) {
+    dir = path.join(configDir(), 'backups');
+    fs.mkdirSync(dir, { recursive: true, mode: 0o700 });
+    name = `${crypto.createHash('sha1').update(path.resolve(file)).digest('hex').slice(0, 8)}-${name}`;
+  }
+  const base = path.join(dir, `${name}.verify-layer-backup-${timestamp()}`);
   for (let n = 0; n < 1000; n++) {
     const dest = n === 0 ? base : `${base}-${n}`;
     try {
@@ -153,22 +171,34 @@ function backup(file) {
   throw new Error('バックアップの名前を決められません');
 }
 
+// Replacing a file takes more than write access to it: the atomic write and the backup create new
+// files next to it (or next to the real file behind a symlink). Checked for every target before the
+// first write, so a refusal leaves nothing half-installed.
 function isWritable(file) {
-  // A new file needs write access to its nearest existing ancestor directory.
+  const ok = (p) => {
+    try {
+      fs.accessSync(p, fs.constants.W_OK);
+      return true;
+    } catch {
+      return false;
+    }
+  };
+  let real = null;
+  try {
+    real = fs.realpathSync(file);
+  } catch {
+    /* new file (or dangling link): judged by its nearest existing ancestor */
+  }
+  if (real) return ok(real) && ok(path.dirname(real));
   let p = file;
   while (!fs.existsSync(p) && path.dirname(p) !== p) p = path.dirname(p);
-  try {
-    fs.accessSync(p, fs.constants.W_OK);
-    return true;
-  } catch {
-    return false;
-  }
+  return ok(p);
 }
 
 function resolveTargets(opts) {
   const scope = opts.scope || 'user';
   if (!['user', 'project'].includes(scope)) throw new Error(`--scope は user か project です: ${scope}`);
-  const projectDir = path.resolve(opts.projectDir || repoRoot(process.cwd()) || process.cwd());
+  const projectDir = path.resolve(opts.projectDir || repoRoot(process.cwd(), { fullEnv: scrubbedEnv() }) || process.cwd());
   // The hook path is machine-specific, so project scope uses the git-ignored local file.
   const settingsFile = opts.settingsFile
     ? path.resolve(opts.settingsFile)
@@ -177,6 +207,20 @@ function resolveTargets(opts) {
       : path.join(projectDir, '.claude', 'settings.local.json');
   const rulesFile = scope === 'user' ? path.join(claudeDir(), 'rules', 'verification.md') : path.join(projectDir, '.claude', 'rules', 'verification.md');
   return { scope, settingsFile, rulesFile };
+}
+
+// settings.local.json holds this machine's absolute paths (and often local permissions or
+// credentials): it may only be written where git will not offer it for commit.
+function localFileProblem(file) {
+  const cwd = path.dirname(path.resolve(file));
+  let dir = cwd;
+  while (!fs.existsSync(dir) && path.dirname(dir) !== dir) dir = path.dirname(dir);
+  const g = (args) => git(args, { cwd: dir, fullEnv: scrubbedEnv() });
+  if (g(['rev-parse', '--is-inside-work-tree']).out.trim() !== 'true') return null;
+  const hint = '.gitignore か .git/info/exclude に `.claude/settings.local.json` を足してから再実行してください';
+  if (g(['ls-files', '--error-unmatch', '--', file]).ok) return `${file} は git で追跡されています（コミットに入ります）。追跡から外すか、--scope user を使ってください`;
+  if (!g(['check-ignore', '-q', '--', file]).ok) return `${file} は git の除外（ignore）に入っていません。このファイルはこの端末の絶対パスを含み、コミット候補になります。${hint}`;
+  return null;
 }
 
 function managedBlocks() {
@@ -188,22 +232,29 @@ function managedBlocks() {
 
 function parseArgs(argv) {
   const o = { action: 'check' };
+  // Every option that takes a value must have one: a missing value must not silently fall back to
+  // another scope or file (`--uninstall --scope` once meant "user").
+  const val = (flag, i) => {
+    const v = argv[i + 1];
+    if (v === undefined || (v.startsWith('--') && v.length > 2)) throw new Error(`${flag} には値が必要です`);
+    return v;
+  };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     if (a === '--check') o.action = 'check';
     else if (a === '--apply') o.action = 'apply';
     else if (a === '--uninstall') o.action = 'uninstall';
-    else if (a === '--scope') o.scope = argv[++i];
-    else if (a === '--settings-file') o.settingsFile = argv[++i];
-    else if (a === '--project-dir') o.projectDir = argv[++i];
-    else if (a === '--mode') o.mode = argv[++i];
-    else if (a === '--node') o.node = argv[++i];
+    else if (a === '--scope') o.scope = val(a, i++);
+    else if (a === '--settings-file') o.settingsFile = val(a, i++);
+    else if (a === '--project-dir') o.projectDir = val(a, i++);
+    else if (a === '--mode') o.mode = val(a, i++);
+    else if (a === '--node') o.node = val(a, i++);
     else if (a === '--rules') o.rules = true;
     else if (a === '--purge') o.purge = true;
     else if (a === '--force') o.force = true;
     else if (a === '--json') o.json = true;
-    else if (a === '--agent') o.agent = argv[++i];
-    else if (a === '--hooks-file') o.hooksFile = argv[++i];
+    else if (a === '--agent') o.agent = val(a, i++);
+    else if (a === '--hooks-file') o.hooksFile = val(a, i++);
     else if (a === '--agents-md') o.agentsMd = true;
     else if (a === '--repo-skill') o.repoSkill = true;
     else throw new Error(`不明なオプション: ${a}`);
@@ -224,6 +275,14 @@ function run(opts) {
   if (read.error) {
     report.error = `${t.settingsFile} を読めません（${read.error}）。何も書いていません。JSON として直してから再実行してください`;
     return { code: 2, report };
+  }
+  if (t.scope === 'project') {
+    const problem = localFileProblem(t.settingsFile);
+    if (problem && opts.action === 'apply') {
+      report.error = `${problem}。何も書いていません`;
+      return { code: 2, report };
+    }
+    if (problem) report.notes.push(problem);
   }
   const before = read.data || {};
   const nodeCmd = opts.node || 'node';

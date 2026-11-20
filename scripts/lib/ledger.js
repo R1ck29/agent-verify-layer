@@ -28,6 +28,54 @@ function append(cwd, row) {
   }
 }
 
+function sleepMs(ms) {
+  Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
+}
+
+// Runs fn while holding the ledger's lock (an atomically created directory), so "is this SHA
+// already recorded?" and "record it" cannot interleave across hook processes. The wait is bounded
+// and a lock older than staleMs (crashed holder) is taken over: a hook never holds up a commit.
+// Returns { locked: false } when the lock could not be had (the caller records nothing).
+function withLock(cwd, fn, { waitMs, staleMs = 15000 } = {}) {
+  const wait = waitMs !== undefined ? waitMs : Number(process.env.VL_LOCK_WAIT_MS) || 2500;
+  const dir = ledgerDir(cwd);
+  if (!dir) return { locked: false };
+  const lock = path.join(dir, 'ledger.lock');
+  try {
+    fs.mkdirSync(dir, { recursive: true });
+  } catch {
+    return { locked: false };
+  }
+  const t0 = Date.now();
+  for (;;) {
+    try {
+      fs.mkdirSync(lock);
+      break;
+    } catch (e) {
+      if (e.code !== 'EEXIST') return { locked: false };
+      try {
+        if (Date.now() - fs.statSync(lock).mtimeMs > staleMs) {
+          fs.rmdirSync(lock);
+          continue;
+        }
+      } catch {
+        continue; // vanished between the checks: try to take it
+      }
+      if (Date.now() - t0 > wait) return { locked: false };
+      sleepMs(10 + Math.floor(Math.random() * 15));
+    }
+  }
+  try {
+    return { locked: true, value: fn() };
+  } finally {
+    try {
+      fs.rmdirSync(lock);
+    } catch {
+      /* already gone */
+    }
+  }
+}
+
 function readAll(cwd) {
   const file = ledgerFile(cwd);
   let text;
@@ -49,4 +97,4 @@ function readAll(cwd) {
   return rows;
 }
 
-module.exports = { LEDGER_VERSION, ledgerDir, ledgerFile, append, readAll };
+module.exports = { LEDGER_VERSION, ledgerDir, ledgerFile, append, readAll, withLock };

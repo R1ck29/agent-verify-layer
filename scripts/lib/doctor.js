@@ -4,7 +4,7 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 const { spawnSync } = require('node:child_process');
-const { git, repoRoot } = require('./git');
+const { git, repoRoot, isolatedGitEnv } = require('./git');
 const { claudeDir, configPath, loadConfig } = require('./config');
 const { isOwnHandler, readJsonFile, allHandlers, managedSettingsPath } = require('./settings');
 
@@ -73,7 +73,7 @@ function checkWiring(add, files) {
   for (const f of files) {
     if (!f.data) continue;
     for (const { event, group, handler } of allHandlers(f.data)) {
-      if (isOwnHandler(handler)) {
+      if (isOwnHandler(handler, event)) {
         own.push(f.label);
         const hookArgs = Array.isArray(handler.args) ? handler.args : String(handler.command).split(/\s+/);
         seen.add(hookArgs.slice(hookArgs.findIndex((a) => /vl\.js["']?$/.test(a) ) + 1).join(' '));
@@ -157,8 +157,14 @@ function checkHooksSmoke(add) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'vl-doctor-'));
   const cfgDir = path.join(dir, 'cfg');
   fs.mkdirSync(cfgDir);
+  const hooksDir = path.join(dir, 'no-hooks');
+  fs.mkdirSync(hooksDir);
+  const emptyConfig = path.join(dir, 'gitconfig');
+  fs.writeFileSync(emptyConfig, '');
+  // Nothing of the caller's git environment (GIT_DIR, GIT_INDEX_FILE, config, hooks) may reach
+  // the throw-away repo: otherwise `git add`/`commit` below would act on the caller's repository.
   const env = {
-    ...process.env,
+    ...isolatedGitEnv(process.env, hooksDir, emptyConfig),
     VL_CONFIG_DIR: cfgDir,
     GIT_AUTHOR_NAME: 'doctor', GIT_AUTHOR_EMAIL: 'doctor@example.invalid',
     GIT_COMMITTER_NAME: 'doctor', GIT_COMMITTER_EMAIL: 'doctor@example.invalid',
@@ -166,8 +172,8 @@ function checkHooksSmoke(add) {
   const repo = path.join(dir, 'repo');
   try {
     fs.mkdirSync(repo);
-    const sh = (args) => git(args, { cwd: repo, env });
-    sh(['init', '-q']);
+    const sh = (args) => git(args, { cwd: repo, fullEnv: env });
+    if (!sh(['init', '-q', '-b', 'main']).ok) throw new Error('使い捨てリポジトリを作れませんでした（git init が失敗）');
     fs.writeFileSync(path.join(repo, 'a.js'), 'a\n');
     sh(['add', '-A']);
     sh(['-c', 'commit.gpgsign=false', 'commit', '-qm', 'init']);

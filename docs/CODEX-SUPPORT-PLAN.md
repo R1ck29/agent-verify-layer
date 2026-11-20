@@ -120,3 +120,12 @@ WIP（このコミット）: `scripts/lib/install-codex.js`（`install.js --agen
 5. CI に「Codex がない環境で Codex の部分が飛ばされる」手順と concurrency・timeout を足した。PR 本文の追記案は `docs/PR-BODY.md`（`gh pr edit` はしていない）
 
 実機で確かめることは、上の「未確認」と `docs/PR-BODY.md` の「未確認」にある。
+
+### XREVIEW 修正（2026-11-20）
+
+Codex の独立レビュー（`XREVIEW-codex.md`）の指摘 12 件と提案を直した。回答の全文は `docs/REVIEW-NOTES.md` の「Codex レビュー（11/19）への回答」。Codex 対応に関わる点: hook の command のシェル引用（共通の `lib/shellquote.js`）、所有判定の完全一致、`--repo-skill` のリポジトリ外への配置・削除の防止、AGENTS.md と hooks.json の全か無かの書き込み、コミットの帰属（reflog と `git commit` の形）、project の `.codex/config.toml` の確認。実機で確かめることの一覧（上の「未確認」）は変わらない。
+
+### XREVIEW 修正の続き（2026-11-20 09:xx JST）
+
+残り: **CI の再実行だけ**。コードと文書の修正は終わり、ローカルで 180/180、各ノードの独立 reviewer は PASS。GitHub Actions が課金・支出上限でジョブを開始できず（`gh run view` の注記: "recent account payments have failed or your spending limit needs to be increased"）、57c4949・c3854af の Windows 修正（doctor の `GIT_CONFIG_GLOBAL` を空ファイルに、テストのパス区切り）が CI で未確認。手順: (1) Riku が Billing を解除、(2) `gh run rerun $(gh run list --branch feat/v0.1 --limit 1 --json databaseId -q '.[0].databaseId')`、(3) 失敗があれば `gh run view <id> --log` で直し、小さなコミットを push（force-push しない）、(4) 緑になったら PR 本文（docs/PR-BODY.md）の CI の行を更新し `gh pr edit 1 --body-file docs/PR-BODY.md`。PR は draft のまま、マージしない。
+

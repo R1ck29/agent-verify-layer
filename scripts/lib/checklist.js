@@ -110,15 +110,16 @@ function parseAddedLines(diffText) {
 }
 
 // What changed in the working tree relative to HEAD: tracked edits (staged or not)
-// plus untracked files. Returns { names:Set, added:Map, untracked:[...] }.
+// plus untracked files. Returns { names:Set, addedFor(path), untracked:Set }.
+// Added lines are fetched per file, with a literal pathspec, only for files an item with a
+// pattern asks about: a combined `git diff` mixes the path (which may hold spaces or quotes) into
+// a header line that cannot be parsed back reliably (XREVIEW #10).
 function collectChanges(cwd, opts) {
   const names = new Set();
-  let added = new Map();
-  if (hasHead(cwd, opts)) {
+  const tracked = hasHead(cwd, opts);
+  if (tracked) {
     const n = git(['diff', 'HEAD', '--name-only', '--no-renames', '-z'], { cwd, ...opts });
     if (n.ok) splitZ(n.out).forEach((p) => names.add(p));
-    const d = git(['diff', 'HEAD', '--no-color', '--no-ext-diff', '--no-renames', '-U0'], { cwd, ...opts });
-    if (d.ok) added = parseAddedLines(d.out);
   } else {
     const l = git(['ls-files', '-z'], { cwd, ...opts });
     if (l.ok) splitZ(l.out).forEach((p) => names.add(p));
@@ -126,13 +127,31 @@ function collectChanges(cwd, opts) {
   const u = git(['ls-files', '--others', '--exclude-standard', '-z'], { cwd, ...opts });
   const untracked = u.ok ? splitZ(u.out) : [];
   untracked.forEach((p) => names.add(p));
-  return { names, added, untracked: new Set(untracked) };
+  const cache = new Map();
+  const addedFor = (p) => {
+    if (cache.has(p)) return cache.get(p);
+    let lines = [];
+    if (tracked) {
+      const d = git(['diff', 'HEAD', '--no-color', '--no-ext-diff', '--no-renames', '-U0', '--', `:(literal)${p}`], { cwd, ...opts });
+      if (d.ok) {
+        // One file with -U0: the only header line starting with "+++ " is the first one; an added
+        // line whose text starts with "++ " is real content.
+        const all = d.out.split('\n');
+        const start = all.findIndex((l) => l.startsWith('+++ '));
+        lines = all.slice(start + 1).filter((l) => l.startsWith('+')).map((l) => l.slice(1));
+      }
+    }
+    cache.set(p, lines);
+    return lines;
+  };
+  return { names, addedFor, untracked: new Set(untracked) };
 }
 
 function readUntracked(root, rel) {
   try {
     const file = path.join(root, rel);
-    const st = fs.statSync(file);
+    // lstat: a symlink (possibly pointing outside the repository) is never read.
+    const st = fs.lstatSync(file);
     if (!st.isFile() || st.size > MAX_UNTRACKED_BYTES) return null;
     return fs.readFileSync(file, 'utf8');
   } catch {
@@ -157,7 +176,7 @@ function matchItems(items, changes, root) {
           const text = readUntracked(root, p);
           return text !== null && text.split('\n').some((l) => item.re.test(l));
         }
-        return (changes.added.get(p) || []).some((l) => item.re.test(l));
+        return changes.addedFor(p).some((l) => item.re.test(l));
       });
       if (!found) continue;
     }
@@ -169,7 +188,11 @@ function matchItems(items, changes, root) {
 
 // Text handed to Claude as additionalContext. Empty string when there is nothing to say.
 // `when` says where the agent should check the items: inside verify (hook) or before committing (mark).
+// The self-check warning goes first and is never cut: only the item list is shortened to fit.
 function formatContext(hits, selfCheck, when = 'verify の中で') {
+  const warning = selfCheck
+    ? '[verify-layer] 警告: この変更はチェック自体（チェックリスト、CLAUDE.md・AGENTS.md、hooks、設定、verify スキル）を触っています。判定の基準を変える変更なので、利用者に内容を見せて確認を求めてください。'
+    : '';
   const lines = [];
   if (hits.length) {
     lines.push(`[verify-layer] 次の確認項目が今回の変更に当たりました（HEAD 側の .claude/verification/checklist.json 由来）。${when}確認してください。`);
@@ -181,11 +204,10 @@ function formatContext(hits, selfCheck, when = 'verify の中で') {
       lines.push(parts.join('\n'));
     }
   }
-  if (selfCheck) {
-    lines.push('[verify-layer] 警告: この変更はチェック自体（チェックリスト、CLAUDE.md・AGENTS.md、hooks、設定、verify スキル）を触っています。判定の基準を変える変更なので、利用者に内容を見せて確認を求めてください。');
-  }
-  const text = lines.join('\n');
-  return text.length > MAX_CONTEXT_CHARS ? text.slice(0, MAX_CONTEXT_CHARS) + '\n…（省略）' : text;
+  let body = lines.join('\n');
+  const room = MAX_CONTEXT_CHARS - (warning ? warning.length + 1 : 0);
+  if (body.length > room) body = body.slice(0, Math.max(0, room - 8)) + '\n…（省略）';
+  return [warning, body].filter(Boolean).join('\n');
 }
 
 module.exports = {

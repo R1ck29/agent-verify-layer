@@ -144,7 +144,7 @@ t('report: text and JSON over a real ledger; reconciliation with git log', (repo
   const j = run(process.execPath, [VL, 'report', '--json'], { cwd: repo.dir, env: repo.env });
   assert.equal(j.status, 0, j.stderr);
   const s = JSON.parse(j.stdout);
-  assert.deepEqual(s.commits, { total: 2, verified: 1, stale: 0, none: 1, skipped: 0 });
+  assert.deepEqual(s.commits, { total: 2, verified: 1, stale: 0, none: 1, skipped: 0, unknown: 0 });
   assert.equal(s.runs.verify, 1);
   assert.equal(s.verified_rate_pct, 50);
   assert.equal(s.reconcile.not_recorded >= 1, true);

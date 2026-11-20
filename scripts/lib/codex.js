@@ -6,6 +6,7 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 const { spawnSync } = require('node:child_process');
+const { quoteArg, splitCommand } = require('./shellquote');
 
 const VL_PATH = path.resolve(__dirname, '..', 'vl.js');
 const HOOK_TIMEOUT_S = 10; // Codex default is 600 s
@@ -15,16 +16,12 @@ function codexHome(env = process.env) {
   return env.CODEX_HOME ? path.resolve(env.CODEX_HOME) : path.join(os.homedir(), '.codex');
 }
 
-function quote(p) {
-  if (/["\r\n]/.test(p)) throw new Error(`パスに使えない文字があります: ${p}`);
-  return /[\s&()^%!;$`'|<>]/.test(p) ? `"${p}"` : p;
-}
+const STATUS_MESSAGE = 'verify-layer: recording commit';
 
-// `node "<abs>/scripts/vl.js" hook commit --agent codex`. Always double-quoting the script path
-// keeps it one argument in sh, cmd and PowerShell alike.
+// `node "<abs>/scripts/vl.js" hook commit --agent codex`, with every path quoted for the shell
+// (single quotes when it holds $ or a backtick). Throws for a path no shell can carry literally.
 function hookCommand(nodeCmd = 'node', vlPath = VL_PATH) {
-  if (/["\r\n]/.test(vlPath)) throw new Error(`パスに使えない文字があります: ${vlPath}`);
-  return `${quote(nodeCmd)} "${vlPath}" hook commit --agent codex`;
+  return `${quoteArg(nodeCmd)} ${quoteArg(vlPath, { always: true })} hook commit --agent codex`;
 }
 
 // The single matcher group this tool adds to Codex hooks.json (PostToolUse only: never gates).
@@ -34,28 +31,38 @@ function ownGroups(nodeCmd, vlPath) {
       event: 'PostToolUse',
       group: {
         matcher: MATCHER,
-        hooks: [{ type: 'command', command: hookCommand(nodeCmd, vlPath), timeout: HOOK_TIMEOUT_S, statusMessage: 'verify-layer: recording commit' }],
+        hooks: [{ type: 'command', command: hookCommand(nodeCmd, vlPath), timeout: HOOK_TIMEOUT_S, statusMessage: STATUS_MESSAGE }],
       },
     },
   ];
 }
 
-// Ours = a command handler whose command runs a `vl.js` script with `hook ... --agent codex`.
-// A foreign command that merely mentions vl.js (no `--agent codex` hook call) is never touched.
-const OWN_RE = /^(?:"[^"]+"|\S+)\s+"([^"]*[\\/]vl\.js)"\s+hook\s+\S+(?:\s+\S+)*\s+--agent\s+codex\s*$/;
+// Ours = exactly what ownGroups writes: PostToolUse, matcher ^Bash$, our statusMessage and a
+// command of the form `<node> <path>/vl.js hook commit --agent codex`. A handler that only looks
+// similar (another event, another sub-command, another matcher) belongs to somebody else and is
+// never touched. `event` / `group` are optional only for callers that look at a bare handler.
+function commandWords(h) {
+  if (!h || typeof h !== 'object' || h.type !== 'command' || typeof h.command !== 'string') return null;
+  const w = splitCommand(h.command);
+  const ok = w && w.length === 6 && path.basename(w[1].replace(/\\/g, '/')) === 'vl.js' && w.slice(2).join(' ') === 'hook commit --agent codex';
+  return ok ? w : null;
+}
 
-function isOwnCodexHandler(h) {
-  return !!h && typeof h === 'object' && h.type === 'command' && typeof h.command === 'string' && OWN_RE.test(h.command);
+function isOwnCodexHandler(h, event, group) {
+  if (!commandWords(h) || h.statusMessage !== STATUS_MESSAGE) return false;
+  if (event === undefined) return true;
+  return event === 'PostToolUse' && !!group && group.matcher === MATCHER;
 }
 
 function ownScriptPath(h) {
-  const m = isOwnCodexHandler(h) ? OWN_RE.exec(h.command) : null;
-  return m ? m[1] : null;
+  const w = commandWords(h);
+  return w ? w[1] : null;
 }
 
 // AGENTS.md: two lines, appended (never overwriting). The second one carries this machine's path.
 function agentsLines(nodeCmd = 'node', vlPath = VL_PATH) {
-  const mark = `${quote(nodeCmd)} "${vlPath}" mark verify --agent codex`;
+  if (/`/.test(vlPath) || /`/.test(nodeCmd)) throw new Error(`パスに使えない文字があります（AGENTS.md の行に書けません）: ${vlPath}`);
+  const mark = `${quoteArg(nodeCmd)} ${quoteArg(vlPath, { always: true })} mark verify --agent codex`;
   return [
     '- コミットの前に、リポジトリに `verify` スキル（`.agents/skills/verify/`）があれば `$verify` を使う（ドキュメントとテストだけの変更は除く）。',
     `- verify の確認がすべて通ったら、コミットの前に \`${mark}\` を実行して確認した時点の状態を記録する（verify-layer。記録だけで作業は止めない）。`,
@@ -190,6 +197,7 @@ module.exports = {
   HOOK_TIMEOUT_S,
   codexHome,
   hookCommand,
+  STATUS_MESSAGE,
   ownGroups,
   isOwnCodexHandler,
   ownScriptPath,

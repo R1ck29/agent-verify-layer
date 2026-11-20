@@ -28,7 +28,7 @@ function ownInHooksFile(file) {
   if (!r.exists) return { exists: false, own: [] };
   if (r.error) return { exists: true, error: r.error, own: [] };
   const own = allHandlers(r.data)
-    .filter(({ handler }) => codex.isOwnCodexHandler(handler))
+    .filter(({ event, group, handler }) => codex.isOwnCodexHandler(handler, event, group))
     .map(({ handler }) => ({ script: codex.ownScriptPath(handler) }));
   return { exists: true, own };
 }
@@ -64,12 +64,28 @@ function ownLocations(add, home, root) {
   return where;
 }
 
+// Project-level .codex/config.toml: read only for its `[features] hooks = false` (Codex reads it
+// only for a trusted project). The scope that was and was not read is always stated.
+function projectConfigHooks(add, root, level) {
+  const scope = 'ユーザーの config.toml と requirements.toml';
+  if (!root) {
+    add('info', `Codex: 調べた範囲: ${scope}。実効値は \`codex features list\` で確かめられます`);
+    return;
+  }
+  const file = path.join(root, '.codex', 'config.toml');
+  const text = codex.readText(file);
+  const off = text !== null && ['features.hooks', 'features.codex_hooks'].some((k) => /^false$/i.test(String(codex.tomlGet(text, k) || '').trim()));
+  if (off) add(level === 'ng' ? 'ng' : 'warn', `Codex: ${file} の [features] hooks = false（信頼済みのプロジェクトでは hooks が無効になります）`);
+  add('info', `Codex: 調べた範囲: ${scope}${text !== null ? '、このプロジェクトの .codex/config.toml' : ''}。実際に効いている値は \`codex features list\`（このリポジトリで実行）で確かめられます`);
+}
+
 function checkHooks(add, home, root, env) {
   const where = ownLocations(add, home, root);
   const blockers = codex.hookBlockers(home, env);
   const level = where.length ? 'ng' : 'warn';
   if (blockers.hooksOff.length) add(level, `Codex: hooks が無効です（${blockers.hooksOff.join(', ')} の [features] hooks = false）`);
   else add('info', 'Codex: features.hooks は無効にされていません（既定で有効）');
+  projectConfigHooks(add, root, level);
   if (blockers.managedOnly.length) add(level, `Codex: allow_managed_hooks_only = true（${blockers.managedOnly.join(', ')}）。利用者の hook は動きません。管理者に requirements.toml の [hooks] で配ってもらってください`);
 
   if (!where.length) {

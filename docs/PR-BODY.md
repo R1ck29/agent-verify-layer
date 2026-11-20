@@ -1,42 +1,41 @@
-# PR #1 本文に足す節: Codex 対応（2026-11-19）
+## 概要
 
-PR #1 の本文の「未確認」の前に、次の節を入れてください（`gh pr edit` はしていません）。タイトルの「Codex は計画」は「Codex 対応（実機未確認）」に改めるのがよいと思います。
+agent-verify-layer v0.1.0（観察モードの検証レイヤー）の実装です。Claude Code 向けの観察の台帳とチェックリスト照合に加えて、Codex CLI 向けの記録・導入・診断を実装しました（Codex は文書に基づく実装で、実機は未確認）。**この PR はマージしません（draft のまま）。** 理由は下の「評価」です。仕様の最上位は設計書の原本（`docs/DESIGN-source.md`）で、`docs/REVIEW-NOTES.md` が原本から変えた点は変更案として承認待ちです。
 
----
+- **台帳**（`scripts/vl.js hook skill|commit|expand`）: verify / code-review の実行と、成功した `git commit` を `git rev-parse --git-path claude-verify` 下の `ledger.jsonl` に記録します。コミットは verified / stale / none / skipped / unknown に分類します（`verified` は原本どおり作業ツリーのハッシュの一致）。プロンプト、`command_args`、コマンド、ファイル名は記録しません。壊れた入力でも exit 0 です。行に `agent`（`claude` / `codex`）があります。
+- **HEAD 側チェックリスト照合**: `git show HEAD:.claude/verification/checklist.json` だけを読み、当たった項目だけを `additionalContext` で渡します（Codex は `mark verify` の出力）。チェック自体を触る変更には警告を添えます。
+- **`vl.js mark verify`**: 確認が終わった時点のツリーを記録します（verify を編集前に読み込むと偽の stale になる問題への対策）。
+- **Codex 対応**: `install.js --agent codex`（`$CODEX_HOME/hooks.json` のマージ、`--agents-md`、`--repo-skill`。既定は確認だけ、冪等、他者の hook は変更しない）、`codex/skills/verify/SKILL.md`、`doctor` の Codex 項目。
+- **`report` と `doctor`**、導入物（プラグイン形式、`scripts/install.js`、`rules/verification.md`、`INSTALL_FOR_CLAUDE.md`、`README.md`、`CHANGELOG.md`）。
 
-## Codex CLI 対応（0.170 の文書に基づく。実機は未確認）
+## 評価（この PR をマージしない理由）
 
-計画とそのレビューは `docs/CODEX-SUPPORT-PLAN.md` にあります。台帳・判定・HEAD 側チェックリスト・`report` は Claude と共通です。台帳の行に `agent`（`claude` / `codex`）を足しました。この項目がない古い行は claude として読みます。
+- **E1b（実リポジトリの罠、事前に固定した規則）: Claude 側は「有用でない」**。罠の合格は P0（層なし）9/12・P1（CLAUDE.md にルール）10/12・P2（この層）9/12、対照は 8/8。P2 は P0 を上回らず（改善 1・後退 1）、4/12 でしか verify を呼んでいません。数値と限界は `eval/RESULTS-E1b.md`（ブランチ `feat/e1b-hard`）。Codex 側は各セル 1 試行の予備結果で、判定は出していません。E1（縮小版）は P0 が天井で判定不能でした。
+- v0.1 の層は観察の台帳としては動きますが、評価で効果を示せていません。**改善版 v0.2 を `feat/v0.2` で設計中**で、held-out の罠で決定評価する予定です。
 
-- **`vl.js mark verify`**（e251f50）: 確認が**終わった時点**のツリーを `via: "mark"` の verify の記録として残し、その時点の diff に当たるチェックリストの項目を出します。Claude 側では、`Skill(verify)` の hook が返す文脈で案内します。verify を編集前に読み込むと stale と出る、実機スモークで見つかった問題への対策です。
-- **コミットの hook**（360878a）: Codex の PostToolUse `^Bash$` に `node "<絶対パス>/vl.js" hook commit --agent codex` を 1 本（`timeout: 10`）置きます。Codex の hook には `if` がないので、`git … commit` を含まないコマンドはスクリプトの先頭で即終了します。`--agent` がないときは、入力に `turn_id` があれば Codex と判定します。
-- **インストーラ** `install.js --agent codex`:
-  - `$CODEX_HOME/hooks.json` へのマージです。既定は確認だけで、2 回目の `--apply` は 1 バイトも変えません。他の hook は変更しません。
-  - `--agents-md` は AGENTS.md の末尾に 2 行を足します。空でない `AGENTS.override.md` があれば、そちらに書きます。
-  - `--repo-skill` は別の操作で、リポジトリに verify スキルを写すだけです。`hooks.json` と AGENTS.md には触れません。既定は確認だけで、既存のものは上書きしません。
-  - Codex がない端末では何も書かず、Claude の部分だけを入れるよう案内します。
-  - `allow_managed_hooks_only` のときは書き込みを止めます。
-- **verify スキルの雛形** `codex/skills/verify/SKILL.md`: skill-creator の指針で作りました。確認の手順は持たず、Claude の `/verify` が記録した `.claude/skills/verify/SKILL.md` に従います（手順は 1 か所）。最後の手順で、AGENTS.md にある mark の行を実行します。Claude のプラグインのスキルにはしていません。
-- **`doctor` の Codex 項目**: 版、`features.hooks`、`allow_managed_hooks_only`、hook の配線と重複、`/hooks` での信頼の確認手順、プロジェクトの信頼、`.agents/skills/verify`、個人用の verify、AGENTS.md の 2 行と大きさを見ます。Codex がない端末では、1 行の案内を出して飛ばします。
-- **文書**: `INSTALL_FOR_CLAUDE.md` を Claude と Codex の両方に広げました。Codex がない端末では Codex の部分を飛ばします。「部分的に入れる」の表で、Claude だけ・Codex だけ・両方を選べます。README には Codex の節を足しました。
-- **CI**: 各 OS で「Codex がない環境で Codex の部分が飛ばされ、何も書かれない」ことを確かめる手順を足しました。あわせて concurrency と job の timeout を設定しました。
+## 独立レビュー（Codex）への対応
 
-### この作業で見つかって直した不具合
+Codex gpt-6.2-astra の独立レビュー（VERDICT: CHANGES_REQUESTED。ブロッキング 12 件と提案）に、テスト先行で対応しました。回答の全文は `docs/REVIEW-NOTES.md` の「Codex レビュー（11/19）への回答」です。
 
-- `install.js` が `module.exports` より前に `main()` を呼んでいたため、`--agent codex` が毎回失敗していました（テストを書いて発覚）。
-- `hooks.json` の `hooks` や `hooks.PostToolUse` が想定と違う形（オブジェクトや文字列など）のとき、`--apply` が他人の hook を黙って消していました。Claude 側の settings.json も同じでした。今は両方とも exit 2 で止まり、何も書きません。独立レビューで FAIL になって発覚しました。
-- `--repo-skill` が利用者全体の hook のマージ・削除も一緒に行っていて、「リポジトリのスキルだけ」の承認では使えませんでした（文書の独立レビューの FAIL で発覚）。今はスキルだけを扱います。
-- プロジェクトの信頼を引くパスの比較が、Windows の 8.3 形式の短い名前で外れていました（Windows の CI で発覚）。
+- 直した: #1 doctor の Git 環境隔離、#2 project スコープの設定とバックアップのコミット混入防止、#3 Codex hook のシェル引用、#4 hook の所有判定（他者の hook を外さない）、#5 `--repo-skill` のリポジトリ外への配置・削除の防止、#6 コミットの帰属（実際の `git commit` だけを記録）、#7 スナップショット・差分の取得失敗を `unknown` に、#9 並行 hook の重複記録（台帳のロック）、#10 空白入りファイル名、#11 BOM 付き config、#12 report の期間起点と mark 経路の集計。提案（非 Git 指定のメッセージ、部分導入、引数検証、連続 amend、symlink と警告の切り詰め、project の Codex config、文書の矛盾）も対応済みです。
+- **一部だけ同意**: #8 `verified` は、原本どおり「作業ツリーのハッシュの一致」に戻しました。Codex の提案（コミットの tree 全体の一致を条件にする）は採らず、`paths_match`・`head_tree_match` を別集計にして部分コミットが見えるようにしました。厳しい定義に切り替えるかは Riku の判断（承認待ち）です。
+- 修正ごとに独立した reviewer の PASS を記録しています（install-safety は 1 度 FAIL して直しました）。
 
-### 検証
+## 検証
 
-- `node --test`: 全件成功（件数は最終の CI を参照）。テストは一時的な HOME・`CODEX_HOME` と、偽の `codex` コマンド（`VL_CODEX_BIN`）だけを使います。本物の `~/.codex`・`~/.claude` には触れません。
-- 各ノード（codex-adapter / codex-installer / codex-skill / doctor-codex / docs / ci-push）は、独立した reviewer が判定し、その結果を `task-graph.json` に記録しています。codex-installer（上の 2 つ目の不具合）と docs（上の 3 つ目の不具合と、文書の記述の誤り）は 1 度 FAIL になり、直してから再レビューしました。
+- `node --test`: 180 件、180 件成功（一時 git リポジトリ、一時 HOME・`CODEX_HOME`、偽の `codex` コマンドだけを使用。本物の `~/.codex`・`~/.claude` には触れません）。
+- CI: ubuntu / macos / windows × Node 18 / 22。**最後に実行された CI（4b371bb）は ubuntu・macOS が全件成功、Windows 2 構成が失敗**（doctor の隔離環境が Windows の `os.devNull` を git の config として読めなかった。57c4949 と c3854af で直した）。**その後の push では、GitHub Actions が課金・支出上限でジョブを開始できず（"recent account payments have failed or your spending limit needs to be increased"）、Windows の修正は CI で未確認**です。上限の解除後に `gh run rerun` で再実行してください。Linux ではローカルで 180/180 成功しています。
 
-### 未確認（Codex の実機で確かめること）
+## 未確認（隠さずに書きます）
 
-- Codex 0.170 で、PostToolUse `^Bash$` が実際の `git commit`（unified exec の `exec_command` 経由を含む）で発火し、台帳に `agent: codex` の行が出るか
-- `/hooks` での信頼の手順と、`vl.js` を更新したときに再確認を求められるか（文書では、`hooks.json` の hook は定義のハッシュに対して信頼される）
-- `codex exec`（非対話）で hook が発火するか。評価の一時ホームで信頼がどう扱われるか
-- AGENTS.md の 2 行だけで、Codex がコミット前に `$verify` を使い、`mark verify` を実行する割合（評価 E1 の Codex 版で測る）
-- Windows での `command` 文字列（cmd / PowerShell）の実行
+- Claude で**実機確認済み**: Skill の hook、`Bash(git commit *)` の `if`、commit 行、`report` の突き合わせ（`docs/SMOKE.md`）。
+- **未確認**: `UserPromptExpansion`（利用者が打った `/verify`）、PowerShell の `if`、Windows の実機、導入先の Claude Code 2.1.321。
+- **Codex は実機未確認**: PostToolUse `^Bash$` が実際の `git commit`（unified exec 経由を含む）で発火するか、`/hooks` での信頼と再確認、`codex exec` での発火、AGENTS.md の 2 行で `$verify` と `mark verify` が使われる割合、Windows の command 文字列。テストの Codex 入力は文書から作った fixture で、実機で採取したものではありません。
+
+## テスト計画
+
+- [x] `node --test`（180 件）
+- [ ] CI（最終コミットで 6 構成が緑。Actions の課金上限の解除待ち）
+- [ ] ログイン済みの端末で `docs/SMOKE.md` の手順、Codex の実機確認（レビュー後）
+
+🤖 Generated with [Claude Code](https://claude.com/claude-code)

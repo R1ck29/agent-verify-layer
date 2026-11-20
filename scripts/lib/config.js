@@ -1,7 +1,7 @@
 'use strict';
-const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
+const { readJsonFile } = require('./settings');
 
 const DEFAULT_SKIP_GLOBS = [
   '*.md',
@@ -41,13 +41,10 @@ function configPath() {
 
 function loadConfig() {
   const cfg = { ...DEFAULTS, skipGlobs: [...DEFAULT_SKIP_GLOBS] };
-  let raw;
-  try {
-    raw = JSON.parse(fs.readFileSync(configPath(), 'utf8'));
-  } catch {
-    return cfg;
-  }
-  if (!raw || typeof raw !== 'object') return cfg;
+  // The same reader as the installer (BOM-tolerant): the hook, mark and `install --check` must
+  // agree on what config.json says (XREVIEW #11).
+  const raw = readJsonFile(configPath()).data;
+  if (!raw) return cfg;
   if (['off', 'observe'].includes(raw.mode)) cfg.mode = raw.mode;
   // "enforce" does not exist in v0.1: anything else behaves as observe.
   if (Array.isArray(raw.skipGlobs) && raw.skipGlobs.every((g) => typeof g === 'string')) {

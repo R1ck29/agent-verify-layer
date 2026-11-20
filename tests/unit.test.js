@@ -47,7 +47,10 @@ test('glob: Windows separators are normalised (path.win32)', () => {
 test('isOwnHandler: exec-form vl.js + "hook" only, with POSIX and Windows paths', () => {
   const h = (args, extra = {}) => ({ type: 'command', command: 'node', args, ...extra });
   assert.equal(isOwnHandler(h(['/a/b/scripts/vl.js', 'hook', 'commit'])), true);
-  assert.equal(isOwnHandler(h(['C:\\Users\\me\\vl\\scripts\\vl.js', 'hook', 'run', 'verify'])), true);
+  assert.equal(isOwnHandler(h(['C:\\Users\\me\\vl\\scripts\\vl.js', 'hook', 'expand'])), true);
+  assert.equal(isOwnHandler(h(['/a/b/scripts/vl.js', 'hook', 'expand']), 'PostToolUse'), false); // right shape, wrong event
+  assert.equal(isOwnHandler(h(['/a/b/scripts/vl.js', 'hook', 'audit'])), false);
+  assert.equal(isOwnHandler(h(['/a/b/scripts/vl.js', 'hook', 'skill', '--x'])), false);
   assert.equal(isOwnHandler(h(['/a/b/scripts/vl.js', 'hook', 'commit'], { timeout: 99, if: 'x' })), true); // other fields ignored
   assert.equal(isOwnHandler(h(['/a/b/scripts/vl.js', 'report'])), false);
   assert.equal(isOwnHandler(h(['/a/b/notvl.js', 'hook'])), false);
@@ -60,13 +63,16 @@ test('classify: skipped beats none; none; verified; stale; unreachable tree', ()
   const skipGlobs = ['*.md', 'docs/**'];
   const run = { tree: 'T' };
   const same = () => new Set();
-  assert.deepEqual(classify({ paths: ['README.md', 'docs/a.txt'], run: null, skipGlobs, diffNames: same }), { result: 'skipped', stale_files: 0 });
-  assert.deepEqual(classify({ paths: [], run: null, skipGlobs, diffNames: same }), { result: 'skipped', stale_files: 0 }); // empty commit
-  assert.equal(classify({ paths: ['a.js'], run: null, skipGlobs, diffNames: same }).result, 'none');
-  assert.equal(classify({ paths: ['a.js'], run, skipGlobs, diffNames: same }).result, 'verified');
-  assert.deepEqual(classify({ paths: ['a.js', 'b.js', 'c.js'], run, skipGlobs, diffNames: () => new Set(['a.js', 'c.js', 'zzz.js']) }), { result: 'stale', stale_files: 2 });
-  assert.equal(classify({ paths: ['a.js'], run, skipGlobs, diffNames: () => new Set(['other.js']) }).result, 'verified'); // differences outside the commit are ignored
-  const lost = classify({ paths: ['a.js'], run, skipGlobs, diffNames: () => null });
+  const w = { worktreeTree: 'T', headTree: 'T' };
+  assert.deepEqual(classify({ paths: ['README.md', 'docs/a.txt'], run: null, skipGlobs, diffNames: same, ...w }), { result: 'skipped', stale_files: 0 });
+  assert.deepEqual(classify({ paths: [], run: null, skipGlobs, diffNames: same, ...w }), { result: 'skipped', stale_files: 0 }); // empty commit
+  assert.equal(classify({ paths: ['a.js'], run: null, skipGlobs, diffNames: same, ...w }).result, 'none');
+  assert.equal(classify({ paths: ['a.js'], run, skipGlobs, diffNames: same, ...w }).result, 'verified');
+  const stale = { worktreeTree: 'W', headTree: 'H' };
+  assert.deepEqual(classify({ paths: ['a.js', 'b.js', 'c.js'], run, skipGlobs, diffNames: () => new Set(['a.js', 'c.js', 'zzz.js']), ...stale }), { result: 'stale', stale_files: 2, paths_match: false, head_tree_match: false });
+  const outside = classify({ paths: ['a.js'], run, skipGlobs, diffNames: () => new Set(['other.js']), ...stale });
+  assert.deepEqual([outside.result, outside.paths_match], ['stale', true]); // XREVIEW #8: no longer "verified"
+  const lost = classify({ paths: ['a.js'], run, skipGlobs, diffNames: () => null, ...stale });
   assert.equal(lost.result, 'stale');
   assert.equal(lost.warn, 'tree-unreachable');
 });
@@ -110,7 +116,7 @@ test('report.summarize: counts, rates, percentiles and git-log reconciliation', 
     { kind: 'run', skill: 'verify', via: 'model', checklist_warnings: 1 },
   ];
   const s = summarize(rows, ['a', 'b', 'c', 'd', 'e', 'f']);
-  assert.deepEqual(s.commits, { total: 5, verified: 2, stale: 1, none: 1, skipped: 1 });
+  assert.deepEqual(s.commits, { total: 5, verified: 2, stale: 1, none: 1, skipped: 1, unknown: 0 });
   assert.equal(s.verified_rate_pct, 50); // 2 of 4 judged (skipped excluded)
   assert.equal(s.session_verify_rate_pct, 50);
   assert.equal(s.session_code_review_rate_pct, 25);

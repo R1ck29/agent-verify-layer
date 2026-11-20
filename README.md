@@ -10,7 +10,7 @@ Claude Code と Codex CLI の「コミット前の検証」を**測る**ため�
 
 作業は一切止めません（観察モード）。モデルも呼ばないので、常時かかる費用はありません。依存は Node 18 以上の標準機能と git だけです（npm の依存なし）。private のため LICENSE は付けていません。
 
-導入は [INSTALL_FOR_CLAUDE.md](INSTALL_FOR_CLAUDE.md) を、導入先の Claude Code（または Codex）に読ませてください（検出 → 承認 → 導入 → 確認 → 削除の順で進みます。Codex がない端末では Codex の部分を飛ばし、Claude だけ・Codex だけ・両方のどれでも入れられます）。設計の経緯は [docs/DESIGN-source.md](docs/DESIGN-source.md)（原本）と [docs/REVIEW-NOTES.md](docs/REVIEW-NOTES.md)（レビューと調整済み計画。**食い違いはこちらが優先**）にあります。
+導入は [INSTALL_FOR_CLAUDE.md](INSTALL_FOR_CLAUDE.md) を、導入先の Claude Code（または Codex）に読ませてください（検出 → 承認 → 導入 → 確認 → 削除の順で進みます。Codex がない端末では Codex の部分を飛ばし、Claude だけ・Codex だけ・両方のどれでも入れられます）。設計の経緯は [docs/DESIGN-source.md](docs/DESIGN-source.md)（Riku の設計書の原本。**最上位**）と [docs/REVIEW-NOTES.md](docs/REVIEW-NOTES.md)（レビューと調整済み計画）にあります。REVIEW-NOTES が原本から変えた点（PostToolUse への移動、OTEL の廃止など）は変更案であり、承認されるまで原本が正です。独立レビュー（Codex）への回答は REVIEW-NOTES の「Codex レビュー（11/19）への回答」にあります。
 
 ## 何をするか・しないか
 
@@ -35,14 +35,17 @@ Claude ──git commit──▶ PostToolUse(Bash|PowerShell, if: git commit *) 
 - Skill の hook に `if` は付けません（実機の 2.1.325 で `if: "Skill(verify)"` が当たらなかったため。`docs/SMOKE.md`）。`matcher: "Skill"` の 1 本が全スキルの呼び出しで起動し、スクリプト側で `verify`（入れ子の `apps/web:verify` も）と `code-review`（別名 `review`）だけを記録して、ほかは何もせず終了します。Bash の `if` は実機で当たりました。
 - 観察は **PostToolUse だけ**で行います。PreToolUse には載せません（ECC の gateguard などと並列に走って、拒否されたコミットの行が残るのを避けるため）。
 - ツリーのハッシュは、本物の index を一時ファイルにコピーして `git add -A` → `git write-tree` で求めます（本物の index と `index.lock` には触れません）。
-- 判定は、**コミットに含まれるファイル**について、直近の verify 開始時のツリーと HEAD の差を見ます。
-  - `verified`: 差がない（検証した内容のままコミットされた）
-  - `stale`: 差がある（verify のあとに変えた。差のあるファイルの数を残す）
+- 判定は設計書の原本どおり、**作業ツリーのハッシュ**で行います（コミット直後の作業ツリーのハッシュと、直近の verify の記録のハッシュを比べる）。
+  - `verified`: 一致する（verify の記録のあと、作業ツリーに 1 文字の変更もない）
+  - `stale`: 一致しない。コミットに含まれるファイルについて、記録したツリーとの差のあるファイルの数を `stale_files` に残す
   - `none`: 前のコミットのあとに verify の記録がない
   - `skipped`: ドキュメントとテストだけの変更（`skipGlobs`。標準の指示の対象外）。`none` より優先する。空のコミットも `skipped`
+  - `unknown`: git が変更ファイルやスナップショットを返せなかった（`skipped` や正常な tree とは区別して数え、検証率の分母に入れない）
   - 記録したツリーが git から消えていて比べられないときは `stale`（`stale_files` が `null`、`warn: tree-unreachable`）
+  - 別集計として、`paths_match`（コミットしたファイルは検証時と同一か）と `head_tree_match`（コミットの tree 全体が検証した tree か）を残す。**`verified` はコミット内容が検証されたことではなく、作業ツリーが検証済みだったこと**を意味する。互いに依存する変更の部分コミットは `verified` でも `head_tree_match: false` になり、`report` に別掲される
 - 同じ `session_id` で verify / code-review があったか（`session_verify` / `session_code_review`）も残します。ツリー単位の判定とセッション単位の判定を並べて見るためです。
-- `.claude/skills/verify/SKILL.md` は `/verify` 自身が書き換えるため、コミットに含まれなければ判定に影響しません。
+- `.claude/skills/verify/SKILL.md` は `/verify` 自身が書き換えるため、verify の最中に作業ツリーが変わり `stale` になり得ます（`paths_match` で見分けられます）。確認が終わった時点で `mark verify` を実行すると、その時点のツリーが記録されます。
+- コミットの記録は、コマンド本文に本物の `git commit`（`--dry-run` でない。`-C`・`cd` で場所が特定できる）があり、HEAD の reflog の最新が直近の `commit…` で、SHA が未記録のときだけ行います。特定できない形（`--git-dir`、`cd $VAR`、`bash -c`、alias）は拾えず、`report` の突き合わせで「台帳にない」に数えます。同じ SHA は並行する hook からも 1 行だけ記録します（台帳のロック）。
 
 ## Codex
 
@@ -117,9 +120,16 @@ Codex CLI（0.170 の文書。`../sources/codex/`）向けの部分です。台�
 
 ## 評価結果
 
-評価 E1（縮小版: 実際のバグ由来の罠 4 件 ＋ 対照 4 件 × 3 プロファイル × 2 回 = 48 試行、sonnet）の一式は [eval/](eval/README.md) にあります。**結果（2026-11-18）: 判定不能**。P0（層なし）が罠 8/8 で天井だったため、層の効果を測れていません。隠しテストの合格は、罠が P0 8/8・P1（CLAUDE.md にルール）8/8・P2（この層）6/8、対照はどれも 8/8。P2 の不合格 2 件は `trap-drift-scope`（2 回とも verify を呼ばず直接実行）。台帳は 16 コミットすべてを拾い、結果の合致は 13/16（偽の stale 2）でした。この評価は、有用とも有用でないとも言えません。判定基準は結果を見る前に固定してあり、数値・限界・次の版は [eval/RESULTS.md](eval/RESULTS.md)、集計は `eval/tools/aggregate.py`。E2（レビュアーの再現率）は今回やりません（理由は eval/README.md）。実機スモークの記録は [docs/SMOKE.md](docs/SMOKE.md)。
+評価 E1b（実リポジトリの罠）の結果は下の「E1b」を先に読んでください。評価 E1（縮小版: 実際のバグ由来の罠 4 件 ＋ 対照 4 件 × 3 プロファイル × 2 回 = 48 試行、sonnet）の一式は [eval/](eval/README.md) にあります。**結果（2026-11-18）: 判定不能**。P0（層なし）が罠 8/8 で天井だったため、層の効果を測れていません。隠しテストの合格は、罠が P0 8/8・P1（CLAUDE.md にルール）8/8・P2（この層）6/8、対照はどれも 8/8。P2 の不合格 2 件は `trap-drift-scope`（2 回とも verify を呼ばず直接実行）。台帳は 16 コミットすべてを拾い、結果の合致は 13/16（偽の stale 2）でした。この評価は、有用とも有用でないとも言えません。判定基準は結果を見る前に固定してあり、数値・限界・次の版は [eval/RESULTS.md](eval/RESULTS.md)、集計は `eval/tools/aggregate.py`。E2（レビュアーの再現率）は今回やりません（理由は eval/README.md）。実機スモークの記録は [docs/SMOKE.md](docs/SMOKE.md)。
 
-実機スモークの現状（[docs/SMOKE.md](docs/SMOKE.md)）: 開発環境の `claude` が未ログインでモデルを呼べず、**台帳に行が出るかの実機確認は未実施**です。プラグインの読み込みと hook の認識（`plugin details`、`plugin validate`）だけを実機で確かめました。ログイン済みの端末での確認手順を同じ文書に載せています。
+### E1b（2026-11-19、[eval/RESULTS-E1b.md](eval/RESULTS-E1b.md)、ブランチ feat/e1b-hard）
+
+事前に固定した規則による判定は、Claude 側で **「有用でない」**: 罠の合格が P0（層なし）9/12・P1（CLAUDE.md にルール）10/12・P2（この層）9/12、対照は 8/8。P2 は P0 を上回らず（改善 1・後退 1）、4/12 でしか verify を呼びませんでした。Codex 側は各セル 1 試行の予備結果で、判定はまだ出していません。したがって **v0.1 の層は、この評価では効果を示せていません**。観察の台帳としては動きます。改善版 v0.2 は feat/v0.2 で設計中で、held-out の罠で決定評価する予定です。
+
+実機スモークの現状（[docs/SMOKE.md](docs/SMOKE.md)。11/18 に Claude Code 2.1.325 で実行）:
+
+- **Claude で確認済み**: `Skill` の hook（`if` なしの 1 本）が実機で当たり、run 行（`via: model`）ができること、`Bash(git commit *)` の `if` と commit 行の書き込み、`report` の突き合わせ、`stale` の出方（verify を編集前に読み込むと偽の stale になる → `mark verify` で対処）
+- **未確認**: `UserPromptExpansion`（利用者が打った `/verify`）、PowerShell の `if`、Windows の実機、Codex の実際の PostToolUse（`tests/` の Codex 入力は文書から作った fixture で、実機で採取したものではない）、導入先の Claude Code 2.1.321 での動作
 
 ## 開発
 
