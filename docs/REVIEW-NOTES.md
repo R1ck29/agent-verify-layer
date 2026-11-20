@@ -126,7 +126,7 @@
 | --- | --- | --- |
 | 1. verify は標準の指示に任せる | **残す（確認項目を足す）** | 事実確認 #1〜#7 は合っていた。インストーラの `doctor` が確かめる項目に、`skillOverrides`、`strictPluginOnlyCustomization`、`CLAUDE_CODE_DISABLE_GIT_INSTRUCTIONS`、個人用やエンタープライズの場所にある `verify` や `simplify`（全リポジトリを上書きする）を加える。monorepo の入れ子の verify も対象にする |
 | 2. 実行の記録（PostToolUse(Skill)、UserPromptExpansion） | **変える** | 記録は「始めた時点のツリー」として残す。`/code-review` の実行も同じ方法で記録する（記事の関門の条件）。台帳に書くのは時刻、経路（model / user）、スキル名、ツリーのハッシュ、session_id だけにする。`prompt` と `command_args` は書かない |
-| 3. コミットの関門 | **変える** | 初版は observe だけで、**PostToolUse（`Bash\|PowerShell`、`if` を 2 本）で、成功したコミットを SHA で記録する**。判定は、コミットされたファイルについて、直近の verify 時のツリーと `HEAD^{tree}` の差を見る。差がなければ verified、あれば stale（差のあるファイルの数を残す）、記録がなければ none。docs と tests だけなら skipped（glob は設定で変えられる）。同じセッションで verify か code-review を実行したか（記事の基準）も同じ行に残す。PreToolUse での deny（enforce）は、観察の結果を見てから第 2 段で作る |
+| 3. コミットの関門 | **変える** | 初版は observe だけで、**PostToolUse（`Bash\|PowerShell`、`if` を 2 本）で、帰属を確認できたコミットを SHA で記録する**。直近の検証記録と対象 SHA の tree 全体が一致すれば verified、異なれば stale、検証記録がなければ none。docs と tests だけなら skipped（glob は設定で変えられる）。同じセッションで verify か code-review を実行したかも記録する。PreToolUse での deny（enforce）は、観察の結果を見てから第 2 段で作る |
 | 4. diff で発火するチェックリスト | **残す（形式を変える）** | YAML は Node の標準機能では読めず、ZIP で入れる環境に依存パッケージを持ち込みたくないので、`.claude/verification/checklist.json` にする。項目は `id`、`paths`（glob、必須）、`pattern`（追加行に当てる正規表現、任意）、`check`、`why`、`incident`、`owner`。HEAD 側を読み、照合する差分は `git diff HEAD` と未追跡ファイルの名前。渡すのは verify の hook と UserPromptExpansion の `additionalContext`。当たりがなければ何も出さない。チェックリスト、CLAUDE.md、hooks、`.claude/skills/verify/` を触る変更には、必ず「チェックを変える変更」の警告を添える |
 | 5. レビュアーは 1 体 | **残す** | 「何を重視するか」は CLAUDE.md の短い節で渡す。チェックリストはレビュアーには届かない（設計どおり）。`includeCodeReviewSuggestion` は文書にないので使わない |
 | 6. SQL 向けの個人用 verify | **やめる** | 個人用は全リポジトリの記録を上書きし、データ抽出の利用者がほかのリポジトリで作業するときにも発火する。`verify` という名前が要るのは git のコミット前の指示のためだけ。git 管理のクエリなら、そのリポジトリのプロジェクトスキル `verify` で足りる。git 管理でないなら、`sql-check` のような別名で、説明文から呼ばれる形にすれば上書きの問題が起きない。どちらも、Trino で小さく試せる場所が決まってから作る |
@@ -175,16 +175,17 @@ hook の配線（プラグイン形式。`if` は 1 つの hook に 1 規則な�
 
 - UserPromptExpansion の matcher は、英数字・`_`・`-`・`|` だけなら完全一致になり、それ以外の文字を含むと先頭に固定されない正規表現になる（hooks.md:282-283）。入れ子の `apps/web:verify` にも当てるため、上のように正規表現で書く
 - `Skill(review)`（`/code-review` の別名。skills.md:899）と、入れ子の verify（`Skill(verify)` は入れ子の名前にも当たる: skills.md:900）が、実際に上の `if` に当たるかは smoke test で確かめる
-- `if` はベストエフォートなので、`commit` の処理は「HEAD が、台帳に記録済みのどの SHA とも違い、コミットの時刻が直近である」ことを自分で確かめてから行を書く。`if` に当たらなかったコミット（`git -C`、スクリプト経由、利用者の `!` コマンド）は `report` の突き合わせで数える
+- `commit` はツールの `workdir` とコマンドの実行先を確認する。Git が出力した SHA がそのリポジトリの直近のコミット reflog と一致するときだけ、未記録の SHA に対して行を書く。未実行の分岐、実行先を確定できないコマンド、`--quiet` や結果の欠落で SHA を裏付けられない通知は、`report` の履歴との突き合わせで未捕捉に数える。
 - 判定（コミット 1 件ごと）:
-  - `paths` = そのコミットで変わったファイル（`git diff-tree --no-commit-id --name-only -r HEAD`。最初のコミットは `--root`、マージは第 1 親との差）
-  - `run` = 前のコミットの後にあった、同じリポジトリでの最新の verify の記録
-  - `run` がない → `none`。`git diff --name-only <run.tree> HEAD -- <paths>` が空 → `verified`。空でない → `stale`（差のあるファイルの数を残す）。`paths` がすべて docs と tests の glob に当たる → `skipped`
+  - 変更パス・比較に使う tree・差分は捕捉した SHA から取得する。初回コミットは空の tree、マージは第 1 親との差を使う。
+  - verify の候補は前のコミットの記録との間で絞る。対象コミットの reflog 時刻の秒末と hook 開始時刻のうち、早い方を上限にする。新しい run の `head_sha` が対象コミットと同じなら、コミット後の記録として除外する。旧形式で `head_sha` がない同秒の記録は、hook 開始前の前後関係を判別できない。
+  - 対象 SHA の tree と検証記録の tree が一致すれば `verified`、異なれば `stale`、候補がなければ `none`。変更パスがすべて除外 glob に当たれば `skipped`、判定に必要な Git 情報を取得できなければ `unknown`。
+  - コミットされたパスの一致は `paths_match`、hook 時点の作業ツリー全体の一致は `worktree_tree_match` に残す。検証した複数の変更から一部だけをコミットすると、作業ツリーが一致していても `stale` になる。
   - あわせて `session_verify`・`session_code_review`（同じ session_id で実行があったか。記事の基準）を記録する
-- ツリーのハッシュは、本物の index を一時ファイルにコピーし、`GIT_INDEX_FILE` を差し替えて `git add -A` と `git write-tree` で求める。本物の index には触らないので、`index.lock` とぶつからない
+- ツリーのハッシュは index の一時コピーで求める。index が存在しないと確認できた場合だけ空から開始する。読取・コピー・時刻復元に失敗した場合は取得不能を返す。`git add -A` と `git write-tree` には、一時 index を `GIT_INDEX_FILE` で指定する。
 - 台帳の行（プロンプト、コマンド、ファイル名は書かない）:
-  - `{"v":1,"kind":"run","ts":…,"skill":"verify","via":"model|user","tree":"<sha>","session":"<id>","fired":["hooks-stdout"],"self_check_change":false}`
-  - `{"v":1,"kind":"commit","ts":…,"sha":"<sha>","mode":"observe","result":"verified|stale|none|skipped","stale_files":0,"since_run_s":42,"session_verify":true,"session_code_review":false}`
+  - `{"v":1,"kind":"run","ts":…,"skill":"verify","via":"model|user|mark","tree":"<sha>","head_sha":"<sha>","session":"<id>","fired":["hooks-stdout"],"self_check_change":false}`
+  - `{"v":1,"kind":"commit","ts":…,"sha":"<sha>","mode":"observe","result":"verified|stale|none|skipped|unknown","stale_files":0,"head_tree_match":true,"worktree_tree_match":true,"since_run_s":42,"session_verify":true,"session_code_review":false}`
 - 設定は `~/.claude/verify-layer/config.json`（`mode`、`skipGlobs`、`timeoutMs`）。既定は `observe`。`off` なら何も書かない
 
 ### 5.2 置き場所
@@ -349,6 +350,8 @@ AHE 0.8.0 の、実在する仕組みだけで組む: タスクの YAML、プロ
 
 ## Codex レビュー（11/19）への回答
 
+この節は初回回答時点の記録です。再レビュー後の観察仕様は第 5.1 節と末尾の「PR #1 再レビューへの対応」に反映しています。
+
 Codex（gpt-6.2-astra）の独立レビュー（`XREVIEW-codex.md`、VERDICT: CHANGES_REQUESTED、対象は PR #1 の SHA `1c01f24`）への、作者側の回答です。原則: 設計書の原本が最上位で、原本と食い違う過去の判断は、原本に戻すか、変更案として明示して承認を待つ。修正はすべてテストを先に書き、修正前のコードで失敗することを確かめてから直しました。各ノードは独立した reviewer（`graph-reviewer`）が確認しています。
 
 ### ブロッキング 12 件
@@ -385,4 +388,11 @@ Codex（gpt-6.2-astra）の独立レビュー（`XREVIEW-codex.md`、VERDICT: CH
 ### 同意しなかったこと
 
 - #8 の「HEAD の tree 全体の一致を `verified` の条件にする」だけは採らなかった（上の理由。代わりに別集計で見える化）。それ以外の指摘は、方法を変えたものも含めて採用した。
+
+## PR #1 再レビューへの対応
+
+- #2–4。プロジェクト設定のパスと実体を、それぞれが属する全作業ツリーで書き込み前に確認する。バックアップの実保存先は作業ツリーの外に置く。Windows の Codex では `!` などを文字どおり渡せないパスを `--check` と `--apply` の両方で拒否する。hook の更新・削除は、現在の絶対パスと同じ設定先への過去の登録記録に限る。登録履歴がない旧パスは保全する。
+- #6–8、追加 HIGH 1–2。帰属、捕捉済み SHA、検証記録の時刻上限、index エラー、tree 全体の判定は第 5.1 節のとおり。旧台帳の `verified` 行は、`head_tree_match: false` が明記されていれば集計上は `stale` とする。一致フラグのない旧行には保存済みの判定を使う。
+- #9、追加 HIGH 3。ロック待ちは既定で 2.5 秒。古いロックは同一ホストで所有者のプロセスが消えたことを確認できた場合に限って回収する。ロックの消失による再試行でも期限を確認し、所有者不明のまま期限に達した場合や削除不能の場合は、その回の記録を見送り hook を終了コード 0 で返す。
+- `report` は Git 履歴を取得できなかった場合、照合結果を JSON で `null`、テキストで「取得不能」と表示する。hook と mark の二重提示は、同じエージェント・セッション・検証 tree・項目の組み合わせで集計する。
 

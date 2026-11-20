@@ -12,7 +12,7 @@
 | --- | --- |
 | 台帳（`.git/claude-verify/ledger.jsonl`）・判定（verified / stale / none / skipped） | git の状態だけで決まる。行に `agent: "codex"` を足すだけ（パスは互換のため据え置き） |
 | HEAD 側チェックリスト照合 | `git show HEAD:...` と diff だけ。置き場所 `.claude/verification/checklist.json` は Codex でも読める（共通の置き場所 `.agents/verification/` を別名として後で足す） |
-| コミットの記録 | Codex の `PostToolUse` は `tool_name: "Bash"`、`tool_input.command`（文字列）で、この 2 つは Claude と同じ形（hooks.md「PostToolUse」）。unified exec（`exec_command`）も `Bash` として来る。`tool_response` の形は文書にない（使わない）。現行の `hook commit` の処理（HEAD が新しく、未記録か）をそのまま使える |
+| コミットの記録 | `PostToolUse` の `tool_input.command` と、あれば `tool_input.workdir` から実行先を求める。Git のコミット出力にある SHA が実行先の直近の reflog と一致した場合に記録する。結果を確認できない通知は未捕捉として扱う。実機での `tool_response` の確認は今後の検証項目 |
 | `additionalContext` | Codex の `PostToolUse` も `hookSpecificOutput.additionalContext` を受け取り、開発者向けの文脈として足す（既定 2,500 トークンで打ち切り、`additionalContextLimit` で調整） |
 | `report` / `doctor` の本体 | ツール非依存。`doctor` に Codex の項目を足すだけ |
 | 出力 | PostToolUse の stdout は JSON だけが読まれ、ただの文字列は捨てられる（hooks.md「PostToolUse」）。現行の出力（JSON か空、終了コード 0）のままでよい |
@@ -128,4 +128,8 @@ Codex の独立レビュー（`XREVIEW-codex.md`）の指摘 12 件と提案を�
 ### XREVIEW 修正の続き（2026-11-20 09:xx JST）
 
 残り: **CI の再実行だけ**。コードと文書の修正は終わり、ローカルで 180/180、各ノードの独立 reviewer は PASS。GitHub Actions が課金・支出上限でジョブを開始できず（`gh run view` の注記: "recent account payments have failed or your spending limit needs to be increased"）、57c4949・c3854af の Windows 修正（doctor の `GIT_CONFIG_GLOBAL` を空ファイルに、テストのパス区切り）が CI で未確認。手順: (1) Riku が Billing を解除、(2) `gh run rerun $(gh run list --branch feat/v0.1 --limit 1 --json databaseId -q '.[0].databaseId')`、(3) 失敗があれば `gh run view <id> --log` で直し、小さなコミットを push（force-push しない）、(4) 緑になったら PR 本文（docs/PR-BODY.md）の CI の行を更新し `gh pr edit 1 --body-file docs/PR-BODY.md`。PR は draft のまま、マージしない。
+
+### PR #1 再レビュー
+
+Windows では cmd の遅延展開に使われる `!` などを含むパスを、check と apply で拒否する。hook の更新・削除は、現在の絶対パスか、同じ設定先への過去の登録記録にあるパスに限る。テストは実際に生成した Git のコミット出力を通知に渡している。Codex 実機の payload と Windows の実 cmd での argv は引き続き確認対象とする。
 

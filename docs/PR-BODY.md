@@ -2,7 +2,7 @@
 
 agent-verify-layer v0.1.0（観察モードの検証レイヤー）の実装です。Claude Code 向けの観察の台帳とチェックリスト照合に加えて、Codex CLI 向けの記録・導入・診断を実装しました（Codex は文書に基づく実装で、実機は未確認）。**この PR はマージしません（draft のまま）。** 理由は下の「評価」です。仕様の最上位は設計書の原本（`docs/DESIGN-source.md`）で、`docs/REVIEW-NOTES.md` が原本から変えた点は変更案として承認待ちです。
 
-- **台帳**（`scripts/vl.js hook skill|commit|expand`）: verify / code-review の実行と、成功した `git commit` を `git rev-parse --git-path claude-verify` 下の `ledger.jsonl` に記録します。コミットは verified / stale / none / skipped / unknown に分類します（`verified` は原本どおり作業ツリーのハッシュの一致）。プロンプト、`command_args`、コマンド、ファイル名は記録しません。壊れた入力でも exit 0 です。行に `agent`（`claude` / `codex`）があります。
+- **台帳**（`scripts/vl.js hook skill|commit|expand`）: verify / code-review の実行と、Git の出力から帰属を確認できたコミットを `git rev-parse --git-path claude-verify` 下の `ledger.jsonl` に記録します。対象 SHA の tree 全体が検証記録の tree と一致すれば `verified` です。作業ツリーの一致は補助指標に残します。プロンプト、`command_args`、コマンド、ファイル名は記録しません。壊れた入力でも exit 0 です。行に `agent`（`claude` / `codex`）があります。
 - **HEAD 側チェックリスト照合**: `git show HEAD:.claude/verification/checklist.json` だけを読み、当たった項目だけを `additionalContext` で渡します（Codex は `mark verify` の出力）。チェック自体を触る変更には警告を添えます。
 - **`vl.js mark verify`**: 確認が終わった時点のツリーを記録します（verify を編集前に読み込むと偽の stale になる問題への対策）。
 - **Codex 対応**: `install.js --agent codex`（`$CODEX_HOME/hooks.json` のマージ、`--agents-md`、`--repo-skill`。既定は確認だけ、冪等、他者の hook は変更しない）、`codex/skills/verify/SKILL.md`、`doctor` の Codex 項目。
@@ -18,12 +18,12 @@ agent-verify-layer v0.1.0（観察モードの検証レイヤー）の実装で�
 Codex gpt-6.2-astra の独立レビュー（VERDICT: CHANGES_REQUESTED。ブロッキング 12 件と提案）に、テスト先行で対応しました。回答の全文は `docs/REVIEW-NOTES.md` の「Codex レビュー（11/19）への回答」です。
 
 - 直した: #1 doctor の Git 環境隔離、#2 project スコープの設定とバックアップのコミット混入防止、#3 Codex hook のシェル引用、#4 hook の所有判定（他者の hook を外さない）、#5 `--repo-skill` のリポジトリ外への配置・削除の防止、#6 コミットの帰属（実際の `git commit` だけを記録）、#7 スナップショット・差分の取得失敗を `unknown` に、#9 並行 hook の重複記録（台帳のロック）、#10 空白入りファイル名、#11 BOM 付き config、#12 report の期間起点と mark 経路の集計。提案（非 Git 指定のメッセージ、部分導入、引数検証、連続 amend、symlink と警告の切り詰め、project の Codex config、文書の矛盾）も対応済みです。
-- **一部だけ同意**: #8 `verified` は、原本どおり「作業ツリーのハッシュの一致」に戻しました。Codex の提案（コミットの tree 全体の一致を条件にする）は採らず、`paths_match`・`head_tree_match` を別集計にして部分コミットが見えるようにしました。厳しい定義に切り替えるかは Riku の判断（承認待ち）です。
+- `feat/v0.2` の土台では PR #1 の再レビューを反映しました。#8 は対象 SHA の tree 全体で判定し、#2–4、#6–7、#9 と追加の HIGH 3 件にも対応しました。変更内容は [REVIEW-NOTES.md](REVIEW-NOTES.md#pr-1-再レビューへの対応) に記録しています。
 - 修正ごとに独立した reviewer の PASS を記録しています（install-safety は 1 度 FAIL して直しました）。
 
 ## 検証
 
-- `node --test`: 180 件、180 件成功（一時 git リポジトリ、一時 HOME・`CODEX_HOME`、偽の `codex` コマンドだけを使用。本物の `~/.codex`・`~/.claude` には触れません）。
+- PR #1 再レビュー後の Linux 検証では `node --test tests/*.test.js` が 209 件中 208 件成功、失敗 0 件でした。実 `cmd.exe` の argv を検証する Windows 専用テスト 1 件をスキップしました。
 - CI: ubuntu / macos / windows × Node 18 / 22。**最後に実行された CI（4b371bb）は ubuntu・macOS が全件成功、Windows 2 構成が失敗**（doctor の隔離環境が Windows の `os.devNull` を git の config として読めなかった。57c4949 と c3854af で直した）。**その後の push では、GitHub Actions が課金・支出上限でジョブを開始できず（"recent account payments have failed or your spending limit needs to be increased"）、Windows の修正は CI で未確認**です。上限の解除後に `gh run rerun` で再実行してください。Linux ではローカルで 180/180 成功しています。
 
 ## 未確認（隠さずに書きます）
