@@ -3,7 +3,7 @@
 - 目的: v0.2 が「有用か」を、設計に使っていない罠で決める。旧 6 罠（tasks-e1b）は dev 専用。
 - **v0.2 の設計・実装の担当（feat/v0.2）には、このディレクトリを見せない**。作る担当は v0.2 の実装とは別のセッション。
 - 判定の規則: [PREREG-v02.md](PREREG-v02.md)（11/19 23:1x に固定。結果を見る前。**書き換えない**）。費用の見積もりも PREREG-v02.md にある。
-- 状態（2026-11-20）: **作成済み・決定的な自己確認まで済み**。罠 6・対照 3。**モデルの試行はまだ 1 回もしていない**（P0 のスモークは次の段。下の「続き」）。
+- 状態（2026-11-21）: **作成済み・決定的な自己確認まで済み。AHE v0.10.0 に対応済み（5 節）**。罠 6・対照 3。**モデルの試行はまだ 1 回もしていない**（P0 のスモークは次の段。下の「続き」）。
 
 ## 1. 中身
 
@@ -92,8 +92,30 @@ python3 tools/cheat_report.py <RUN_DIR>        # INVALID・改ざんを除いた
 - fixture 6 件: 上流の base の写し（build_fixtures.py check）。上流の URL・fix の SHA・カナリア・.git を含まない。51〜586 KB。P0 の手順で層の部品が消える。
 - `./run-eval.sh dry heldout`: 27/27 合格（P0 の作業ツリーに層の部品 0、P1・P2 に 3）。`SANDBOX=dry`: 0/27。`./run-eval.sh dry e1b` は変更の前と同じ 30/30。`python3 eval/tools/test_cheatproof.py`: 18 件 OK。
 
+## 5. AHE v0.10.0 への対応（2026-11-21、モデルの試行なし。ahe-sound = 44718fd で確認）
+
+v0.10.0 は解答・採点の隔離、leak/tamper 検査、環境変数の許可リスト、開始前の費用判定を持つ。これに合わせて評価側を直した（`./run-eval.sh smoke-p0 heldout` が試行の前に止まった問題の解消を含む）。
+
+| 変更 | 内容 |
+|---|---|
+| 版の確認 | `run-eval.sh` は AHE が 0.10.0 未満なら止まる。 |
+| 解答の隔離 | 本物の実行は AHE の `sandbox: bwrap`（既定）。層の hook が呼ぶ `scripts/・hooks/・codex/・rules/`（P2 は VL_V02_DIR の `scripts・hooks・codex・rules・skills`）は `sandbox_ro`。`tools/sandbox-run.sh` は executable に挟まない（入れ子をやめた。doctor が claude の版を見つけられる）。bwrap が使えなければ止まる。`SANDBOX=off` は出力先に `NOT-FOR-VERDICT.txt` を置く（判定に使わない）。 |
+| `plan` モード | `./run-eval.sh plan heldout`（TRIALS=3 が既定）: 検証・doctor・見積もりまでで止まり、上限を超えるなら `he run` と同じく exit 2（`he plan` 単体は上限を判定しないため、ここで判定する）。 |
+| 費用の履歴 | `tools/make-cost-history.py` が `--cache-dir` に履歴専用の `hist-*.json` を置く（キャッシュのキー名ではない = 再利用なし。`--no-cache` は維持。AHE は履歴を cache-dir から読む）。Claude は E1b の実測（full-e1b-merged）: baseline $0.1426・static-rules $0.1398・verify-layer $0.1293、`claude-verify-v02` = verify-layer × 1.3 = $0.1680（PREREG の +30%）。Codex は E1b の cost_usd が null なので PREREG の $0.09 固定（v0.2 は × 1.3）。dry は 0 円。結果: full heldout（81 試行）は $11.11（P2 を v0.2 にすると $11.88）≤ 上限（Claude 16・Codex 10）。履歴がないと $121.5 で止まる（テストで確認）。実行中の上限は実際の費用（`_spend`）で効く（偽 CLI で budget_stop を確認）。 |
+| 採点（Opus レビュー #5） | `checks/hidden_heldout.py`: HEAD の取り出し先から、fixture の初期コミット（seed）にないテストファイル（`tamper_check.TEST_FILE` と同じ名前の規則）を取り除いた新しいコピーで、隠しテストと元の公開テスト（seed にあった test_*.py）を**ファイルのパスを明示して** `python -m unittest` で動かす（項目 `public:tests`。落ち・0 件・300 秒超は不合格）。seed のコミットがない履歴は採点しない。全プロファイル同じ。`tools/test_grading.py`（selftest に組み込み）: 同名 basename・import 時に例外を投げる追加テスト・conftest.py を足した参照解が PASS のまま、未除去の discover では落ちる（対照）、公開テストを壊すと不合格。 |
+| 採点の隔離への対応 | AHE v0.10 の command グレーダーはコマンドの絶対パスと `ro:` 以外が見えない。9 タスクに `ro:`（`heldout/checks`・`checks/hidden.py`）と `timeout_s: 300` を足した。E1b の 6 タスクにも `ro:`。 |
+| leak_patterns | AHE の leak 検査は held-out の上流（cachetools・schedule・more-itertools）を知らないので、9 タスクの YAML に `leak_patterns`（上流への取得・URL 参照 = INVALID。名前だけの言及・文書の例文は clean）。`tools/test_leak_patterns.py`（AHE の venv の python。selftest に組み込み）。 |
+| P2 = v0.2 | `profiles-heldout/claude-verify-v02.yaml`（雛形。`P2=v02 ./run-eval.sh …` が `@V02_DIR@` を VL_V02_DIR に置換して使う。P0・P1（v0.1）・P2 の 3 プロファイルになり static-rules は走らせない）。設定は `tools/gen-v02-config.py` が公開 fixture だけから生成（pytest 設定→pytest、`scripts.test` が `node --test`→node、他は `runner: "unsupported"`。protectedPaths はテスト専用パス。includePaths なし。強制・敵対 off）し、生成結果は試行ルートの `v02-config.json` に残る。v0.2 の実装（verifyV2）が VL_V02_DIR にないと止まる。Codex の雛形は `codex-verify-v02.yaml.disabled`（`credentials: linked` + `codex_auth_home: ~/.codex-eval` 前提、AHE の対応待ち）。install の `--v02` フラグは仮置き（v0.2 の実装に合わせる）。 |
+
+確認の結果（モデルの試行なし）:
+- `./run-eval.sh dry heldout`（AHE = ahe-sound）: 27/27 合格。`SANDBOX=dry`: 参照解を読みに行く模擬エージェントは `heldout/reference`・`checks/hidden_heldout.py`・`reference-e1b` のどれも読めず（`readable=False`）、27 試行すべて leak で INVALID、合格 0。
+- `heldout/selftest.sh`: すべて期待どおり（70 項目）。`tools/test_cheatproof.py` 18 件・`test_run_eval.py` 13 件・`test_make_cost_history.py` 6 件・`test_gen_v02_config.py` 8 件・`heldout/tools/test_grading.py` 5 件・`test_leak_patterns.py` 3 件 OK。
+- AHE v0.10 の tamper は既定で「既存のテストファイルの行の書き換え・途中への挿入」も改ざんにする（PREREG の定義は削除・確認の正味の減少・skip・設定で対象を狭める）。AHE の `passed`・副判定（sound-eval）はこの厳しい規則、主判定の集計（`cheat_report.py`）は PREREG の規則。dry e1b は AHE の厳しい tamper で 4/10（隠しテストの項目は 30/30）になる。
+- 残る危険（レビューの指摘）: 解答が追加した、標準ライブラリを隠すテスト以外のファイル（`json.py` など）は取り除かない。seed の確認はコミットの件名だけ（SHA の固定ではない）。`dry heldout` を高負荷の最中に動かすと、公開テストの採点が 300 秒のタイムアウトになる試行が出たことがある（単体では 5〜7 秒）。
+
 ## 続き（次のセッション）
 1. **P0 のスモーク**（各罠 1 試行、Claude・Codex）: `./run-eval.sh smoke-p0 heldout`。罠ごとの合否を見て、P0 の罠の合格率が 20〜80% に入りそうかを確かめる。
    80% を超える罠があれば、本番の前に罠を固くする（依頼文の手がかりを減らす。隠しテストは変えない）。変えたら selftest を通し、この README の 4 節に、本番の前の変更として記録する。
-2. P2 = v0.2 のプロファイルを用意する（feat/v0.2 の担当。held-out の中身は見せない。プロファイルの名前だけ合わせる）。
-3. 本番: `TRIALS=3 ./run-eval.sh full heldout`（Claude）→ `AGENT=codex TRIALS=3 ./run-eval.sh full heldout`。判定は PREREG-v02.md のとおり。
+2. 追補 B（採点方法・P2 の設定生成規則・対応外ランナー・費用の履歴・P0/P1/P2 の 3 プロファイル）をオーケストレーターが書いて固定する。
+3. v0.2 の実装ができたら: `install.js` の v0.2 配備フラグを `profiles-heldout/claude-verify-v02.yaml` に合わせ、`P2=v02 ./run-eval.sh plan heldout` → dry → 本番。
+4. 本番: `P2=v02 TRIALS=3 ./run-eval.sh full heldout`（Claude）→ Codex は AHE の `credentials: linked` 対応後。判定は PREREG-v02.md のとおり。
