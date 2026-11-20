@@ -55,6 +55,11 @@ done
 echo "== 採点の入口（追加テストを取り除いた新しいコピー・公開テストをパス明示で）"
 "$py" -B "$here/tools/test_grading.py" >/dev/null 2>&1 && ok "追加テスト（同名 basename・import 時の副作用）は結果を変えない／公開テストが落ちれば不合格／seed のない履歴は採点しない" || bad "tools/test_grading.py が落ちる"
 
+echo "== leak_patterns（上流の取得は INVALID・通常の作業は clean。AHE の venv の python が要る）"
+ahe_py="${AHE_DIR:-$eval_dir/../../ahe-sound}/.venv/bin/python"
+if [ -x "$ahe_py" ]; then "$ahe_py" -B "$here/tools/test_leak_patterns.py" >/dev/null 2>&1 && ok "9 タスクの leak_patterns: 上流の取得・参照は INVALID、通常の作業は clean" || bad "tools/test_leak_patterns.py が落ちる"
+else echo "  skip AHE の venv の python がない（$ahe_py）"; fi
+
 echo "== held-out の fixture・参照解"
 "$py" -B "$here/tools/build_fixtures.py" check || bad "fixture が上流の写しと食い違う・上流の手がかりがある"
 nocan="$(find "$here/checks" "$here/reference" -type f ! -path '*/manifests/*' ! -name '*.pyc' -exec grep -L "VL-EVAL-CANARY-7f3c1a" {} + | head -5)"
