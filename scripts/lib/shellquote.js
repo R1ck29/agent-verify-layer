@@ -6,13 +6,13 @@
 
 const bad = (s) => new Error(`パスに使えない文字があります: ${JSON.stringify(s)}`);
 
-// always: quote even when not needed (script paths). Windows shells (cmd, PowerShell) only get
-// double quotes; `$`, backtick and `%` would still be expanded inside them, so they are refused.
+// always: quote even when not needed (script paths). Windows uses cmd-style double quotes.
+// Reject expansion markers that survive double quoting, including delayed-expansion `!`.
 function quoteArg(s, { platform = process.platform, always = false } = {}) {
   if (typeof s !== 'string' || !s || /[\0\r\n]/.test(s)) throw bad(s);
   if (platform === 'win32') {
-    if (/["$`%]/.test(s)) throw bad(s);
-    return always || /[\s&()^;,'!=]/.test(s) ? `"${s}"` : s;
+    if (/["$`%!<>|]/.test(s)) throw bad(s);
+    return always || /[\s&()^;,'=]/.test(s) ? `"${s}"` : s;
   }
   if (!always && /^[A-Za-z0-9_@%+=:,./-]+$/.test(s)) return s;
   // Double quotes are safe unless the text has $ ` " or a backslash that could escape something.

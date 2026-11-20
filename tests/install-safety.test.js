@@ -58,6 +58,40 @@ test('XREVIEW #3: splitCommand reads back what quoteArg wrote (both quote styles
   }
 });
 
+for (const action of ['--check', '--apply']) {
+  t(`XREVIEW #3: Codex ${action} rejects a cmd path with delayed expansion before writes`, (c) => {
+    fs.mkdirSync(c.cx, { recursive: true });
+    const code = `
+      Object.defineProperty(process, 'platform', { value: 'win32' });
+      const { parseArgs, run } = require(process.argv[1]);
+      const result = run(parseArgs(process.argv.slice(2)));
+      process.stdout.write(JSON.stringify(result.report));
+      process.exitCode = result.code;
+    `;
+    const args = ['-e', code, '--', INSTALL, '--agent', 'codex', action, '--node', 'C:\\Tools\\!name!\\node.exe'];
+    const r = run(process.execPath, args, { cwd: c.home, env: c.env });
+    assert.equal(r.status, 2, r.stdout + r.stderr);
+    assert.match(JSON.parse(r.stdout).error, /パスに使えない文字/);
+    assert.deepEqual(fs.readdirSync(c.cx), []);
+    assert.equal(fs.existsSync(c.env.VL_CONFIG_DIR), false);
+  });
+}
+
+t('XREVIEW #3: delayed-expansion cmd passes an allowed path and the precise hook argv', (c) => {
+  const dir = path.join(c.home, 'space & parens (ok)');
+  const node = path.join(dir, 'node.exe');
+  const stub = path.join(dir, 'vl.js');
+  fs.mkdirSync(dir);
+  fs.copyFileSync(process.execPath, node);
+  fs.writeFileSync(stub, 'process.stdout.write(JSON.stringify(process.argv.slice(1)));\n');
+  const cmd = codex.hookCommand(node, stub);
+  const r = run(process.env.ComSpec || 'cmd.exe', ['/d', '/v:on', '/s', '/c', `"${cmd}"`], {
+    cwd: c.home, windowsVerbatimArguments: true,
+  });
+  assert.equal(r.status, 0, r.stderr);
+  assert.deepEqual(JSON.parse(r.stdout), [stub, 'hook', 'commit', '--agent', 'codex']);
+}, { skip: posix });
+
 t('XREVIEW #3: a directory name with $, backtick and quote reaches the intended script through sh -c, and nothing is evaluated', (c) => {
   const dir = path.join(c.home, "a$(touch PWNED)`touch PWNED2`'q d");
   fs.mkdirSync(path.join(dir, 'scripts'), { recursive: true });
