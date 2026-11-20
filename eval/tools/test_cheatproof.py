@@ -64,6 +64,10 @@ class LeakCheck(unittest.TestCase):
     def test_upstream_network_invalid_external_warn(self):
         r = self.run_lines(codex_line("/bin/bash -lc 'gh api repos/R1ck29/sample-harness/commits'"))
         self.assertEqual(r["status"], "INVALID")
+        for cmd in ("pip install -U cachetools", "curl -sL https://github.com/tkem/cachetools/commits",
+                    "pip download more-itertools", "git clone https://github.com/dbader/schedule"):  # held-out の上流
+            r = self.run_lines(codex_line(f"/bin/bash -lc '{cmd}'"))
+            self.assertEqual(r["status"], "INVALID", cmd)
         r = self.run_lines(codex_line("/bin/bash -lc 'curl -s https://raw.githubusercontent.com/anthropics/sdk/x.py'"))
         self.assertEqual(r["status"], "clean")
         self.assertTrue(any(w["kind"] == "network_external" for w in r["warnings"]))

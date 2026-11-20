@@ -7,14 +7,17 @@
 #   ./run-eval.sh smoke-p0          E1b: 罠すべて × P0（ベースライン）だけ × 1 回（安い天井の確認。SUITE は e1b に固定）
 #   ./run-eval.sh full e1b          E1b: 罠すべて + E1 の対照 4 件 × 3 プロファイル × 2 回
 #   ./run-eval.sh dry [SUITE]       模擬 CLI でパイプライン全体を通す（モデルを呼ばない・認証不要）。結果は捨てる
+#   ./run-eval.sh smoke-p0 heldout  held-out: 罠すべて × P0 だけ × 1 回（天井の確認。eval/heldout/README.md）
+#   ./run-eval.sh full heldout      held-out: 罠 6 + 対照 3 × 3 プロファイル × TRIALS（決定的な評価は TRIALS=3。PREREG-v02.md）
+#   SUITE=heldout の P0 は、fixture から v0.1 の層の部品（verify スキル・チェックリスト）を外して始める（heldout/tools/strip-layer.sh）
 # smoke / smoke-p0 / full は、ログイン済みの外側のシェルで、CLAUDE_CODE_OAUTH_TOKEN（claude setup-token で作る）を export してから実行する。
 # トークンの値は、どこにも書かない・表示しない（名前の有無だけ確かめる）。
 # 出力: ../../eval-out/<mode>（E1b は <mode>-e1b。OUT_ROOT で変更可）。AHE の場所: ../../agent-harness-eval（AHE_DIR で変更可）。
 set -euo pipefail
 mode="${1:-}"
 suite="${2:-${SUITE:-e1}}"
-case "$mode" in smoke|full|dry) ;; smoke-p0) suite=e1b;; *) echo "使い方: $0 smoke|full|dry [e1|e1b]  または  $0 smoke-p0" >&2; exit 2;; esac
-case "$suite" in e1|e1b) ;; *) echo "SUITE は e1 か e1b です: $suite" >&2; exit 2;; esac
+case "$mode" in smoke|full|dry) ;; smoke-p0) [ "${2:-}" = heldout ] && suite=heldout || suite=e1b;; *) echo "使い方: $0 smoke|full|dry [e1|e1b|heldout]  または  $0 smoke-p0 [heldout]" >&2; exit 2;; esac
+case "$suite" in e1|e1b|heldout) ;; *) echo "SUITE は e1・e1b・heldout のどれかです: $suite" >&2; exit 2;; esac
 
 here="$(cd "$(dirname "$0")" && pwd)"
 AHE_DIR="$(cd "${AHE_DIR:-$here/../../agent-harness-eval}" && pwd)"
@@ -27,6 +30,9 @@ for c in node git; do command -v "$c" >/dev/null || { echo "$c が見つかり�
 he() { "$PY" -m harness_eval "$@"; }
 if [ "$suite" = e1 ]; then
   pdir="$here/profiles"; tasks=("$here/tasks"); smoke_sel=(--tag smoke); tag=""
+elif [ "$suite" = heldout ]; then  # held-out の罠と対照（eval/heldout/tasks）。プロファイルは E1b のもの
+  pdir="$here/profiles-e1b"; tasks=("$here/heldout/tasks")
+  smoke_sel=(--task "${HELDOUT_SMOKE_TASK:-trap-cache-iter-update}"); tag="-heldout"
 else  # E1b の罠（tasks-e1b）と、後退の検出用に E1 の対照 4 件をそのまま
   pdir="$here/profiles-e1b"; tasks=("$here/tasks-e1b" "$here"/tasks/ctrl-*.yaml)
   smoke_sel=(--task "${E1B_SMOKE_TASK:-trap-csv-roundtrip}"); tag="-e1b"
@@ -34,22 +40,32 @@ fi
 # AGENT=codex で Codex 側（profiles-e1b-codex。E1b のみ）。認証は ~/.codex/auth.json の複製（copy_credentials）
 AGENT="${AGENT:-claude}"; base=claude-baseline
 if [ "$AGENT" = codex ]; then
-  [ "$suite" = e1b ] || { echo "AGENT=codex は e1b だけです" >&2; exit 2; }
-  pdir="$here/profiles-e1b-codex"; base=codex-baseline; tag="-e1b-codex"
+  [ "$suite" = e1 ] && { echo "AGENT=codex は e1b と heldout だけです" >&2; exit 2; }
+  pdir="$here/profiles-e1b-codex"; base=codex-baseline; tag="$tag-codex"
 fi
 profiles=("$pdir"/$AGENT-*.yaml)
 [ "$mode" = smoke-p0 ] && profiles=("$pdir/$base.yaml")
+# held-out の P0 = 素のベースライン: 同じプロファイルの install の先頭に、層の部品を外す手順を差し込んだ版（同じディレクトリの隠しファイル。.gitignore 済み）
+if [ "$suite" = heldout ]; then
+  for i in "${!profiles[@]}"; do
+    f="${profiles[$i]}"; [ "$(basename "$f" .yaml)" = "$base" ] || continue
+    g="$(dirname "$f")/.p0.$(basename "$f")"
+    awk '{print} /^install:/{print "  - run: '"'"'sh {profile_dir}/../heldout/tools/strip-layer.sh {workdir}'"'"'     # held-out の P0: v0.1 の層の部品を外す"}' "$f" > "$g"
+    profiles[$i]="$g"
+  done
+fi
 
 if [ "$mode" = dry ]; then
   out="$(mktemp -d)"
   prof="$out/profiles"; mkdir -p "$prof"
-  for f in "$pdir"/claude-*.yaml; do   # 認証を外し、模擬 CLI を使う。ほかは本物のプロファイルと同じ
+  for f in "${profiles[@]}"; do   # 認証を外し、模擬 CLI を使う。ほかは本物のプロファイルと同じ（held-out の P0 は層を外した版）
+    n="$(basename "$f")"; n="${n#.p0.}"
     sed -e "s#{profile_dir}#$pdir#g" -e "s#copy: static-rules#copy: $pdir/static-rules#" \
-        -e '/^inherit_env:/d' -e '/^billing:/d' -e '/^hash_paths:/d' "$f" > "$prof/$(basename "$f")"
+        -e '/^inherit_env:/d' -e '/^billing:/d' -e '/^hash_paths:/d' "$f" > "$prof/$n"
     if [ "${SANDBOX:-}" = dry ]; then  # 隔離の通し確認: 模擬 CLI も bubblewrap の中で動かす
-      printf 'executable: ["%s", "%s", "%s"]\n' "$here/tools/sandbox-run.sh" "$PY" "$here/tools/fake_claude.py" >> "$prof/$(basename "$f")"
+      printf 'executable: ["%s", "%s", "%s"]\n' "$here/tools/sandbox-run.sh" "$PY" "$here/tools/fake_claude.py" >> "$prof/$n"
     else
-      printf 'executable: ["%s", "%s"]\n' "$PY" "$here/tools/fake_claude.py" >> "$prof/$(basename "$f")"
+      printf 'executable: ["%s", "%s"]\n' "$PY" "$here/tools/fake_claude.py" >> "$prof/$n"
     fi
   done
   profiles=("$prof"/claude-*.yaml)
@@ -62,7 +78,7 @@ else
   out="$OUT_ROOT/$mode$tag"; mkdir -p "$out"
   case "$mode" in
     smoke) trials=1; extra=("${smoke_sel[@]}");;
-    smoke-p0) trials=1; extra=(--tag e1b);;          # E1b の罠だけ（E1 の対照は含めない）
+    smoke-p0) trials=1; extra=(--tag e1b); [ "$suite" = heldout ] && extra=(--tag heldout-trap);;  # 罠だけ（対照は含めない）
     full) trials="${TRIALS:-2}"; extra=(--tag verify-layer);;
   esac
 fi
@@ -85,7 +101,7 @@ if [ "$mode" != dry ] && [ "${SANDBOX:-on}" != off ]; then
 fi
 # 実行全体の費用の上限（推定額）。E1 は従来どおり 30。E1b は 1 試行の上限 1.5 USD（タスク YAML）に合わせて、smoke 5・smoke-p0 10・full 30
 cap=30
-if [ "$suite" = e1b ]; then case "$mode" in smoke) cap=5;; smoke-p0) cap=10;; esac; fi
+if [ "$suite" != e1 ]; then case "$mode" in smoke) cap=5;; smoke-p0) cap=10;; esac; fi
 
 # キャッシュは使わない（隠しテストなどタスク YAML の外にある採点の変更が、キャッシュのキーに入らないため）。作業の場所も出力先にする
 cd "$out"

@@ -29,10 +29,13 @@ REF = EVAL / "reference"
 if task is None:  # E1b: タスク YAML（tasks-e1b/）の依頼文と突き合わせる（AHE の Python には PyYAML がある）
     import yaml
 
-    for y in sorted((EVAL / "tasks-e1b").glob("*.yaml")):
-        d = yaml.safe_load(y.read_text(encoding="utf-8"))
-        if str(d.get("prompt", "")).strip() and str(d["prompt"]).strip() in prompt:
-            task, REF = d["id"], EVAL / "reference-e1b"
+    for tdir, rdir in (("tasks-e1b", "reference-e1b"), ("heldout/tasks", "heldout/reference")):  # held-out も同じ形
+        for y in sorted((EVAL / tdir).glob("*.yaml")):
+            d = yaml.safe_load(y.read_text(encoding="utf-8"))
+            if str(d.get("prompt", "")).strip() and str(d["prompt"]).strip() in prompt:
+                task, REF = d["id"], EVAL / rdir
+                break
+        if task is not None:
             break
 variant = os.environ.get("FAKE_VARIANT", "fixed")
 cwd = Path.cwd()
