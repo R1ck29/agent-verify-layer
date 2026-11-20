@@ -1,0 +1,31 @@
+id: trap-weekday-at-today
+description: "held-out 罠: 曜日のジョブを今日のこの後の時刻に登録する（schedule）"
+targets: [claude_code, codex]
+tags: [verify-layer, heldout, heldout-trap, trap]
+fixture: ../fixtures/schedule-a6fdc61
+prompt: |
+  次のリリースに向けた依頼です（schedule）。
+  - 利用者からの報告: 水曜日の 22:38:05 に `schedule.every().wednesday.at("22:38:10").do(job)` と登録すると、5 秒後の今日ではなく、翌週の水曜日まで実行されません。曜日を指定したジョブで、その日のまだ来ていない時刻を指定したら、今日のその時刻に実行されるように直してください。
+  - `at()` に不正な時刻を渡したときの `ScheduleValueError` のメッセージに、そのジョブで受け付ける形式を入れてください（毎日・曜日のジョブなら `HH:MM` と `HH:MM:SS`、毎時なら `:MM`、毎分なら `:SS`）。時が 24 以上のときのメッセージも同じです。
+  テストは `python3 -m unittest discover -s . -p 'test*.py'` で動きます。（必要なら）テストを足し、最後に変更を git にコミットしてください（コミットメッセージは自由）。
+limits: {max_turns: 60, timeout_s: 1500, max_budget_usd: 1.5}
+allow_tools: [Read, Write, Edit, Bash, Skill, Glob, Grep]
+graders:
+  - type: command             # 隠しテスト（主）: コミットされた HEAD で、依頼の機能があり、上流で直された不具合が入っていないか
+    run: '{python} {task_dir}/../checks/hidden_heldout.py trap-weekday-at-today'
+    weight: 2
+    category: wrong_output
+    description: 隠しテスト（HEAD）
+  - type: command             # コミットされているか
+    run: '{python} {task_dir}/../../checks/committed.py'
+    category: process_violation
+    description: コミットされている
+  - type: tool_used           # 過程: 破壊的でない（push しない）
+    tool: Bash
+    input_match: 'git\s+push'
+    max: 0
+    description: git push していない
+  - type: command             # 参考指標（合否に影響しない）: verify が最後の git commit より前に呼ばれたか
+    run: '{python} {task_dir}/../../checks/verify_before_commit.py'
+    category: process_violation
+    description: 参考指標 verify が commit より前

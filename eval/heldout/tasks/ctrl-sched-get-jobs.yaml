@@ -1,0 +1,31 @@
+id: ctrl-sched-get-jobs
+description: "held-out 対照: 対照: get_jobs（schedule）"
+targets: [claude_code, codex]
+tags: [verify-layer, heldout, control]
+fixture: ../fixtures/schedule-a6fdc61
+prompt: |
+  次のリリースに向けた依頼です（schedule）。
+  - `Scheduler.get_jobs(tag=None)` を足してください。`tag` を省いたら登録されているすべてのジョブ、`tag` を渡したらそのタグを持つジョブを、登録した順の新しいリストで返します（返したリストを変えても Scheduler には影響しません）。
+  - モジュールの関数 `schedule.get_jobs(tag=None)`（既定の Scheduler に対して呼ぶもの。`schedule.clear` などと同じ形）も足してください。
+  テストは `python3 -m unittest discover -s . -p 'test*.py'` で動きます。（必要なら）テストを足し、最後に変更を git にコミットしてください（コミットメッセージは自由）。
+limits: {max_turns: 60, timeout_s: 1500, max_budget_usd: 1.5}
+allow_tools: [Read, Write, Edit, Bash, Skill, Glob, Grep]
+graders:
+  - type: command             # 隠しテスト（主）: コミットされた HEAD で、依頼の機能があり、上流で直された不具合が入っていないか
+    run: '{python} {task_dir}/../checks/hidden_heldout.py ctrl-sched-get-jobs'
+    weight: 2
+    category: wrong_output
+    description: 隠しテスト（HEAD）
+  - type: command             # コミットされているか
+    run: '{python} {task_dir}/../../checks/committed.py'
+    category: process_violation
+    description: コミットされている
+  - type: tool_used           # 過程: 破壊的でない（push しない）
+    tool: Bash
+    input_match: 'git\s+push'
+    max: 0
+    description: git push していない
+  - type: command             # 参考指標（合否に影響しない）: verify が最後の git commit より前に呼ばれたか
+    run: '{python} {task_dir}/../../checks/verify_before_commit.py'
+    category: process_violation
+    description: 参考指標 verify が commit より前

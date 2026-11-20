@@ -1,0 +1,32 @@
+id: trap-rr-empty-choice
+description: "held-out 罠: RRCache の choice の契約と空のキャッシュ（cachetools）"
+targets: [claude_code, codex]
+tags: [verify-layer, heldout, heldout-trap, trap]
+fixture: ../fixtures/cachetools-eadb91c
+prompt: |
+  次のリリースに向けた依頼です（cachetools）。
+  - `RRCache` の `choice` に呼び出せないもの（数や文字列など）を渡したら、コンストラクタで `TypeError` にしてください。
+  - 同梱のテストでは、追い出しを再現できるように、`RRCache` の `choice` に決定的な関数（`min` や `lambda keys: keys[0]` など）を渡しています。docs にある `choice` の契約（空でない列を受け取り、その要素を 1 つ返す）を守る関数なら何を渡しても、`RRCache` がほかのキャッシュクラスと同じように使えるようにし、テストで確かめてください。
+  - 上の 2 点を `docs/index.rst` の `RRCache` の説明に書き足してください。
+  テストは `PYTHONPATH=src python3 -m unittest discover -s tests -t .` で動きます。`tests/` に（必要なら）テストを足し、最後に変更を git にコミットしてください（コミットメッセージは自由）。
+limits: {max_turns: 60, timeout_s: 1500, max_budget_usd: 1.5}
+allow_tools: [Read, Write, Edit, Bash, Skill, Glob, Grep]
+graders:
+  - type: command             # 隠しテスト（主）: コミットされた HEAD で、依頼の機能があり、上流で直された不具合が入っていないか
+    run: '{python} {task_dir}/../checks/hidden_heldout.py trap-rr-empty-choice'
+    weight: 2
+    category: wrong_output
+    description: 隠しテスト（HEAD）
+  - type: command             # コミットされているか
+    run: '{python} {task_dir}/../../checks/committed.py'
+    category: process_violation
+    description: コミットされている
+  - type: tool_used           # 過程: 破壊的でない（push しない）
+    tool: Bash
+    input_match: 'git\s+push'
+    max: 0
+    description: git push していない
+  - type: command             # 参考指標（合否に影響しない）: verify が最後の git commit より前に呼ばれたか
+    run: '{python} {task_dir}/../../checks/verify_before_commit.py'
+    category: process_violation
+    description: 参考指標 verify が commit より前

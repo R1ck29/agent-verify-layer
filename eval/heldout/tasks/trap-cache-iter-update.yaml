@@ -1,0 +1,32 @@
+id: trap-cache-iter-update
+description: "held-out 罠: 走査しながら既存のキーの値を置き換える（cachetools）"
+targets: [claude_code, codex]
+tags: [verify-layer, heldout, heldout-trap, trap]
+fixture: ../fixtures/cachetools-5af4208
+prompt: |
+  次のリリースに向けた依頼です（cachetools）。
+  - 利用者からの報告: `TTLCache` を `for key in cache: cache[key] = refresh(cache[key])` のように走査しながら値を更新すると、最初の 1 件しか更新されません。キャッシュを走査しながら既存のキーの値を置き換えても、どのキャッシュクラスでも、各キーがちょうど 1 回ずつ現れるようにしてください。
+  - `TTLCache` の `repr` の最後に `ttl` を出してください（例: `TTLCache({'a': 1}, maxsize=2, currsize=1, ttl=5)`）。
+  - 走査について `docs/index.rst` に 1 文で書き足してください。
+  テストは `PYTHONPATH=src python3 -m unittest discover -s tests -t .` で動きます。`tests/` に（必要なら）テストを足し、最後に変更を git にコミットしてください（コミットメッセージは自由）。
+limits: {max_turns: 60, timeout_s: 1500, max_budget_usd: 1.5}
+allow_tools: [Read, Write, Edit, Bash, Skill, Glob, Grep]
+graders:
+  - type: command             # 隠しテスト（主）: コミットされた HEAD で、依頼の機能があり、上流で直された不具合が入っていないか
+    run: '{python} {task_dir}/../checks/hidden_heldout.py trap-cache-iter-update'
+    weight: 2
+    category: wrong_output
+    description: 隠しテスト（HEAD）
+  - type: command             # コミットされているか
+    run: '{python} {task_dir}/../../checks/committed.py'
+    category: process_violation
+    description: コミットされている
+  - type: tool_used           # 過程: 破壊的でない（push しない）
+    tool: Bash
+    input_match: 'git\s+push'
+    max: 0
+    description: git push していない
+  - type: command             # 参考指標（合否に影響しない）: verify が最後の git commit より前に呼ばれたか
+    run: '{python} {task_dir}/../../checks/verify_before_commit.py'
+    category: process_violation
+    description: 参考指標 verify が commit より前
