@@ -15,6 +15,7 @@ allow_tools: [Read, Write, Edit, Bash, Skill, Glob, Grep]
 graders:
   - type: command             # 隠しテスト（主）: コミットされた HEAD で、不具合が再発していないか・機能が仕様どおりか
     run: '{python} {task_dir}/../checks/hidden_e1b.py trap-text-of'
+    ro: ['{task_dir}/../checks']   # AHE v0.10 の採点は隔離され、コマンドの絶対パス以外は見えない。入口が import する検査を渡す
     weight: 2
     category: wrong_output
     description: 隠しテスト（HEAD）

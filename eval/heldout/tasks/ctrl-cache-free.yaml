@@ -13,6 +13,7 @@ allow_tools: [Read, Write, Edit, Bash, Skill, Glob, Grep]
 graders:
   - type: command             # 隠しテスト（主）: コミットされた HEAD で、依頼の機能があり、上流で直された不具合が入っていないか
     run: '{python} {task_dir}/../checks/hidden_heldout.py ctrl-cache-free'
+    ro: ['{task_dir}/../checks', '{task_dir}/../../checks/hidden.py']   # AHE v0.10 の採点は隔離され、コマンドの絶対パス以外は見えない。入口が import する検査と共通の道具を渡す
     weight: 2
     category: wrong_output
     description: 隠しテスト（HEAD）

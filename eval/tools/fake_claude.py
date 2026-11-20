@@ -3,7 +3,7 @@
 
 本物の代わりに、依頼の文面から対象のタスクを見分け、eval/reference/<task>/<variant>/（E1b は eval/reference-e1b/）の参照解を作業ツリーに当てて、git にコミットする。
 プロファイルの settings.json に hook があれば、本物の Claude Code と同じ入力（stdin の JSON）で、その hook を実際に実行する。
-環境変数: FAKE_VARIANT = fixed（既定）| buggy | none、FAKE_VERIFY = 1 なら Skill(verify) を Edit の後・コミットの前に呼ぶ。
+環境変数: FAKE_VARIANT = fixed（既定）| buggy | none、FAKE_COST = 1 試行の費用（既定 0。実行中の --max-cost-usd の確認用）、FAKE_PEEK = 1 なら参照解のパスを Read する（隔離の確認）、FAKE_VERIFY = 1 なら Skill(verify) を Edit の後・コミットの前に呼ぶ。
 """
 import json
 import os
@@ -24,9 +24,13 @@ KEYS = {
     "format_problems": "ctrl-format-problems", "managed_events": "ctrl-managed-events",
 }
 prompt = sys.stdin.read()
+try:
+    import yaml
+except ImportError:  # 隔離の中（SANDBOX=dry）の Python には PyYAML がない。E1b・held-out の依頼文の突き合わせは行わない
+    yaml = None
 task = next((t for k, t in KEYS.items() if k in prompt), None)
 REF = EVAL / "reference"
-if task is None:  # E1b: タスク YAML（tasks-e1b/）の依頼文と突き合わせる（AHE の Python には PyYAML がある）
+if task is None and yaml is not None:  # E1b: タスク YAML（tasks-e1b/）の依頼文と突き合わせる（AHE の Python には PyYAML がある）
     import yaml
 
     for tdir, rdir in (("tasks-e1b", "reference-e1b"), ("heldout/tasks", "heldout/reference")):  # held-out も同じ形
@@ -71,6 +75,10 @@ def run_hooks(matcher_tool, hook_input):
                   "outcome": "success" if r.returncode == 0 else "error"})
 
 
+if os.environ.get("FAKE_PEEK") == "1":  # 参照解・隠しテストを読みに行く模擬エージェント（SANDBOX=dry）。見えたかを標準エラーに出し、読んだ記録は leak 検査が INVALID にする
+    for peek in (EVAL / "heldout" / "reference", EVAL / "heldout" / "checks" / "hidden_heldout.py", EVAL / "reference-e1b"):
+        tool("Read", {"file_path": str(peek)})
+        print(f"PEEK {peek.relative_to(EVAL)} readable={peek.exists()}", file=sys.stderr)
 emit({"type": "system", "subtype": "init", "claude_code_version": "9.9.9", "model": "fake", "skills": ["verify"], "plugins": []})
 base = {"session_id": "fake-session", "cwd": str(cwd)}
 if task and variant != "none":
@@ -88,7 +96,7 @@ if os.environ.get("FAKE_VERIFY") == "1":
 if task and variant != "none":
     subprocess.run(["git", "add", "-A"], cwd=cwd, check=True)
     tool("Bash", {"command": "git commit -m change"})
-    subprocess.run(["git", "commit", "-q", "-m", "change"], cwd=cwd, check=True)
+    subprocess.run(["git", "commit", "-q", "--allow-empty", "-m", "change"], cwd=cwd, check=True)
     run_hooks("Bash", {**base, "tool_name": "Bash", "tool_input": {"command": "git commit -m change"}})
 emit({"type": "result", "subtype": "success", "is_error": False, "result": "done", "num_turns": len(events) + 1, "duration_ms": 1,
-      "total_cost_usd": 0.0, "usage": {"input_tokens": 10, "output_tokens": 5}})
+      "total_cost_usd": float(os.environ.get("FAKE_COST", "0")), "usage": {"input_tokens": 10, "output_tokens": 5}})
