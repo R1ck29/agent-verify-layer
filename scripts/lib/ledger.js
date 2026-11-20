@@ -1,6 +1,9 @@
 'use strict';
 const fs = require('node:fs');
+const os = require('node:os');
 const path = require('node:path');
+const { randomUUID } = require('node:crypto');
+const { performance } = require('node:perf_hooks');
 const { gitPath } = require('./git');
 
 const LEDGER_VERSION = 1;
@@ -32,44 +35,86 @@ function sleepMs(ms) {
   Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
 }
 
-// Runs fn while holding the ledger's lock (an atomically created directory), so "is this SHA
-// already recorded?" and "record it" cannot interleave across hook processes. The wait is bounded
-// and a lock older than staleMs (crashed holder) is taken over: a hook never holds up a commit.
+function deadOwner(lock, hostname) {
+  const files = fs.readdirSync(lock);
+  if (files.length !== 1) return null;
+  const match = /^owner-(\d+)-[a-f0-9-]{36}$/.exec(files[0]);
+  const pid = match ? Number(match[1]) : 0;
+  if (!Number.isSafeInteger(pid) || pid < 1) return null;
+  const file = path.join(lock, files[0]);
+  if (!fs.lstatSync(file).isFile() || fs.readFileSync(file, 'utf8') !== hostname) return null;
+  try {
+    process.kill(pid, 0);
+  } catch (e) {
+    if (e.code === 'ESRCH') return file;
+  }
+  return null;
+}
+
+function removeLock(lock, owner) {
+  // Only the process that unlinks this acquisition's unique marker may remove its directory.
+  fs.unlinkSync(owner);
+  fs.rmdirSync(lock);
+}
+
+// An atomic directory creation keeps the SHA check and append together across hook processes.
+// For an old lock, only a confirmed dead local owner can be cleaned up.
 // Returns { locked: false } when the lock could not be had (the caller records nothing).
-function withLock(cwd, fn, { waitMs, staleMs = 15000 } = {}) {
-  const wait = waitMs !== undefined ? waitMs : Number(process.env.VL_LOCK_WAIT_MS) || 2500;
+function withLock(cwd, fn, { waitMs = Number(process.env.VL_LOCK_WAIT_MS) || 2500, staleMs = 15000 } = {}) {
+  const wait = Number.isFinite(waitMs) ? Math.max(0, waitMs) : 2500;
   const dir = ledgerDir(cwd);
   if (!dir) return { locked: false };
   const lock = path.join(dir, 'ledger.lock');
+  const hostname = os.hostname();
+  const owner = path.join(lock, `owner-${process.pid}-${randomUUID()}`);
   try {
     fs.mkdirSync(dir, { recursive: true });
   } catch {
     return { locked: false };
   }
-  const t0 = Date.now();
+  const deadline = performance.now() + wait;
   for (;;) {
+    if (performance.now() >= deadline) return { locked: false };
     try {
       fs.mkdirSync(lock);
       break;
     } catch (e) {
       if (e.code !== 'EEXIST') return { locked: false };
       try {
-        if (Date.now() - fs.statSync(lock).mtimeMs > staleMs) {
-          fs.rmdirSync(lock);
-          continue;
+        const current = fs.lstatSync(lock);
+        if (!current.isDirectory()) return { locked: false };
+        if (Date.now() - current.mtimeMs > staleMs) {
+          const staleOwner = deadOwner(lock, hostname);
+          if (staleOwner) {
+            removeLock(lock, staleOwner);
+            continue;
+          }
         }
-      } catch {
-        continue; // vanished between the checks: try to take it
+      } catch (inspectionError) {
+        if (inspectionError.code === 'ENOENT') continue;
+        return { locked: false };
       }
-      if (Date.now() - t0 > wait) return { locked: false };
-      sleepMs(10 + Math.floor(Math.random() * 15));
+      const remaining = deadline - performance.now();
+      if (remaining <= 0) return { locked: false };
+      sleepMs(Math.min(remaining, 10 + Math.floor(Math.random() * 15)));
     }
+  }
+  try {
+    fs.writeFileSync(owner, hostname, { flag: 'wx' });
+  } catch {
+    try {
+      fs.rmSync(owner, { force: true });
+      fs.rmdirSync(lock);
+    } catch {
+      /* The acquisition failed and no callback ran. */
+    }
+    return { locked: false };
   }
   try {
     return { locked: true, value: fn() };
   } finally {
     try {
-      fs.rmdirSync(lock);
+      removeLock(lock, owner);
     } catch {
       /* already gone */
     }

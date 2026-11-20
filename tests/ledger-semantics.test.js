@@ -184,16 +184,17 @@ t('XREVIEW #9: a lock held by someone else never blocks the commit: bounded wait
   assert.equal(commitRows(repo).length, 0);
 });
 
-t('XREVIEW #9: a stale lock (crashed holder) is taken over', async (repo) => {
+t('XREVIEW #9: an old lock with no known owner is left in place', async (repo) => {
   repo.write('src/a.js', 'one\n');
   repo.commit('init');
   const lock = path.join(path.dirname(repo.ledgerFile()), 'ledger.lock');
   fs.mkdirSync(lock, { recursive: true });
   const old = new Date(Date.now() - 120000);
   fs.utimesSync(lock, old, old);
-  const r = await spawnHook(repo, commitInput(repo));
+  const r = await spawnHook(repo, commitInput(repo), { VL_LOCK_WAIT_MS: '300' });
   assert.equal(r.code, 0);
-  assert.equal(commitRows(repo).length, 1);
+  assert.equal(commitRows(repo).length, 0);
+  assert.equal(fs.existsSync(lock), true);
 });
 
 // --- consecutive amend ----------------------------------------------------------------------------
