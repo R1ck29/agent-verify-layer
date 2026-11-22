@@ -5,7 +5,7 @@ tags: [verify-layer, heldout, heldout-trap, trap]
 fixture: ../fixtures/cachetools-16e8889
 prompt: |
   次のリリースに向けた依頼です（cachetools）。
-  - 利用者からの報告: `getsizeof` を指定したキャッシュで、既存のキーの値をより大きな値に置き換えると、置き換えたあとの合計が `maxsize` に収まる場合でも、関係のない別のエントリが追い出されることがあります。収まる場合は何も追い出さないように直してください（どのキャッシュクラスでも同じです）。
+  - 利用者からの報告: `getsizeof` を指定したキャッシュで、既存のキーをより大きな値に更新したとき、更新後も `maxsize` に収まるのに別のエントリが追い出されることがあります。この不具合を直してください。
   - `Cache` とその派生クラスのコンストラクタで、`maxsize` が負の数なら `ValueError` にしてください（0 はこれまでどおり受け付けます）。
   - 上の 2 点を `docs/index.rst` の該当する説明に 1〜2 文で書き足してください。
   テストは `PYTHONPATH=src python3 -m unittest discover -s tests -t .` で動きます。`tests/` に（必要なら）テストを足し、最後に変更を git にコミットしてください（コミットメッセージは自由）。

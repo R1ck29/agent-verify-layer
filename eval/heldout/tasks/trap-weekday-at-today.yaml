@@ -5,7 +5,7 @@ tags: [verify-layer, heldout, heldout-trap, trap]
 fixture: ../fixtures/schedule-a6fdc61
 prompt: |
   次のリリースに向けた依頼です（schedule）。
-  - 利用者からの報告: 水曜日の 22:38:05 に `schedule.every().wednesday.at("22:38:10").do(job)` と登録すると、5 秒後の今日ではなく、翌週の水曜日まで実行されません。曜日を指定したジョブで、その日のまだ来ていない時刻を指定したら、今日のその時刻に実行されるように直してください。
+  - 利用者からの報告: 曜日を指定したジョブ（`schedule.every().wednesday.at(...)` など）で、当日のまだ来ていない時刻を指定して登録したにもかかわらず、今日ではなく翌週まで実行されないことがあります。曜日を指定したジョブで、その日のまだ来ていない時刻を指定したら、今日のその時刻に実行されるように直してください。
   - `at()` に不正な時刻を渡したときの `ScheduleValueError` のメッセージに、そのジョブで受け付ける形式を入れてください（毎日・曜日のジョブなら `HH:MM` と `HH:MM:SS`、毎時なら `:MM`、毎分なら `:SS`）。時が 24 以上のときのメッセージも同じです。
   テストは `python3 -m unittest discover -s . -p 'test*.py'` で動きます。（必要なら）テストを足し、最後に変更を git にコミットしてください（コミットメッセージは自由）。
 limits: {max_turns: 60, timeout_s: 1500, max_budget_usd: 1.5}

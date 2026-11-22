@@ -8,7 +8,7 @@
 #   ./run-eval.sh full e1b          E1b: 罠すべて + E1 の対照 4 件 × 3 プロファイル × 2 回
 #   ./run-eval.sh dry [SUITE]       模擬 CLI でパイプライン全体を通す（モデルを呼ばない・認証不要）。結果は捨てる
 #   ./run-eval.sh plan [SUITE]      full と同じ定義で、検証・doctor・費用の見積もりまでで止まる（モデルを呼ばない。本番の前の確認）
-#   ./run-eval.sh smoke-p0 heldout  held-out: 罠すべて × P0 だけ × 1 回（天井の確認。eval/heldout/README.md）
+#   ./run-eval.sh smoke-p0 heldout  held-out: 罠すべて × P0 だけ × 1 回（天井の確認。eval/heldout/README.md）。TRIALS=2 で較正スモーク（追補 B-0）
 #   ./run-eval.sh full heldout      held-out: 罠 6 + 対照 3 × 3 プロファイル × TRIALS（決定的な評価は TRIALS=3。PREREG-v02.md）
 #   SUITE=heldout の P0 は、fixture から v0.1 の層の部品（verify スキル・チェックリスト）を外して始める（heldout/tools/strip-layer.sh）
 # smoke / smoke-p0 / full は、ログイン済みの外側のシェルで、CLAUDE_CODE_OAUTH_TOKEN（claude setup-token で作る）を export してから実行する。
@@ -118,7 +118,7 @@ else
   out="$OUT_ROOT/$outmode$tag"; mkdir -p "$out"
   case "$mode" in
     smoke) trials=1; extra=("${smoke_sel[@]}");;
-    smoke-p0) trials=1; extra=(--tag e1b); [ "$suite" = heldout ] && extra=(--tag heldout-trap);;  # 罠だけ（対照は含めない）
+    smoke-p0) trials="${TRIALS:-1}"; extra=(--tag e1b); [ "$suite" = heldout ] && extra=(--tag heldout-trap);;  # 罠だけ（対照は含めない）
     full) trials="${TRIALS:-2}"; [ "$suite" = heldout ] && trials="${TRIALS:-3}"; extra=(--tag verify-layer);;  # held-out の決定的な評価は 3 試行（PREREG-v02）
   esac
   # 隔離版のプロファイルは元と同じディレクトリに隠しファイルで作る（相対パスの install・hash_paths をそのまま使うため。.gitignore 済み）

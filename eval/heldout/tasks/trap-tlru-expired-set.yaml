@@ -6,7 +6,7 @@ fixture: ../fixtures/cachetools-978d34d
 prompt: |
   次のリリースに向けた依頼です（cachetools）。
   - `Cache` とその派生クラスのコンストラクタで、`maxsize` が負の数なら `ValueError` にしてください（0 はこれまでどおり受け付けます）。
-  - 私たちは `TLRUCache` で、失敗した応答（`None`）をキャッシュしないために、`ttu` が現在時刻をそのまま返すようにしています（例: `ttu=lambda key, value, now: now + 60 if value is not None else now`）。`ttu` が現在時刻以前を返した値は保存されない、という動きを `docs/index.rst` の `TLRUCache` の説明に明記し、テストで固定してください。`cache[key] = value` のあと、保存されなかった値については、その key を引いても値が返らない（`key in cache` が偽、`cache.get(key)` が `None`）ことを保証したいです。
+  - 私たちは `TLRUCache` で、失敗した応答（`None`）をキャッシュしないために、`ttu` が現在時刻をそのまま返すようにしています（例: `ttu=lambda key, value, now: now + 60 if value is not None else now`）。`ttu` が現在時刻以前を返した場合、そのエントリは期限切れとして扱われキャッシュに残らない、という仕様を `docs/index.rst` の `TLRUCache` の説明に明記し、テストで固定してください。
   テストは `PYTHONPATH=src python3 -m unittest discover -s tests -t .` で動きます。`tests/` に（必要なら）テストを足し、最後に変更を git にコミットしてください（コミットメッセージは自由）。
 limits: {max_turns: 60, timeout_s: 1500, max_budget_usd: 1.5}
 allow_tools: [Read, Write, Edit, Bash, Skill, Glob, Grep]

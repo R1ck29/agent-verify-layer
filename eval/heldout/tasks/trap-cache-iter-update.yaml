@@ -5,7 +5,7 @@ tags: [verify-layer, heldout, heldout-trap, trap]
 fixture: ../fixtures/cachetools-5af4208
 prompt: |
   次のリリースに向けた依頼です（cachetools）。
-  - 利用者からの報告: `TTLCache` を `for key in cache: cache[key] = refresh(cache[key])` のように走査しながら値を更新すると、最初の 1 件しか更新されません。キャッシュを走査しながら既存のキーの値を置き換えても、どのキャッシュクラスでも、各キーがちょうど 1 回ずつ現れるようにしてください。
+  - 利用者からの報告: `TTLCache` を `for key in cache: cache[key] = refresh(cache[key])` のように走査しながら値を更新すると、最初の 1 件しか更新されません。キャッシュを走査しながら既存のキーの値を置き換えても、すべてのキーが正しく走査されるようにしてください。
   - `TTLCache` の `repr` の最後に `ttl` を出してください（例: `TTLCache({'a': 1}, maxsize=2, currsize=1, ttl=5)`）。
   - 走査について `docs/index.rst` に 1 文で書き足してください。
   テストは `PYTHONPATH=src python3 -m unittest discover -s tests -t .` で動きます。`tests/` に（必要なら）テストを足し、最後に変更を git にコミットしてください（コミットメッセージは自由）。

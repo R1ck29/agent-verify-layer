@@ -5,7 +5,7 @@ tags: [verify-layer, heldout, heldout-trap, trap]
 fixture: ../fixtures/moreit-cb75bb9
 prompt: |
   次のリリースに向けた依頼です（more-itertools）。
-  - `running_min` と `running_max` に、キーワード専用の `key` 引数（既定は `None`）を足してください。意味は組み込みの `min` / `max` の `key` と同じです。`maxlen` があってもなくても、各時点の結果は、その時点の窓（`maxlen` がなければそこまでのすべての値）に組み込みの `min(..., key=key)` / `max(..., key=key)` を当てたものと同じ要素にしてください。型スタブ（`recipes.pyi`）も合わせてください。
+  - `running_min` と `running_max` に、キーワード専用の `key` 引数（既定は `None`）を足してください。意味は組み込みの `min` / `max` の `key` と同じです。型スタブ（`recipes.pyi`）も合わせてください。
   - `running_statistics` が返す `Stats` に、`maximum - minimum` を返す読み取り専用の `range` を足してください。
   テストは `python3 -m unittest discover -s tests -t .` で動きます。`tests/` に（必要なら）テストを足し、最後に変更を git にコミットしてください（コミットメッセージは自由）。
 limits: {max_turns: 60, timeout_s: 1500, max_budget_usd: 1.5}

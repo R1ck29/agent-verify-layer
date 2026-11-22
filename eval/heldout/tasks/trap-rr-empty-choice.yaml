@@ -6,7 +6,7 @@ fixture: ../fixtures/cachetools-eadb91c
 prompt: |
   次のリリースに向けた依頼です（cachetools）。
   - `RRCache` の `choice` に呼び出せないもの（数や文字列など）を渡したら、コンストラクタで `TypeError` にしてください。
-  - 同梱のテストでは、追い出しを再現できるように、`RRCache` の `choice` に決定的な関数（`min` や `lambda keys: keys[0]` など）を渡しています。docs にある `choice` の契約（空でない列を受け取り、その要素を 1 つ返す）を守る関数なら何を渡しても、`RRCache` がほかのキャッシュクラスと同じように使えるようにし、テストで確かめてください。
+  - 同梱のテストでは、追い出しを再現できるように、`RRCache` の `choice` に決定的な関数（`min` など）を渡しています。カスタムの `choice` を渡しても、`RRCache` がほかのキャッシュクラスと同じように使えるようにしてください。
   - 上の 2 点を `docs/index.rst` の `RRCache` の説明に書き足してください。
   テストは `PYTHONPATH=src python3 -m unittest discover -s tests -t .` で動きます。`tests/` に（必要なら）テストを足し、最後に変更を git にコミットしてください（コミットメッセージは自由）。
 limits: {max_turns: 60, timeout_s: 1500, max_budget_usd: 1.5}
