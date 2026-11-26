@@ -9,7 +9,7 @@ const DEFAULT_TIMEOUT = 8000;
 function git(args, opts = {}) {
   const r = spawnSync('git', ['-c', 'core.quotepath=off', ...args], {
     cwd: opts.cwd,
-    input: opts.input,
+    ...(opts.input === undefined ? { stdio: ['ignore', 'pipe', 'pipe'] } : { input: opts.input }),
     // opts.fullEnv replaces process.env entirely (see isolatedGitEnv); otherwise opts.env is merged.
     env: { ...(opts.fullEnv || process.env), GIT_OPTIONAL_LOCKS: '0', GIT_TERMINAL_PROMPT: '0', ...(opts.env || {}) },
     encoding: 'utf8',
