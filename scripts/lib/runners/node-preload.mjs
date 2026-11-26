@@ -27,6 +27,7 @@ async function install() {
   const readFile = fs.readFileSync;
   const writeFile = fs.writeFileSync;
   const realpath = fs.realpathSync;
+  const lstat = fs.lstatSync;
   const { root, testFile, output, shape } = JSON.parse(readFile(captureFile, 'utf8'));
   const testUrl = pathToFileURL(testFile).href;
   const stateKey = `vl_evidence_${randomBytes(16).toString('hex')}`;
@@ -86,10 +87,29 @@ async function install() {
     },
   });
 
+  // The nearest attributable caller decides: module loading inside Node is not a copy reference,
+  // while copy code (including module top-level code that Node's loader runs) is.
   function fromCopy() {
     const stack = new Error().stack;
-    return typeof stack === 'string' && stack.split('\n').slice(2).some((line) =>
-      line.includes(`${root}/`) || line.includes(pathToFileURL(root).href + '/'));
+    if (typeof stack !== 'string') return false;
+    for (const line of stack.split('\n').slice(2)) {
+      if (line.includes('node:internal/modules/')) return false;
+      if (line.includes(`${root}/`) || line.includes(pathToFileURL(root).href + '/')) return true;
+    }
+    return false;
+  }
+
+  // A string argument is only a reference when it names a valid, existing repository path in the copy.
+  function inputPath(value) {
+    if (value.includes('\\') || value.includes('\0')) return null;
+    const file = path.resolve(value);
+    const rel = relative(file);
+    if (!rel || rel.split('/').some((part) => ['.', '..', '.git'].includes(part))) return null;
+    try {
+      return lstat(file, { throwIfNoEntry: false }) ? file : null;
+    } catch {
+      return null;
+    }
   }
 
   function recordPath(value, attributes = {}) {
@@ -216,7 +236,10 @@ async function install() {
         const input = serializeInput(args);
         state.inputs.push(input);
         const collect = ({ type, value }) => {
-          if (type === 'str' && value) recordPath(value);
+          if (type === 'str' && value) {
+            const file = inputPath(value);
+            if (file) recordPath(file);
+          }
           if (type === 'array') value.forEach(collect);
           if (type === 'object') value.forEach(([, item]) => collect(item));
         };

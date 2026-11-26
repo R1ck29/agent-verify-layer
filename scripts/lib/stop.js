@@ -6,7 +6,7 @@ const { repoRoot, scrubbedEnv } = require('./git');
 const { requestTransaction } = require('./ledger');
 const { resolveAgent } = require('./hooks');
 const { quoteArg } = require('./shellquote');
-const { begin, finalStatus } = require('./verify-diff');
+const { begin, retire, finalStatus } = require('./verify-diff');
 
 const CLI = path.resolve(__dirname, '..', 'vl.js');
 const labels = {
@@ -29,8 +29,11 @@ function handleStart(input, opts) {
   const root = repoRoot(input.cwd || process.cwd(), { fullEnv: scrubbedEnv() });
   if (!root) return null;
   const config = loadV2Config(root);
-  if (config.mode === 'off') return null;
   const session = { agent: resolveAgent(opts.agent, input), session: input.session_id };
+  if (config.mode === 'off') {
+    retire(root, session);
+    return null;
+  }
   const state = begin(root, session, config, input.prompt);
   if (state.config.runner === 'unsupported') return null;
   return { hookSpecificOutput: {
@@ -58,8 +61,10 @@ function reasonText(result, cli, id) {
 function handleStop(input, opts) {
   if (input.hook_event_name !== 'Stop' || !input.session_id) return null;
   const root = repoRoot(input.cwd || process.cwd(), { fullEnv: scrubbedEnv() });
-  if (!root || loadV2Config(root).mode === 'off') return null;
+  if (!root) return null;
   const session = { agent: resolveAgent(opts.agent, input), session: input.session_id };
+  // The mode fixed in the request ledger at start decides; working-tree settings are not re-read.
+  // Without an active request, finalStatus throws and nothing is recorded or blocked.
   try {
     return finalStatus(root, session, (result, state, save) => {
       const shouldBlock = ['unverified', 'stale'].includes(result.status) &&

@@ -40,9 +40,22 @@ function withSnapshot(repo, id, snapshot, options, callback) {
   }
 }
 
+function archive(repo, previous) {
+  writePrivateJson(requestPath(repo, previous.id + '.state.json'), previous);
+}
+
+// An off start ends only this host and session's active request; its archived state is unchanged.
+function retire(repo, session) {
+  transaction(repo, session, (previous, _save, remove) => {
+    if (!previous) return;
+    archive(repo, previous);
+    remove();
+  });
+}
+
 function begin(repo, session, config, prompt, options = {}) {
   return transaction(repo, session, (previous, save) => {
-    if (previous) writePrivateJson(requestPath(repo, previous.id + '.state.json'), previous);
+    if (previous) archive(repo, previous);
     const id = requestId();
     const nodeDependencies = config.runner !== 'unsupported';
     const state = {
@@ -405,4 +418,4 @@ function generateConfig(repo) {
     reason: result.reason, missing: result.missing };
 }
 
-module.exports = { begin, verifyCase, withdrawCase, finalStatus, recordIntentional, generateConfig };
+module.exports = { begin, retire, verifyCase, withdrawCase, finalStatus, recordIntentional, generateConfig };

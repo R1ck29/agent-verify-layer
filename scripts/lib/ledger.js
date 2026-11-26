@@ -194,7 +194,7 @@ function requestTransaction(cwd, agent, session, fn, options) {
     } catch (err) {
       if (err.code !== 'ENOENT') throw err;
     }
-    return fn(state, (value) => writePrivateJson(file, value));
+    return fn(state, (value) => writePrivateJson(file, value), () => fs.rmSync(file, { force: true }));
   }, { ...options, gitOptions: { fullEnv: scrubbedEnv() }, lockPath: file + '.lock' });
 }
 
