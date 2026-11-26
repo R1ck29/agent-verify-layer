@@ -104,6 +104,16 @@ test('unittest rejects assertion-shaped shortcuts and comparison tampering', t =
   assert.equal(overridden.status, 'error');
 });
 
+test('unittest rejects evidence inconsistent with a bound literal expectation', t => {
+  const body = 'globals()["EXPECTED"] = "wrong"\nself.assertEqual(boundary(""), EXPECTED)';
+  const extra = 'EXPECTED = "right"';
+  const statuses = ['right', 'wrong'].map(returned =>
+    run(t, { body, extra, source: `def boundary(x): return "${returned}"\n` }).status);
+  assert.deepEqual(statuses, ['error', 'error']);
+  const valid = run(t, { body: 'self.assertEqual(boundary(""), EXPECTED)', extra });
+  assert.equal(valid.status, 'pass', JSON.stringify(valid));
+});
+
 test('unittest verifies ordered typed arguments, disallowing subclass or shared mutable input', t => {
   for (const options of [
     { body: 'self.assertEqual(boundary("wrong"), "right")' },
@@ -126,6 +136,30 @@ test('unittest verifies ordered typed arguments, disallowing subclass or shared 
     source: 'def boundary(*args): return "right"\n',
   });
   assert.equal(independent.status, 'pass', JSON.stringify(independent));
+});
+
+test('unittest records existing input paths and accepts strings with invalid path characters', t => {
+  const values = ['data/input.txt', 'data/missing.txt', 'tag/with\\separator', 'tag/with\0byte'];
+  const result = run(t, {
+    body: `self.assertEqual(boundary(${JSON.stringify(values)}), "right")`,
+    args: [{ type: 'list', value: values.map(value => ({ type: 'str', value })) }],
+    files: { 'data/input.txt': 'data' },
+  });
+  assert.equal(result.status, 'pass', JSON.stringify(result));
+  assert.deepEqual(result.references, [{ path: 'data/input.txt' }]);
+});
+
+test('unittest monitors pathlib stat, lstat and failed exists checks', t => {
+  const result = run(t, { source: `from pathlib import Path
+def boundary(value):
+    Path("data/stat.txt").stat()
+    Path("data/lstat.txt").lstat()
+    return "wrong" if Path("data/missing.flag").exists() else "right"
+`, files: { 'data/stat.txt': 'data', 'data/lstat.txt': 'data' } });
+  assert.equal(result.status, 'pass', JSON.stringify(result));
+  assert.deepEqual(result.references.map(({ path }) => path).sort(), [
+    'data/lstat.txt', 'data/missing.flag', 'data/stat.txt',
+  ]);
 });
 
 test('unittest returns attempted paths, access mode, listing and loaded module metadata', t => {

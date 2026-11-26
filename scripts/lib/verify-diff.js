@@ -129,7 +129,7 @@ function referenceState(root, reference) {
     if (!within(root, real)) throw new Error('Reference resolves outside the isolated copy');
     break;
   }
-  function statInfo(file, follow) {
+  function statInfo(file, attributes, follow = false) {
     let stat;
     try {
       stat = (follow ? fs.statSync : fs.lstatSync)(file);
@@ -138,15 +138,24 @@ function referenceState(root, reference) {
       throw error;
     }
     const mode = stat.mode & 0o777;
-    if (stat.isSymbolicLink()) return { kind: 'symlink', mode, target: fs.readlinkSync(file), resolved: statInfo(file, true) };
-    if (stat.isFile()) return reference.metadataOnly ? { kind: 'file', mode } :
+    if (stat.isSymbolicLink()) {
+      return { kind: 'symlink', mode, target: fs.readlinkSync(file), resolved: statInfo(file, attributes, true) };
+    }
+    if (stat.isFile()) return attributes.metadataOnly ? { kind: 'file', mode } :
       { kind: 'file', mode, hash: hash(fs.readFileSync(file)) };
-    if (stat.isDirectory()) return reference.entries ?
+    if (stat.isDirectory()) return attributes.entries ?
       { kind: 'directory', mode, entries: fs.readdirSync(file).filter((entry) => entry !== '__pycache__').sort() } :
       { kind: 'directory', mode };
     throw new Error('Unsupported initial state for ' + name);
   }
-  const result = statInfo(target, false);
+  const ancestors = [];
+  let parent = root;
+  for (const segment of name.split('/').slice(0, -1)) {
+    parent = path.join(parent, segment);
+    ancestors.push(statInfo(parent, { metadataOnly: true }));
+  }
+  const result = statInfo(target, reference);
+  if (ancestors.length) result.ancestors = ancestors;
   if (reference.access !== undefined) {
     if (!Number.isInteger(reference.access) || reference.access < 0 || reference.access > 7) {
       throw new Error('Unrecognized requested path permissions');

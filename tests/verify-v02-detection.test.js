@@ -65,6 +65,17 @@ test('runner detection recognizes pytest-style functions and classes, even with 
   ]);
 });
 
+test('pytest detection includes files containing only inherited TestCase methods', { skip: !hasPytest }, (t) => {
+  const result = detect(t, {
+    'test_function.py': 'def test_example(): assert True\n',
+    'helper.py': testcase,
+    'test_child.py': 'import helper\nclass Child(helper.Tests): pass\n',
+  });
+  assert.equal(result.config.runner, 'pytest', result.reason);
+  assert.deepEqual(result.files, ['test_child.py', 'test_function.py']);
+  assert.ok(result.tests.some(({ id }) => id === 'test_child.py::Child::test_example'));
+});
+
 test('runner detection applies pytest public configuration and reports lost test identifiers', {
   skip: !hasPytest,
 }, (t) => {

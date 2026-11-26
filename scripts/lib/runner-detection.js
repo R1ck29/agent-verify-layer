@@ -117,7 +117,7 @@ function detectRunner(snapshot, { withCopy, remaining = () => 30000, config = {}
     let missing;
     if (hasPytest && pythonTests.length && (publicPytest || isPytest)) {
       runner = 'pytest';
-      options = { ...pythonConfig, existingTestFiles: filesOf(pythonTests) };
+      options = { ...pythonConfig, existingTestFiles: sorted([...filesOf(pythonTests), ...python.testcaseFiles]) };
       const result = collect(pytest.collectSuite, options);
       if (!result.ok) return unsupported(result.reason);
       tests = result.tests;

@@ -2,9 +2,10 @@
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
+const fs = require('node:fs');
 const path = require('node:path');
 const { Repo, VL, run } = require('./helpers');
-const { requestTransaction } = require('../scripts/lib/ledger');
+const { requestPath, requestTransaction } = require('../scripts/lib/ledger');
 
 function fixture(t, mode, runner = 'node') {
   const repo = new Repo();
@@ -62,6 +63,56 @@ test('observe, off, unsupported and missing starts all permit completion', (t) =
   }
 });
 
+for (const [change, update] of [
+  ['switched to off', (repo) => repo.write('.verify-layer.json', '{"verifyV2":{"mode":"off"}}')],
+  ['deleted', (repo) => fs.unlinkSync(path.join(repo.dir, '.verify-layer.json'))],
+  ['invalid JSON', (repo) => repo.write('.verify-layer.json', '{')],
+]) {
+  test(`Stop uses the starting enforce mode when the settings are ${change}`, (t) => {
+    const repo = fixture(t, 'enforce');
+    assert.ok(start(repo).json);
+    const id = state(repo).id;
+    update(repo);
+    const result = stop(repo);
+    assert.equal(result.json?.decision, 'block', result.stderr);
+    assert.match(result.json.reason, /未検証/);
+    const active = state(repo);
+    assert.equal(active.id, id);
+    assert.equal(active.config.mode, 'enforce');
+    assert.equal(active.stop.status, 'unverified');
+    assert.equal(active.stop.blocked, true);
+    assert.equal(active.stop.count, 1);
+  });
+}
+
+test('an off start archives the previous request for only the same host and session', (t) => {
+  const repo = fixture(t, 'enforce');
+  assert.ok(start(repo).json);
+  assert.ok(start(repo, 'codex').json);
+  const previous = state(repo);
+  const otherHost = state(repo, 'codex');
+  const originalSession = repo.sessionId;
+  repo.sessionId = 'other-session';
+  assert.ok(start(repo).json);
+  const otherSession = state(repo);
+
+  repo.sessionId = originalSession;
+  repo.write('.verify-layer.json', '{"verifyV2":{"mode":"off"}}');
+  const disabled = start(repo);
+  assert.equal(disabled.json, null, disabled.stderr);
+  assert.equal(state(repo), null);
+  assert.deepEqual(
+    JSON.parse(fs.readFileSync(requestPath(repo.dir, previous.id + '.state.json'), 'utf8')),
+    previous,
+  );
+  assert.equal(stop(repo).json, null);
+  assert.equal(state(repo, 'codex').id, otherHost.id);
+  assert.equal(stop(repo, false, 'codex').json?.decision, 'block');
+  repo.sessionId = 'other-session';
+  assert.equal(state(repo).id, otherSession.id);
+  assert.equal(stop(repo).json?.decision, 'block');
+});
+
 test('verify-diff CLI supplies evidence for the exact final Stop snapshot', (t) => {
   const repo = fixture(t, 'enforce');
   const opened = start(repo, 'codex');
@@ -87,7 +138,7 @@ test('verify-diff CLI supplies evidence for the exact final Stop snapshot', (t) 
     inputFiles: [], testFile, testId: 'edge', assertion: {line: 5},
   };
   const filename = path.join(repo.home, 'case.json');
-  require('node:fs').writeFileSync(filename, JSON.stringify(data));
+  fs.writeFileSync(filename, JSON.stringify(data));
   repo.write('api.mjs', 'export const edge = () => "fixed";');
   const result = run(process.execPath, [VL, 'verify-diff', '--agent', 'codex', '--session', repo.sessionId,
     '--request', request, '--case', filename], { cwd: repo.dir, env: repo.env });

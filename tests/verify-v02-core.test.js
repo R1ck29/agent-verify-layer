@@ -13,11 +13,13 @@ const session = { agent: 'claude', session: 'test-session' };
 const config = { mode: 'enforce', runner: 'node', timeoutMs: 5000, protectedPaths: [], includePaths: [] };
 const value = { type: 'str', value: '' };
 
-function fixture(t, tests = []) {
+function fixture(t, tests = [], initialFiles = {}, beforeStart = () => {}) {
   const repo = new Repo();
   t.after(() => repo.cleanup());
   repo.write('api.mjs', 'export const edge = () => "wrong";');
+  for (const [name, source] of Object.entries(initialFiles)) repo.write(name, source);
   for (const {file} of tests) repo.write(file, '// public test');
+  beforeStart(repo);
   const state = begin(repo.dir, session, config, '空文字の処理を直す', {
     detectRunner: () => ({config, tests, files: tests.map(({file}) => file)}),
   });
@@ -35,6 +37,123 @@ function fixture(t, tests = []) {
   };
   return {repo, data, state};
 }
+
+function referenceFixture(t, setup, operation, observed, initialFiles = {}, beforeStart) {
+  const {repo, data} = fixture(t, [], {
+    ...initialFiles,
+    'api.mjs': [
+      'import * as fs from "node:fs";',
+      'export function edge() {',
+      '  try {',
+      `    ${operation};`,
+      `    return ${observed};`,
+      '  } catch {',
+      '    return "wrong";',
+      '  }',
+      '}',
+    ].join('\n'),
+  }, beforeStart);
+  repo.write(data.testFile, [
+    'import { test } from "node:test";',
+    'import { edge } from "./api.mjs";',
+    'test("edge", (t) => {',
+    '  t.plan(1);',
+    '  t.assert.strictEqual(edge(""), "fixed");',
+    '});',
+  ].join('\n'));
+  setup(repo);
+  data.assertion.line = 5;
+  return {repo, data};
+}
+
+test('verifyCase rejects an absent leaf whose ancestor was absent or a regular file', async (t) => {
+  for (const [name, operation, initialFiles] of [
+    ['writeFile with a missing parent', 'fs.writeFileSync("data/item", "text")', {}],
+    ['mkdir with a file as parent', 'fs.mkdirSync("data/sub")', {data: 'file'}],
+    ['mkdtemp prefix with a missing higher ancestor', 'fs.mkdtempSync("data/nested/p-")', {}],
+  ]) {
+    await t.test(name, (t) => {
+      const {repo, data} = referenceFixture(t, (repo) => {
+        if (Object.hasOwn(initialFiles, 'data')) fs.unlinkSync(path.join(repo.dir, 'data'));
+        repo.write('data/nested/marker.txt', 'keep');
+      }, operation, '"fixed"', initialFiles);
+      const result = verifyCase(repo.dir, session, data);
+      assert.equal(result.status, 'error', JSON.stringify(result));
+      assert.match(result.reason, /Initial path state differs: data\//);
+      assert.deepEqual(result.openFailures, []);
+      assert.equal(finalStatus(repo.dir, session).status, 'unverified');
+    });
+  }
+});
+
+test('verifyCase rejects write permission changes on an unlisted operation parent', (t) => {
+  const chmod = (mode) => (repo) => fs.chmodSync(path.join(repo.dir, 'data'), mode);
+  const {repo, data} = referenceFixture(t, chmod(0o755), 'fs.closeSync(fs.openSync("data/item", "w"))',
+    '"fixed"', {'data/marker.txt': 'keep'}, chmod(0o555));
+  const result = verifyCase(repo.dir, session, data);
+  assert.equal(result.status, 'error', JSON.stringify(result));
+  assert.match(result.reason, /Initial path state differs: data\/item/);
+  assert.equal(finalStatus(repo.dir, session).status, 'unverified');
+});
+
+test('verifyCase rejects a changed symlink ancestor even when both leaves are absent', (t) => {
+  const link = (target) => (repo) => fs.symlinkSync(target, path.join(repo.dir, 'data'));
+  const {repo, data} = referenceFixture(t, (repo) => {
+    fs.unlinkSync(path.join(repo.dir, 'data'));
+    link('available')(repo);
+  }, 'fs.writeFileSync("data/item", "text")', '"fixed"', {
+    'available/marker.txt': 'keep',
+  }, link('missing'));
+  const result = verifyCase(repo.dir, session, data);
+  assert.equal(result.status, 'error', JSON.stringify(result));
+  assert.match(result.reason, /Initial path state differs: data\/item/);
+  assert.equal(finalStatus(repo.dir, session).status, 'unverified');
+});
+
+test('verifyCase rejects unlisted changes to existing data content, mode and presence', async (t) => {
+  for (const [name, operation, observed, change, initial] of [
+    ['contents', 'const value = fs.readFileSync("data.txt", "utf8")', 'value',
+      (repo) => repo.write('data.txt', 'fixed'), 'wrong'],
+    ['executable bit', 'const stat = fs.statSync("data.txt")', '(stat.mode & 0o111) ? "fixed" : "wrong"',
+      (repo) => fs.chmodSync(path.join(repo.dir, 'data.txt'), 0o755), 'plain'],
+    ['deleted file', 'const present = fs.existsSync("data.txt")', 'present ? "wrong" : "fixed"',
+      (repo) => fs.unlinkSync(path.join(repo.dir, 'data.txt')), 'plain'],
+    ['unlink of a new file', 'fs.unlinkSync("data.txt")', '"fixed"',
+      (repo) => repo.write('data.txt', 'plain'), undefined],
+  ]) {
+    await t.test(name, (t) => {
+      const {repo, data} = referenceFixture(t, change, operation, observed,
+        initial === undefined ? {} : {'data.txt': initial});
+      const result = verifyCase(repo.dir, session, data);
+      assert.equal(result.status, 'error', JSON.stringify(result));
+      assert.match(result.reason, /Initial path state differs: data\.txt/);
+      assert.deepEqual(result.openFailures, []);
+      assert.equal(finalStatus(repo.dir, session).status, 'unverified');
+    });
+  }
+});
+
+test('verifyCase keeps an open failure after its existing unlisted reference is removed', (t) => {
+  const {repo, data} = referenceFixture(t, () => {}, 'const present = fs.existsSync("data.txt")',
+    'present ? "wrong" : "fixed"', {'data.txt': 'plain'});
+  assert.deepEqual(verifyCase(repo.dir, session, data).openFailures, ['one']);
+  fs.unlinkSync(path.join(repo.dir, 'data.txt'));
+  const result = verifyCase(repo.dir, session, data);
+  assert.equal(result.status, 'error', JSON.stringify(result));
+  assert.match(result.reason, /Initial path state differs: data\.txt/);
+  assert.deepEqual(result.openFailures, ['one']);
+  assert.equal(finalStatus(repo.dir, session).status, 'unverified');
+});
+
+test('verifyCase keeps an open failure after the inputFiles executable bit changes', (t) => {
+  const {repo, data} = referenceFixture(t, () => {}, 'const stat = fs.statSync("data.txt")',
+    '(stat.mode & 0o111) ? "fixed" : "wrong"', {'data.txt': 'plain'});
+  data.inputFiles = ['data.txt'];
+  assert.deepEqual(verifyCase(repo.dir, session, data).openFailures, ['one']);
+  fs.chmodSync(path.join(repo.dir, 'data.txt'), 0o755);
+  assert.throws(() => verifyCase(repo.dir, session, data), /Fixed content changed/);
+  assert.deepEqual(finalStatus(repo.dir, session).openFailures, ['one']);
+});
 
 function runner(data, references = []) {
   return {

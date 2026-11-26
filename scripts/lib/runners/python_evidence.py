@@ -106,7 +106,7 @@ def literal(node: ast.AST) -> object:
         raise UnsupportedEvidence("Expected a literal") from error
 
 
-def resolve_expectation(node: ast.AST, tree: ast.Module) -> dict:
+def resolve_expectation(node: ast.AST, tree: ast.Module) -> object:
     if isinstance(node, ast.Name):
         name = node.id
         occurrences = [item for item in ast.walk(tree) if isinstance(item, ast.Name) and item.id == name]
@@ -119,7 +119,7 @@ def resolve_expectation(node: ast.AST, tree: ast.Module) -> dict:
                 "Expectation must be a literal bound exactly once")
         require(import_names(tree).get(name) is None, "Expectation cannot be imported")
         node = bindings[0]
-    return typed(literal(node), set(), expected=True)
+    return literal(node)
 
 
 def assertion_call(node: ast.AST, aliases: dict[str, str]) -> bool:
@@ -183,6 +183,8 @@ class StaticCase:
     kwargs: list[ast.keyword]
     comparison: str
     exception_name: str | None
+    expectation: object
+    check_return: bool
 
 
 def check_case(tree: ast.Module, case: dict, runner: str) -> StaticCase:
@@ -222,6 +224,7 @@ def check_case(tree: ast.Module, case: dict, runner: str) -> StaticCase:
     comparison = ""
     exception = None
     expected_node = None
+    expectation = None
     if runner == "pytest" and isinstance(stmt, ast.Assert):
         value = stmt.test
         require(isinstance(value, ast.Compare) and len(value.ops) == 1 and stmt.msg is None
@@ -262,7 +265,8 @@ def check_case(tree: ast.Module, case: dict, runner: str) -> StaticCase:
         exception_name = name
     else:
         require(expected.get("kind") == "value", "Expected a comparison value")
-        value = resolve_expectation(expected_node, tree)
+        expectation = resolve_expectation(expected_node, tree)
+        value = typed(expectation, set(), expected=True)
         require(value == expected.get("value"), "Assertion expectation does not match the case")
         if comparison in {"identity", "self.assertIs", "self.assertIsNone"}:
             require(value["type"] in {"none", "bool"}, "Identity comparison only supports None and bool")
@@ -281,7 +285,8 @@ def check_case(tree: ast.Module, case: dict, runner: str) -> StaticCase:
             literal(arg)
     require(all(kw.arg is not None for kw in actual.keywords), "Expanded arguments are unsupported")
     return StaticCase(method.name, owner.name if owner else None, stmt, entry,
-                      actual.args, actual.keywords, comparison, exception_name)
+                      actual.args, actual.keywords, comparison, exception_name, expectation,
+                      isinstance(expected_node, ast.Name))
 
 
 def in_repo(root: str, pathname: str) -> bool:
@@ -322,6 +327,7 @@ class CaseEvidence:
         self.assertions = []
         self.frames = {}
         self.inputs = []
+        self.value_matches = None
         self.monitoring = False
         self.inside_hook = False
         self.getcwd = os.getcwd
@@ -413,9 +419,10 @@ class CaseEvidence:
 
     def input_reference(self, value: object) -> None:
         if type(value) is str:
-            # A spelling with no separator can still point to a real root file.
+            if not value or "\0" in value or "\\" in value or ".git" in Path(value).parts:
+                return
             candidate = os.path.join(self.getcwd(), value)
-            if value and (os.sep in value or value in (".", "..") or os.path.lexists(candidate)):
+            if in_repo(self.root, os.path.normpath(candidate)) and os.path.lexists(candidate):
                 self.reference(value)
         elif type(value) in (list, tuple):
             for element in value:
@@ -430,6 +437,12 @@ class CaseEvidence:
                 if frame.f_lasti >= 0 and opname[frame.f_code.co_code[frame.f_lasti]] in ("RETURN_VALUE", "RETURN_CONST"):
                     try:
                         typed(arg, set(), expected=True)
+                        if self.static.check_return:
+                            expectation = self.static.expectation
+                            if self.static.comparison in {"identity", "self.assertIs"}:
+                                self.value_matches = arg is expectation
+                            else:
+                                self.value_matches = arg == expectation
                     except (TypeError, ValueError):
                         self.error = "Return value has no supported literal comparison"
             return
@@ -449,6 +462,8 @@ class CaseEvidence:
             for segment in self.case["entry"]["symbol"].split("."):
                 canonical = inspect.getattr_static(canonical, segment)
             require(function_code(canonical) is frame.f_code, "Runtime entry differs from the imported symbol")
+            require(not self.static.check_return or not isinstance(binding, type),
+                    "Cannot compare constructor return against a bound expectation")
             self.frames[id(frame)] = frame
             if len(self.frames) != 1:
                 raise UnsupportedEvidence("More than one designated entry invocation")
@@ -527,6 +542,9 @@ class CaseEvidence:
         for name in ("stat", "lstat", "access", "readlink"):
             original = getattr(os, name)
             setattr(os, name, self.stat_wrapper(name, original))
+        for name in ("stat", "lstat", "exists"):
+            original = getattr(Path, name)
+            setattr(Path, name, self.stat_wrapper(name, original))
 
     def stat_wrapper(self, name: str, original):
         def wrapped(pathname, *args, **kwargs):
@@ -582,6 +600,11 @@ class CaseEvidence:
         input_data = self.inputs[0] if len(self.inputs) == 1 else None
         if self.error:
             status, reason = "error", self.error
+        elif self.static.check_return and (
+            status == "pass" and self.value_matches is not True
+            or status == "mismatch" and self.value_matches is True
+        ):
+            status, reason = "error", "Assertion outcome differs from the bound literal expectation"
         elif status in ("pass", "mismatch") and (
             not module_path or len(self.frames) != 1 or len(self.assertions) != 1 or input_data != self.case["input"]
         ):

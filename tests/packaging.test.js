@@ -3,7 +3,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
-const { ROOT, Repo } = require('./helpers');
+const { ROOT, Repo, tmpDir, rmrf, isolatedEnv, run } = require('./helpers');
 const { loadChecklist } = require('../scripts/lib/checklist');
 
 const read = (...p) => fs.readFileSync(path.join(ROOT, ...p), 'utf8');
@@ -107,4 +107,19 @@ test('plugin and marketplace manifests have their expected local registration fi
   assert.equal(marketplace.plugins.length, 1);
   assert.equal(marketplace.plugins[0].name, plugin.name);
   assert.equal(marketplace.plugins[0].source, './');
+});
+
+test('claude plugin validate accepts the manifests (skipped when the claude CLI is unavailable)', (t) => {
+  // Select a test CLI explicitly so the suite never launches the user's installed agent via PATH.
+  const bin = process.env.VL_TEST_CLAUDE_BIN;
+  if (!bin || !path.isAbsolute(bin)) return t.skip('claude CLI not available');
+  const home = tmpDir('vl-plugin-validate-');
+  t.after(() => rmrf(home));
+  const options = { cwd: home, env: isolatedEnv({ HOME: home }) };
+  const probe = run(bin, ['--version'], options);
+  if (probe.error || probe.status !== 0) return t.skip('claude CLI not available');
+  const result = run(bin, ['plugin', 'validate', ROOT], options);
+  assert.equal(result.status, 0, result.stdout + result.stderr);
+  assert.match(result.stdout + result.stderr, /Validation passed|✔/i);
+  assert.doesNotMatch(result.stdout, /Found \d+ error/i);
 });

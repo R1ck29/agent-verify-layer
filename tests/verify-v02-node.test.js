@@ -5,9 +5,11 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
+const { Repo } = require('./helpers');
 const { parseSource, checkNodeCase } = require('../scripts/lib/runners/node-ast-check');
 const { checkNodeProtection } = require('../scripts/lib/runners/node-guard');
 const { runCase, runSuite } = require('../scripts/lib/runners/node');
+const { begin, finalStatus, verifyCase } = require('../scripts/lib/verify-diff');
 
 const testFile = 'edge.vl_req_12345678.test.mjs';
 const typed = (type, value) => ({ type, value });
@@ -231,4 +233,104 @@ test('Node distinguishes a missing direct module or symbol from an unrelated dep
   assert.equal(runCase({root, caseData: cjs, timeoutMs: 5000}).absence, 'symbol');
   fs.writeFileSync(path.join(root, 'edge.cjs'), 'module.exports.edge = () => "fixed";');
   assert.equal(runCase({root, caseData: cjs, timeoutMs: 5000}).status, 'pass');
+});
+
+test('verifyCase verifies a CommonJS entry with a changed dependency and records its filesystem calls', (t) => {
+  const repo = new Repo();
+  t.after(() => repo.cleanup());
+  repo.write('package.json', JSON.stringify({ scripts: { test: 'node --test' } }));
+  repo.write('baseline.test.js', "require('node:test').test('baseline', () => {});");
+  repo.write('data/flag', '');
+  repo.write('edge.cjs', [
+    "const { existsSync } = require('node:fs');",
+    // Keep the caller visible across Node versions with deeper loader stacks.
+    'Error.stackTraceLimit = 32;',
+    "module.exports.edge = () => existsSync('data/flag') ? require('./value.cjs') : 'missing';",
+  ].join('\n'));
+  repo.write('value.cjs', 'module.exports = "old";');
+  const session = { agent: 'claude', session: repo.sessionId };
+  const prompt = 'Correct handling of edge inputs';
+  const state = begin(repo.dir, session, {
+    mode: 'enforce', runner: 'node', timeoutMs: 15000, protectedPaths: [], includePaths: [],
+  }, prompt);
+  const name = `edge.vl_${state.id}.test.js`;
+  repo.write(name, [
+    "const { test } = require('node:test');",
+    "const { edge: api } = require('./edge.cjs');",
+    "test('edge', (t) => {",
+    '  t.plan(1);',
+    "  t.assert.strictEqual(api(''), 'fixed');",
+    '});',
+  ].join('\n'));
+  repo.write('value.cjs', 'module.exports = "fixed";');
+  const result = verifyCase(repo.dir, session, caseData({
+    caseId: 'edge', testFile: name, assertion: { line: 5 },
+    entry: { module: './edge.cjs', symbol: 'edge', call: 'api' },
+    inputFiles: [],
+    candidates: ['empty', 'spaces', 'long'].map((id) => ({
+      id, requestQuote: prompt, input: id, boundaryKind: 'size', handled: false,
+    })),
+    selectedCandidateId: 'empty',
+    selectionReason: 'An empty input exercises the boundary',
+  }));
+  assert.equal(result.status, 'pass', JSON.stringify(result));
+  assert.equal(result.before, 'mismatch');
+  assert.deepEqual(result.later.loadedFiles, ['edge.cjs', 'value.cjs']);
+  assert.ok(result.later.references.some(({ path }) => path === 'data/flag'));
+  assert.equal(finalStatus(repo.dir, session).status, 'verified');
+});
+
+test('Node only records string arguments that identify valid existing copy paths', (t) => {
+  const strings = ['data/payload.txt', 'data/missing.txt', 'text\\value', 'text\u0000value', '.git/index'];
+  const root = fixture(t, {
+    'edge.mjs': 'export const edge = () => "fixed";',
+    'data/payload.txt': 'sample',
+    [testFile]: source(`t.assert.strictEqual(api(${strings.map((value) => JSON.stringify(value)).join(', ')}), "fixed");`),
+  });
+  const result = runCase({
+    root, caseData: caseData({ input: input(...strings.map((value) => typed('str', value))) }), timeoutMs: 5000,
+  });
+  assert.equal(result.status, 'pass', JSON.stringify(result));
+  assert.deepEqual(result.references.map(({ path }) => path), ['data/payload.txt']);
+});
+
+test('Node rejects evidence when the entry starts a child process', (t) => {
+  const root = fixture(t, {
+    'edge.mjs': `import { execFileSync } from 'node:child_process';
+      export function edge() {
+        execFileSync(process.execPath, ['-e', '']);
+        return 'fixed';
+      }`,
+    [testFile]: source('t.assert.strictEqual(api(""), "fixed");'),
+  });
+  const result = runCase({ root, caseData: caseData(), timeoutMs: 5000 });
+  assert.equal(result.status, 'error', JSON.stringify(result));
+  assert.match(result.reason, /child process references/);
+});
+
+test('Node uses actual object key order to match case inputs', (t) => {
+  const root = fixture(t, {
+    'edge.mjs': 'export const edge = () => "fixed";',
+    [testFile]: source('t.assert.strictEqual(api({ second: 2, first: 1 }), "fixed");'),
+  });
+  const entries = [['second', typed('number', 2)], ['first', typed('number', 1)]];
+  const run = (pairs) => runCase({
+    root, caseData: caseData({ input: input(typed('object', pairs)) }), timeoutMs: 5000,
+  });
+  assert.equal(run(entries).status, 'pass');
+  const result = run([...entries].reverse());
+  assert.equal(result.status, 'error', JSON.stringify(result));
+  assert.match(result.reason, /actual arguments/);
+});
+
+test('Node rejects TypeError from calling an exported non-function as entry evidence', (t) => {
+  const root = fixture(t, {
+    'edge.mjs': 'export const edge = 42;',
+    [testFile]: source('t.assert.throws(() => api(""), TypeError);'),
+  });
+  const result = runCase({
+    root, caseData: caseData({ expected: { kind: 'exception', type: 'TypeError' } }), timeoutMs: 5000,
+  });
+  assert.equal(result.status, 'error', JSON.stringify(result));
+  assert.equal(result.called, false);
 });
