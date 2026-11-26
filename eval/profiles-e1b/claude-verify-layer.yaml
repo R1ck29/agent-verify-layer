@@ -1,5 +1,5 @@
 # E1b 用（E1 の profiles/ と同じ。P1 の CLAUDE.md だけが E1b のチェックリストから作ったもの）。
-# P2: 層あり。導入と同じ経路 B（INSTALL_FOR_CLAUDE.md 第 4 節）= scripts/install.js で settings.json に hook を入れ、
+# P2: 層あり。導入手順と同じ経路 B（INSTALL_FOR_CLAUDE.md 第 4 節）= scripts/install.js で settings.json に hook を入れ、
 # Rules（2 行）と観察モードの設定を置く。{config_dir} は一時ホームの .claude（install.js は CLAUDE_CONFIG_DIR から読む）。
 # hook は、この checkout の scripts/vl.js を絶対パスで呼ぶ。
 id: claude-verify-layer

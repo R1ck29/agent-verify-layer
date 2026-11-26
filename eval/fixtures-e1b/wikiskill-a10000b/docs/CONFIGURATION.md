@@ -1,7 +1,7 @@
 # CLI の設定
 
 WikiSkill はモデルを直接呼ばず、`claude`（Claude Code）または `codex`（Codex CLI）コマンドを実行します。
-そのため **CLI が単体で動く状態なら、認証方式（API キー、`CLAUDE_CODE_USE_BEDROCK`、認証済みゲートウェイなど）を問わず使えます。**
+そのため **CLI が単体で動く状態なら、認証方式（API キー、`CLAUDE_CODE_USE_BEDROCK`、導入先のゲートウェイなど）を問わず使えます。**
 
 ## 1. 動作確認
 
@@ -57,7 +57,7 @@ WikiSkill が行う呼び出しは 2 種類です。
 
 JSON ファイルを作り、`--backend-config` で指定します。書いたキーだけが既定値を上書きします。
 `complete_args` / `agent_args` は**丸ごと置き換え**なので、残したい既定の引数も書いてください。
-次の例は、利用ポリシーで `bypassPermissions` が使えない場合に、許可するツールを限定する設定です。
+次の例は、導入先の方針で `bypassPermissions` が使えない場合に、許可するツールを限定する設定です。
 
 ```json
 {
@@ -85,10 +85,10 @@ python -m wikiskill evolve my-suite --workspace workspaces/my --backend-config b
 | `retries` | 2 | CLI が失敗したときの再試行回数 |
 | `retry_wait` | 10 | 再試行までの待ち秒数（n 回目は n 倍） |
 
-## 4. 導入環境での注意
+## 4. 閉じた作業環境での注意
 
 - **WikiSkill 自身の通信**: ありません（ネットワーク系モジュールを使っていないことを `tests/test_no_network.py` で確認しています）。
-  通信は CLI からモデルへの呼び出しだけです。エージェントがシェル経由で外部に接続できるかどうかは、CLI と利用環境のネットワークの設定によります。
+  通信は CLI からモデルへの呼び出しだけです。エージェントがシェル経由で外部に接続できるかどうかは、CLI と導入先のネットワークの設定によります。
 - **`--safe-mode` が使えない CLI**: 古い claude では `unknown option` になります。`complete_args` / `agent_args` から外してください。
 - **Codex の個人設定**: `codex exec` は `~/.codex` 配下の個人設定（インストール済みスキルなど）を読み込みます
   （codex-cli 0.146.1 で確認）。`--safe-mode` に当たる指定は使っていないため、実験を純粋にしたい場合は Codex 側で無効化してください。

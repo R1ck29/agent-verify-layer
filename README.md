@@ -145,7 +145,7 @@ Codex CLI（0.170 の文書。`../sources/codex/`）向けの部分です。台�
 - **ECC の gateguard**: 同じ PreToolUse で deny する別物です。この層は PostToolUse だけなので並列に動いても衝突しません。enforce を作るときは、自分の deny だけを数えます。
 - **ECC の skill-run-tracker**: Skill の実行を記録しますが、ツリーのハッシュを持ちません。目的（コミットとの照合）が違うので統合していません。
 - **hookify**: 作業ツリー側の規則を読むため、「変更が自分のチェックを変えられない」を満たしません。
-- **GitHub の管理型 Code Review（REVIEW.md）**: この環境からは GitHub に届かないため使えません。「ベースから読む」原則だけを、この層が自前で持ちます。
+- **GitHub の管理型 Code Review（REVIEW.md）**: GitHub に届かない環境では使えません。「ベースから読む」原則だけを、この層が自前で持ちます。
 
 ## 設計書からの主な変更（詳細は REVIEW-NOTES 第 5 節）
 
@@ -157,7 +157,7 @@ Codex CLI（0.170 の文書。`../sources/codex/`）向けの部分です。台�
 - コミット前の verify 指示は、Claude Code 2.1.286 以降の標準機能と、バイナリ内のフラグ（既定は on）に依存します。版が上がると変わりえます。`doctor` は文書にある条件だけを確かめます。verify の実行率が急に落ちたら、まず版の変化を疑ってください。
 - `/code-review` は背景で動くため、指摘が届く前にコミットが進みえます。前景で動かすには `CLAUDE_CODE_DISABLE_BACKGROUND_TASKS=1`（ほかの背景機能も止まるので既定にはしません）。
 - 台帳は各端末の `.git` の中だけにあり、チーム全体では引けません。
-- `UserPromptExpansion` を追加した版は changelog にありません。導入先の 2.1.321 で発火するかは、導入時の確認で見てください。発火しなければ、利用者が打った `/verify` は記録されず `none` が増えます。
+- `UserPromptExpansion` を追加した版は changelog にありません。導入先の Claude Code 2.1.321（固定版）で発火するかは、導入時の確認で見てください。発火しなければ、利用者が打った `/verify` は記録されず `none` が増えます。
 - Windows は手元で実機確認できていません。単体テスト（`path.win32`）と CI（windows-latest）で補っています。
 
 ## 評価結果
@@ -171,7 +171,7 @@ Codex CLI（0.170 の文書。`../sources/codex/`）向けの部分です。台�
 実機スモークの現状（[docs/SMOKE.md](docs/SMOKE.md)。11/18 に Claude Code 2.1.325 で実行）:
 
 - **Claude で確認済み**: `Skill` の hook（`if` なしの 1 本）が実機で当たり、run 行（`via: model`）ができること、`Bash(git commit *)` の `if` と commit 行の書き込み、`report` の突き合わせ、`stale` の出方（verify を編集前に読み込むと偽の stale になる → `mark verify` で対処）
-- **未確認**: `UserPromptExpansion`（利用者が打った `/verify`）、PowerShell の `if`、Windows の実機、Codex の実際の PostToolUse（`tests/` の Codex 入力は文書から作った fixture で、実機で採取したものではない）、導入先の Claude Code 2.1.321 での動作
+- **未確認**: `UserPromptExpansion`（利用者が打った `/verify`）、PowerShell の `if`、Windows の実機、Codex の実際の PostToolUse（`tests/` の Codex 入力は文書から作った fixture で、実機で採取したものではない）、導入先の Claude Code 2.1.321（固定版）での動作
 
 ## 開発
 

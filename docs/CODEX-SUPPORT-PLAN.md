@@ -33,12 +33,12 @@
 
 ## 既存の ~/.codex ハーネスとの重なり
 
-- `~/.codex/hooks.json`: sample-harness（`samplectl-*`）と code-review-graph の hook だけ。コミットや verify を記録するものはない → 重ならない。マージは自分の hook を絶対パスで見分ける（Claude 側のインストーラと同じ）
+- `~/.codex/hooks.json`: 既存のセッションフックとコードレビュー用フックだけ。コミットや verify を記録するものはない → 重ならない。マージは自分の hook を絶対パスで見分ける（Claude 側のインストーラと同じ）
 - スキル（`~/.agents/skills`）: `independent-verification`、`review-changes`、`refactor-safely` などがあるが、名前が `verify` のものはなく、台帳もない。`independent-verification` は「別の視点で確かめる」指示で、記録と HEAD 側チェックリストは持たない → 補完
 - `~/.codex/AGENTS.md`（268 行）: レビューやコミットの一般的な指示はあるが、verify の実行・記録の指示はない。追記は 2 行以内にする
-- 手元には wikiskill と agent eval があるが、どちらも検証の記録はしない
+- 手元のほかの道具には wikiskill と agent eval があるが、どちらも検証の記録はしない
 
-## この環境の制約
+## 導入先の制約
 
 - GitHub に届かない: ZIP で入れる。Codex のプラグインを git のマーケットプレイスから入れる経路は使えない。ローカルのマーケットプレイスなら入るが、初版は hooks.json へのマージだけにする（レビューの 3）
 - 導入先に Codex がない可能性: `INSTALL_FOR_CLAUDE.md` の検出で `codex --version` と `~/.codex` を見て、なければ Codex 部分を飛ばす（Claude 部分だけ入れる）。Codex があっても、版が hooks の PostToolUse に対応していなければ飛ばす
@@ -73,7 +73,7 @@
 
 1. **exec 形式がない**: Codex の command handler の項目は `type`・`command`（文字列）・`commandWindows`・`timeout`（既定 600 秒）・`statusMessage`・`additionalContextLimit`・`async` で（ほかに `mcp_tool` の handler がある）、`args`・`if`・`onFailure` は文書にない（hooks.md 183-199）。「Node の exec 形式にそろえる」は誤り。Claude の `hooks/hooks.json` は使い回せない。Codex 用は、インストーラが絶対パスで組んだ `node "<path>/vl.js" hook commit --agent codex` を `command` に書き、`timeout: 10` を明示する
 2. **信頼の検出は doctor でできない**: 信頼はハッシュに対して記録される（hooks.md 67-83）が、保存場所は文書にない。`doctor` は検出せず、`/hooks` での確認を案内する。プラグインの hook は同梱スクリプトの変更でも再確認になるが、`hooks.json` の hook は「定義」のハッシュに対して信頼される（hooks.md 67-72）ので、`vl.js` を更新しても再確認は求められない**と推測される**（文書には明記がない。実機で確かめる）
-3. **プラグインとマージの両方を用意すると二重に走る**: 全ての場所の hook が合算され、同じ command を 2 か所に書くと 2 回走る。同じイベントの hook は同時に起動される（hooks.md 15-19, 61-65）。「未記録か」の確認が競合しうる。初版はマージだけにし、doctor が重複を警告する。プラグインは、ローカルのマーケットプレイス（`.agents/plugins/marketplace.json`、config-reference.md の `marketplaces.*`）が要り、「ローカルのプラグインディレクトリ」だけでは入らない（本文「この環境の制約」の 1 行目も同じ）
+3. **プラグインとマージの両方を用意すると二重に走る**: 全ての場所の hook が合算され、同じ command を 2 か所に書くと 2 回走る。同じイベントの hook は同時に起動される（hooks.md 15-19, 61-65）。「未記録か」の確認が競合しうる。初版はマージだけにし、doctor が重複を警告する。プラグインは、ローカルのマーケットプレイス（`.agents/plugins/marketplace.json`、config-reference.md の `marketplaces.*`）が要り、「ローカルのプラグインディレクトリ」だけでは入らない（本文「導入先の制約」の 1 行目も同じ）
 4. **エージェントの判定に環境変数は使えない**: Codex はプラグインの hook に `CLAUDE_PLUGIN_ROOT` も設定する（hooks.md 406-413）。Codex 用の hook は `--agent codex` を明示し、なければ入力の `turn_id`（Codex だけの項目、hooks.md 919-925）で判定する
 
 ### 抜け（本文に追加、または実装で扱う）
@@ -89,7 +89,7 @@
 
 ### 既存のハーネスとの重なり（確認済み、本文のとおり）
 
-- `~/.codex/hooks.json` は sample-harness（SessionStart・SessionEnd・Stop・PostToolUse `Edit|Write|…|apply_patch`）と code-review-graph（SessionStart・PostToolUse `Edit|Write`）だけで、`Bash` の PostToolUse はない。この層は PostToolUse `^Bash$` の 1 本だけを足すので重ならない。`[features]` に `hooks` の指定はなく、`codex features list` では `hooks stable true`（既定で有効）
+- `~/.codex/hooks.json` は既存のセッションフック（SessionStart・SessionEnd・Stop・PostToolUse `Edit|Write|…|apply_patch`）とコードレビュー用フック（SessionStart・PostToolUse `Edit|Write`）だけで、`Bash` の PostToolUse はない。この層は PostToolUse `^Bash$` の 1 本だけを足すので重ならない。`[features]` に `hooks` の指定はなく、`codex features list` では `hooks stable true`（既定で有効）
 - `~/.agents/skills` に `verify` はない（`independent-verification` などは記録と HEAD 側チェックリストを持たない）
 - Codex がない端末では、インストーラの `--agent codex` は何も書かずに止まり、doctor は 1 行の案内だけを出す。Claude の部分はこれまでどおり単独で入る
 

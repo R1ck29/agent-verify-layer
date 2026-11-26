@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """E1b の fixture が、元のリポジトリの pinned SHA の写しであることを確かめる（刈り込み・書き換えは MANIFEST に宣言したものだけ）。
 
-使い方: e1b-provenance.py [--repos DIR]   （既定 $E1B_REPOS_DIR または $E1B_REPOS_DIR）
+使い方: e1b-provenance.py [--repos DIR]   （既定は環境変数 $E1B_REPOS_DIR）
 fixtures-e1b/<fixture>.manifest.json（fixture の外。エージェントには見えない）の各 fixture について:
   - fixture のファイルのうち、changed にも added にもないもの → base の同じパスと同じ内容
   - changed のパス → base にあり、内容が違う（刈り込み・気をそらすもの）
@@ -16,7 +16,7 @@ from pathlib import Path
 
 EVAL = Path(__file__).resolve().parent.parent
 FX = EVAL / "fixtures-e1b"
-repos = Path(os.environ.get("E1B_REPOS_DIR", "$E1B_REPOS_DIR"))
+repos = Path(os.environ.get("E1B_REPOS_DIR") or ".")
 if "--repos" in sys.argv:
     repos = Path(sys.argv[sys.argv.index("--repos") + 1])
 

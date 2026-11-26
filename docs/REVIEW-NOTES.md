@@ -2,7 +2,7 @@
 
 2026-11-18 · レビュアー兼設計者: Claude Code（Opus 5.5）
 
-入力: DESIGN.md 全文、sources/article.md 全文、sources/ の公式ドキュメント（2.1.327 時点の写し）と changelog、この環境の Claude Code 2.1.325 のバイナリ（`strings`）、agent-harness-eval（main、pyproject 上は 0.8.0）、既存ハーネス（~/.claude、プラグイン、$E1B_REPOS_DIR/ の 6 リポジトリ。読むだけ）。モデルを呼ぶ実験はしていない。
+入力: DESIGN.md 全文、sources/article.md 全文、sources/ の公式ドキュメント（2.1.327 時点の写し）と changelog、この環境の Claude Code 2.1.325 のバイナリ（`strings`）、agent-harness-eval（main、pyproject 上は 0.8.0）、既存の設定（~/.claude、プラグイン、手元の関連リポジトリ。読むだけ）。モデルを呼ぶ実験はしていない。
 
 **位置づけ（2026-11-20）**: Riku の設計書の原本（[DESIGN-source.md](DESIGN-source.md)）が最上位です。このノートが原本から変えた点（PostToolUse への移動、OTEL の廃止、判定の対象をコミットのファイルに絞ったこと、など）は変更案で、承認されるまで原本が正です。判定の定義は Codex レビューを受けて原本（作業ツリーのハッシュ）に戻しました（末尾の回答を参照）。
 
@@ -12,7 +12,7 @@
 
 設計の骨格（verify の実行は標準の指示に任せる、観察モードから入る関門、HEAD から読むチェックリスト、レビュアーは 1 体、正解キーでの採点）は記事と合っており、残してよい。ただし、そのまま実装すると次の 6 点で動かないか、誤った数字を出す。
 
-1. **Windows で関門が発火しない**: Git Bash のない Windows では Bash ツールが登録されず、`matcher: "Bash"` の hook は一度も動かない（hooks.md:1874-1878）。Git Bash があっても PowerShell ツールが有効なら主シェルは PowerShell になる（その推論経路では 2.1.143 から既定で有効。changelog:8940）。matcher は `Bash|PowerShell` にし、`if` も 2 本立てる必要がある。
+1. **Windows で関門が発火しない**: Git Bash のない Windows では Bash ツールが登録されず、`matcher: "Bash"` の hook は一度も動かない（hooks.md:1874-1878）。Git Bash があっても PowerShell ツールが有効なら主シェルは PowerShell になる（`CLAUDE_CODE_USE_BEDROCK` 経路では 2.1.143 から既定で有効。changelog:8940）。matcher は `Bash|PowerShell` にし、`if` も 2 本立てる必要がある。
 2. **verify の「実行の記録」は開始時点の記録になる**: 同梱の `/verify` は `context: fork` を持たず、会話の中で動く【確: バイナリの登録に fork 指定なし】。そのため PostToolUse(Skill) は手順の読み込み直後、つまり確認作業の前に発火する。verify 中の修正や、初回の `/verify` が書く `.claude/skills/verify/SKILL.md` で作業ツリーのハッシュが変わり、正しく確認したコミットでも stale になる。
 3. **PreToolUse の関門は ECC の gateguard と並列に走る**: 同じイベントの hook は並列に動く（hooks.md:409）。gateguard が deny したコミットにも台帳の行ができ、存在しないコミットの行（幻の行）が残る。観察モードには PreToolUse は要らない。成功したコミットにだけ発火する PostToolUse で記録すれば、この問題はなくなる。
 4. **OTEL テレメトリの前提が崩れている**: agent-harness-eval は 2026-11-03 に、利用者から信号を戻す経路を「作らない」と決めた（docs/design.html:258）。Claude Code も hook の子プロセスから `OTEL_*` を取り除く（hooks.md:774）。台帳はローカルに置き、件数は利用者が自分で `report` を実行して見る形にする。
@@ -61,11 +61,11 @@
 
 ## 2. 公式ドキュメントでの事実確認
 
-対象は DESIGN.md の「公式ドキュメントで確認したこと」の各行と、本文で前提にしている事実。sources/ の写しは 2.1.327（2026-11-17）時点のもので、この環境の 2.1.325 より新しく、導入先の 2.1.321 よりさらに新しい。版の差は changelog で確かめた。
+対象は DESIGN.md の「公式ドキュメントで確認したこと」の各行と、本文で前提にしている事実。sources/ の写しは 2.1.327（2026-11-17）時点のもので、この環境の 2.1.325 より新しく、導入先の Claude Code 2.1.321（固定版）よりさらに新しい。版の差は changelog で確かめた。
 
 | # | 設計の記述 | 判定 | 根拠 | 補足・設計への影響 |
 | --- | --- | --- | --- | --- |
-| 1 | v2.1.286 以降、`verify` か `simplify` という名前のスキルがあれば、コミット直前に実行するよう指示が入る。docs・tests だけの変更は除く | **合っている** | skills.md:74 に「verify or simplify」「v2.1.286 or later」。changelog:3700（2.1.286）には verify だけが書かれている | バイナリ 2.1.325 の文面は ``Always run `/verify` right before the `commit` command (never for docs or tests).`` で、**Bash ツールの説明文に入る**【確】。この文面の生成はフラグ `tengu_polished_tulip` の下にあり、既定は on【確】。その推論経路ではフラグを取りに行かない（skills.md:259）ので、既定値が使われる【推】。版が変われば消えうる |
+| 1 | v2.1.286 以降、`verify` か `simplify` という名前のスキルがあれば、コミット直前に実行するよう指示が入る。docs・tests だけの変更は除く | **合っている** | skills.md:74 に「verify or simplify」「v2.1.286 or later」。changelog:3700（2.1.286）には verify だけが書かれている | バイナリ 2.1.325 の文面は ``Always run `/verify` right before the `commit` command (never for docs or tests).`` で、**Bash ツールの説明文に入る**【確】。この文面の生成はフラグ `tengu_polished_tulip` の下にあり、既定は on【確】。`CLAUDE_CODE_USE_BEDROCK` 経路ではフラグを取りに行かない（skills.md:259）ので、既定値が使われる【推】。版が変われば消えうる |
 | 1a | （設計にない）`/code-review` も同じ指示に入りうる | **文書にない** | バイナリに `codeReview: ... && includeCodeReviewSuggestion===!0` があり、条件を満たせば `` `/code-review medium` `` が並ぶ【確】。settings.md・changelog には出てこない | 文書にない設定なので依存しない。観察期間中に試す候補として未解決リスクに挙げる |
 | 2 | 対象はエンタープライズ・個人・プロジェクトなどのスキル。同梱版・プラグイン・claude.ai のスキルは対象外 | **合っている** | skills.md:76。追加ディレクトリと `.claude/commands/` の同名ファイルも対象 | プラグインで `verify` を配っても効かない、という設計の結論は正しい |
 | 3 | `disable-model-invocation: true` や `includeGitInstructions` の無効化で指示が消える | **合っている（条件が足りない）** | skills.md:77-78。`CLAUDE_CODE_DISABLE_GIT_INSTRUCTIONS` も同じ（バイナリの `e_t()`）【確】 | このほかに、`skillOverrides` の `user-invocable-only`（skills.md:340）、プロジェクトのスキルを読まない `strictPluginOnlyCustomization`・bare・`--safe-mode`（skills.md:198）でも指示は入らない。インストーラの検出項目に加える |
@@ -76,13 +76,13 @@
 | 8 | `/code-review` はどのプランでも動き、セッション内で、背景の subagent として実行される | **合っている** | code-review-local.md:11, 36 | 背景で動くので、指摘が届く前にコミットが進みうる。前景で動かすのは `-p`、`CLAUDE_CODE_DISABLE_BACKGROUND_TASKS=1`、または 2 回目の実行（同:108-112）。評価では `-p` なので前景で動く |
 | 9 | 会話履歴を持たない subagent で動く | **合っている** | code-review-local.md:71（forked subagent）。skills.md:805, 809（`context: fork` は会話履歴を見ない。会話の fork ではない） | 実機での確認は残す |
 | 10 | CLAUDE.md に従い、REVIEW.md は読まない | **合っている** | code-review-local.md:65、156 | 設計どおり |
-| 11 | `ultra` は その推論経路では使えず、ローカルのレビューに切り替わる | **合っている** | code-review-local.md:150 | 導入先に影響なし |
-| 12 | 管理型 Code Review は REVIEW.md をベースのブランチから読む | **合っている** | code-review-customize.md:14, 43, 135。記事:106 | この環境では使えない（GitHub に届かない） |
+| 11 | `ultra` は `CLAUDE_CODE_USE_BEDROCK` 経路では使えず、ローカルのレビューに切り替わる | **合っている** | code-review-local.md:150 | 導入先への影響なし |
+| 12 | 管理型 Code Review は REVIEW.md をベースのブランチから読む | **合っている** | code-review-customize.md:14, 43, 135。記事:106 | GitHub に届かない環境では使えない |
 | 13 | （本文）Claude が自分から `/code-review` を始めることはない | **文書の間で食い違う** | changelog:7114（2.1.215）は「自分からは実行しない」。code-review-local.md:116 は「平易な言葉で頼めば Claude が始められる」 | 自動で走ることを前提にしない。台帳には「実行されたか」だけを残す |
-| 14 | `/goal` はセッション単位のプロンプト型 Stop hook。small fast model で評価し、ツールを呼ばない | **合っている** | goal.md:120, 174 | 評価モデルは `ANTHROPIC_DEFAULT_HAIKU_MODEL` で変えられる（goal.md:168）。その推論経路では要設定 |
+| 14 | `/goal` はセッション単位のプロンプト型 Stop hook。small fast model で評価し、ツールを呼ばない | **合っている** | goal.md:120, 174 | 評価モデルは `ANTHROPIC_DEFAULT_HAIKU_MODEL` で変えられる（goal.md:168）。`CLAUDE_CODE_USE_BEDROCK` 経路では要設定 |
 | 15 | Stop hook は、間にツール呼び出しがないまま 8 回連続でブロックすると上書きされる | **合っている（結論の理由が弱い）** | hooks-guide.md:1010、hooks.md:2853、changelog:8954 | 上限は `CLAUDE_CODE_STOP_HOOK_BLOCK_CAP` で上げられ、ツールを呼ぶたびに数え直す（hooks-guide.md:1021）。「完了判定に使わない」理由は、この上限ではなく時間と、質問だけのターンでも発火すること（第 1.1 節） |
 | 16 | hook の `if` は permission ルールの形で書け、`Bash(git commit *)` や `Skill(verify)` が使える。ツールのイベントでだけ効き、Bash の判定はベストエフォート | **合っている** | hooks.md:424（効くのは PreToolUse・PostToolUse・PostToolUseFailure・PermissionRequest・PermissionDenied。ほかのイベントでは、`if` のある hook は動かない）、429（1 つの hook に 1 規則）、437-445、skills.md:893。`if` は 2.1.85 で追加（changelog:10520） | `Bash(git commit *)` は `git -C dir commit` に当たらない（パターンは前方一致）【推: 表 437 の規則から】。`npm test && git commit` には当たる。**Windows では `PowerShell(git commit *)` が別に要る**（hooks.md:119, 1874-1878） |
-| 17 | UserPromptExpansion は、利用者が打ったコマンドが展開されるときに発火し、コマンド名で絞れる | **合っている（版は確認できない）** | hooks.md:36, 310, 1603-1650。入力に `command_name`・`command_args`・`prompt` がある | changelog に追加した版が見つからない。この環境のバイナリには文字列がある【確】。導入先の 2.1.321 で動くかは実機で確かめる。**入力の `prompt` と `command_args` は台帳に書かない** |
+| 17 | UserPromptExpansion は、利用者が打ったコマンドが展開されるときに発火し、コマンド名で絞れる | **合っている（版は確認できない）** | hooks.md:36, 310, 1603-1650。入力に `command_name`・`command_args`・`prompt` がある | changelog に追加した版が見つからない。この環境のバイナリには文字列がある【確】。導入先の Claude Code 2.1.321（固定版）で動くかは実機で確かめる。**入力の `prompt` と `command_args` は台帳に書かない** |
 | 18 | Windows の hook のシェル形式は Git Bash が要る。`"args": []` の exec 形式ならシェルを通さずに起動できる | **半分違う** | hooks.md:462-470。exec 形式は 2.1.139（changelog:9125） | Git Bash がなければ、シェル形式は PowerShell で動く（hooks.md:466）。「Git Bash が要る」のではなく「bash 用に書いた行が PowerShell で壊れる」。exec 形式では `command` が本物の実行ファイルでなければならない。`node` と、`args` に渡すスクリプトのパスの組み合わせなら全 OS で動く（hooks.md:470）。**Node が入っていない端末では動かない**（Claude Code 本体はネイティブのバイナリで、Node を前提にしない）。インストーラで検出する |
 | 19 | すべてのイベントの入力に `session_id` と `cwd` が入る | **合っている** | hooks.md:748-760。subagent の中では `agent_id`・`agent_type` も入る（hooks.md:255） | subagent が作ったコミットも、同じ hook で記録できる |
 | 20 | （本文）PostToolUse の `additionalContext` で、チェックリストの項目を Claude に渡せる | **合っている** | hooks.md:2320-2330。UserPromptExpansion でも渡せる（hooks.md:1630-1640） | 利用者が `/verify` を打ったときにも、UserPromptExpansion から同じ項目を渡す |
@@ -91,23 +91,23 @@
 | 23 | （本文）一時インデックスで `git add -A` し、`git write-tree` でツリーのハッシュを求める | **合っている（速さに注意）** | git の標準の動き | 空の一時インデックスから始めると、全ファイルをハッシュし直して遅い。本物の index をコピーしてから `git add -A` すれば、stat のキャッシュが効く。worktree では `.git` がファイルなので、置き場所は `git rev-parse --git-path claude-verify` で求める |
 | 24 | （本文）PostToolUse(Skill verify) で「verify が実行された」ことを記録できる | **一部違う** | PostToolUse は、ツールの処理が終わった直後に発火する（hooks.md:2270）。インラインのスキルでは、それは手順を読み込んだ時点にあたる。同梱の `/verify` に `context: fork` はない【確: バイナリ】 | 記録されるのは「verify を始めた時点のツリー」。第 0 節の 2 のとおり、誤って stale になる経路がある。第 5 節で、コミットに含まれるファイルだけを比べるよう変える |
 
-### 2.1 版ごとの注意（導入先 2.1.321 と、この環境の 2.1.325）
+### 2.1 版ごとの注意（導入先の Claude Code 2.1.321（固定版）と、この環境の 2.1.325）
 
-- 初版が使う機能の最低版: `if` は 2.1.85、exec 形式は 2.1.139、verify の指示は 2.1.286、`onFailure` は 2.1.295（changelog:2842）、割り込み後に PostToolUse が走るのは 2.1.319（hooks.md:2290）。どれも導入先の 2.1.321 より前
+- 初版が使う機能の最低版: `if` は 2.1.85、exec 形式は 2.1.139、verify の指示は 2.1.286、`onFailure` は 2.1.295（changelog:2842）、割り込み後に PostToolUse が走るのは 2.1.319（hooks.md:2290）。どれも導入先の Claude Code 2.1.321（固定版）より前
 - 2.1.326 で、`"decision": "block"` が効く場面が増えた（changelog:229）。観察モードの hook は `decision` を一切出さない
-- 2.1.327 で、`/status` に「一度も当たらない hook の matcher」の一覧が出るようになった（changelog:22）。導入先の 2.1.321 にはないので、導入後の確認は自作の `doctor` で行う
-- UserPromptExpansion を追加した版は changelog にない。手元での発火確認は導入直後の smoke test で行う
+- 2.1.327 で、`/status` に「一度も当たらない hook の matcher」の一覧が出るようになった（changelog:22）。導入先の Claude Code 2.1.321（固定版）にはないので、導入後の確認は自作の `doctor` で行う
+- UserPromptExpansion を追加した版は changelog にない。導入先での発火確認は導入直後の smoke test で行う
 
 ## 3. 既存ハーネスとの重複
 
-調べた範囲: ~/.claude の CLAUDE.md・rules・skills・agents・settings.json の hooks、有効なプラグイン（ECC 2.2.3、autoresearch 2.3.0、superpowers 7.0.2、code-review@claude-plugins-official ほか）、$E1B_REPOS_DIR/ の 6 リポジトリ。読んだだけで、どれも変更していない。
+調べた範囲: ~/.claude の CLAUDE.md・rules・skills・agents・settings.json の hooks、有効なプラグイン（ECC 2.2.3、autoresearch 2.3.0、superpowers 7.0.2、code-review@claude-plugins-official ほか）、手元の関連リポジトリ。読んだだけで、どれも変更していない。
 
 | 設計の部品 | 重なる既存部品 | 重なり方 | 判断 |
 | --- | --- | --- | --- |
 | A. verify を標準の指示に任せる | CLAUDE.md の「4. Verification Before Done」。superpowers `verification-before-completion`（コミット前の未検証を危険信号に挙げる）。ECC `verification-loop` | 部分重複。どれも指示だけで、記録も強制もしない。プラグイン配布なので、標準の指示の対象外 | **残す**。名前が `verify` のスキルは個人用の場所にもプラグインにもない【確】ので、リポジトリの記録は上書きされない |
-| B. コミットの関門と台帳 | ECC `pre-bash-dispatcher.js` の gateguard-fact-force（セッション最初の、読み取り専用でない Bash を 1 回 deny する。`commit --amend` なども初回は deny）と block-no-verify。ECC `skill-run-tracker.js`（PostToolUse(Skill) を `~/.claude/state/skill-runs.jsonl` に記録。ツリーのハッシュは持たない）。sample-harness `session_hooks.py`（観察して、次のセッションで知らせる形の前例） | **衝突**（gateguard）、部分重複（skill-run-tracker） | **変える**。観察は PostToolUse で行い、gateguard と同じ PreToolUse には載せない。enforce を作るときは、自分の deny だけを数える。ECC が入った環境では、skill-run-tracker の記録と台帳が二重になるが、目的（ツリーとの照合）が違うので統合はしない |
+| B. コミットの関門と台帳 | ECC `pre-bash-dispatcher.js` の gateguard-fact-force（セッション最初の、読み取り専用でない Bash を 1 回 deny する。`commit --amend` なども初回は deny）と block-no-verify。ECC `skill-run-tracker.js`（PostToolUse(Skill) を `~/.claude/state/skill-runs.jsonl` に記録。ツリーのハッシュは持たない）。既存のセッションフック（観察して、次のセッションで知らせる形の前例） | **衝突**（gateguard）、部分重複（skill-run-tracker） | **変える**。観察は PostToolUse で行い、gateguard と同じ PreToolUse には載せない。enforce を作るときは、自分の deny だけを数える。ECC が入った環境では、skill-run-tracker の記録と台帳が二重になるが、目的（ツリーとの照合）が違うので統合はしない |
 | C. diff で発火するチェックリスト | ECC `hookify-runtime.js`（PreToolUse・UserPromptSubmit・Stop で規則を評価する。規則ファイルはない）。`rules/code-review.md` 25-37 行（diff と関係なく、いつも読まれる固定のチェックリスト）。cc-review-tool-eval `harness/string_contracts.py`（LLM を使わない決定的な照合） | 部分重複。「HEAD から読む」「diff で発火する」「元の事故を持つ」の 3 つを兼ねるものはない | **残す**（初版の中心）。hookify は作業ツリーの規則を読むので、「変更が自分のチェックを変えられない」を満たさない |
-| D. レビュアーは 1 体（`/code-review`） | `skills/review-changes`（CRG を使う）、`agents/graph-reviewer.md`、ECC の `*-reviewer` 25 体と `code-review` / `review-pr` / `orch-review` / `astra-review`、superpowers `requesting-code-review`、プラグイン `code-review@claude-plugins-official` | **衝突**。`rules/agents.md`、`rules/development-workflow.md`、`rules/code-review.md` が、複数のレビュアーを毎回呼ぶよう指示している | **方針は残す。範囲は変える**。導入先に配る物には `/code-review` だけを入れる。Riku の環境の Rules にある複数レビュアーの指示は、この部品の範囲外（別に整理する）。`code-review@claude-plugins-official` は `gh pr` 専用（`allowed-tools` が gh だけ）で、GitHub に届かないこの環境では動かない。同梱の `/code-review` と名前が紛らわしいので、導入先に配らないよう INSTALL に書く |
+| D. レビュアーは 1 体（`/code-review`） | `skills/review-changes`（CRG を使う）、`agents/graph-reviewer.md`、ECC の `*-reviewer` 25 体と `code-review` / `review-pr` / `orch-review` / `astra-review`、superpowers `requesting-code-review`、プラグイン `code-review@claude-plugins-official` | **衝突**。`rules/agents.md`、`rules/development-workflow.md`、`rules/code-review.md` が、複数のレビュアーを毎回呼ぶよう指示している | **方針は残す。範囲は変える**。導入先に配る物には `/code-review` だけを入れる。Riku の環境の Rules にある複数レビュアーの指示は、この部品の範囲外（別に整理する）。`code-review@claude-plugins-official` は `gh pr` 専用（`allowed-tools` が gh だけ）で、GitHub に届かない環境では動かない。同梱の `/code-review` と名前が紛らわしいので、導入先に配らないよう INSTALL に書く |
 | E. SQL 向けの個人用 verify | agent-harness-eval の `examples/tasks/request-extract.yaml` と `request-ambiguous.yaml`（条件を間違えたクエリ、曖昧な依頼の確認） | 補完。評価の例題はすでにある | **やめる**（初版から外す）。第 4 節 |
 | F. Rules の 2 行 | superpowers `systematic-debugging`（3 回修正に失敗したら止まる）。ECC の testing rules（flaky なタイムアウトを避ける） | 部分重複 | **変える**。flaky の 1 行は残す。「2 回目は Opus」は既存の Rules に見当たらないので、導入先にない限り落とす |
 | G. Agent Harness Eval で採点 | cc-review-tool-eval（欠陥 12 件、英語 1 文の正解キー、`MATCH` の同義語グループによる決定的な採点、McNemar 検定。対照はない。`/code-review` との比較はない）。AHE の `command` / `llm` / `hook_used` / `skill_used` グレーダー、split、`promote` | 補完。正解キーと採点の仕組みは流用できる | **残す**。具体案は第 5.6 節 |
@@ -116,9 +116,9 @@
 
 既存の作りで、そのまま流用できるもの:
 
-- **設定のマージ**: sample-harness `scripts/install_pc.py`。自分の hook はコマンドの絶対パスだけで見分け（timeout まで照合すると二重登録が起きた経緯がある）、自分の分だけを外してから入れ直す。タイムスタンプ付きのバックアップを取り、`--check` と `--uninstall` を持つ。wikiskill `tools/integrate.py` の `hooks_blocked()` は、管理設定が hook を止めていないかを先に調べる
+- **設定のマージ**: 既存のセッションフックのインストーラ。自分の hook はコマンドの絶対パスだけで見分け（timeout まで照合すると二重登録が起きた経緯がある）、自分の分だけを外してから入れ直す。タイムスタンプ付きのバックアップを取り、`--check` と `--uninstall` を持つ。wikiskill `tools/integrate.py` の `hooks_blocked()` は、管理設定が hook を止めていないかを先に調べる
 - **hook の出力**: ECC `suggest-compact.js` 251-257 行のコメント「止めない PreToolUse の stderr は debug ログにしか出ない」。ECC `bash-hook-dispatcher.js` 111-115 行の「入力をそのまま stdout に返すとスキーマ検証で落ちる」。言うことがなければ何も出さない
-- **exec 形式の hook**: 前例は sample-harness の hook だけ。ECC・autoresearch・wikiskill はシェル形式で、Windows では Git Bash を前提にしている
+- **exec 形式の hook**: 前例は既存のセッションフックだけ。ECC・autoresearch・wikiskill はシェル形式で、Windows では Git Bash を前提にしている
 
 ## 4. コンポーネントごとの判断
 
@@ -192,17 +192,17 @@ hook の配線（プラグイン形式。`if` は 1 つの hook に 1 規則な�
 
 **新しい独立リポジトリ `claude-verify-layer` にする。**
 
-- sample-harness は「タスクグラフの実行と検証」の道具で、導入先に入っているとは限らない。混ぜると、片方だけを入れる・外すことができなくなる
+- タスクグラフ用のホストフックは、導入先に入っているとは限らない。混ぜると、片方だけを入れる・外すことができなくなる
 - agent-harness-eval は汎用の評価器として保つ。この層の評価タスクは新しいリポジトリの `eval/` に置き、AHE にはそのパスを渡して実行する（タスク置き場を指定する CLI の引数名は実装時に確かめる）
-- wikiskill、lean-agent-skill、cc-review-tool-eval、codegraph-harness は目的が違う
-- この環境では wikiskill や agent eval と同じく ZIP で入れるので、単体で完結したリポジトリのほうが扱いやすい
+- wikiskill やほかの評価・グラフ用スキルは目的が違う
+- 導入時は wikiskill や agent eval と同じく ZIP で入れるので、単体で完結したリポジトリのほうが扱いやすい
 
 ### 5.3 ディレクトリ構成
 
 ```
 claude-verify-layer/
 ├── README.md                    # 何をして、何をしないか。台帳の読み方
-├── INSTALL_FOR_CLAUDE.md        # 導入先の Claude Code が読んで導入する手順（5.4）
+├── INSTALL_FOR_CLAUDE.md        # 導入先で読んで導入する手順（5.4）
 ├── .claude-plugin/
 │   ├── plugin.json
 │   └── marketplace.json         # 展開したディレクトリをローカルのマーケットプレイスとして追加するため
@@ -242,7 +242,7 @@ claude-verify-layer/
    - `strictPluginOnlyCustomization` がスキルを含む → プロジェクトの verify が読み込まれない。台帳は入れられるが、verify の実行率は 0 になる、と伝える
 3. **既存の設定を壊さないマージ**
    - JSON として読んで書く。文字列の置換はしない。読めなければ止める
-   - 自分の hook は、コマンドの引数にある `vl.js` の絶対パスだけで見分ける（sample-harness の前例）。自分の分を外してから入れ直すので、2 回実行しても同じ結果になる
+   - 自分の hook は、コマンドの引数にある `vl.js` の絶対パスだけで見分ける（既存のセッションフックの前例）。自分の分を外してから入れ直すので、2 回実行しても同じ結果になる
    - 他人の hook の削除・並べ替え・書き換えをしない。ECC などを無効にするのは提案にとどめる
    - 書き込む前に差分を見せ、タイムスタンプ付きのバックアップを取る。`--check` は読むだけ
 4. **観察モードが既定**: `config.json` は `{"mode":"observe"}` で作る。enforce は初版にはない
@@ -263,7 +263,7 @@ claude-verify-layer/
   - 秘匿: 入力の `prompt` に目印の文字列を入れ、台帳に出てこないことを確かめる
 - **hook の約束事のテスト**: イベントごとに hooks.md の入力例を流し、終了コード 0、stdout は空か正しい JSON、`decision` を出さない、1 秒以内（1 万ファイルのリポジトリで計る）
 - **インストーラのテスト**: 空の settings、ECC 相当の hook を含む settings、既に PostToolUse の Bash がある settings で、2 回続けてマージしても同じになること、`--check` が書かないこと、アンインストール後にほかの部分が意味として同じであること
-- **実機の smoke test**（モデルを呼ぶのは最小限。haiku で 1〜2 回）: この環境の 2.1.325 で、PostToolUse(Skill verify)、`/verify` を打ったときの UserPromptExpansion、`Skill(review)` の別名、PowerShell の `if` 以外の配線が実際に発火するかを確かめる。導入先の 2.1.321 でも、INSTALL の手順 6 で同じことをする
+- **実機の smoke test**（モデルを呼ぶのは最小限。haiku で 1〜2 回）: この環境の 2.1.325 で、PostToolUse(Skill verify)、`/verify` を打ったときの UserPromptExpansion、`Skill(review)` の別名、PowerShell の `if` 以外の配線が実際に発火するかを確かめる。導入先の Claude Code 2.1.321（固定版）でも、INSTALL の手順 6 で同じことをする
 - **Windows**: 手元に端末がないので、`path.win32` の単体テストと、最初の Windows 利用者向けの確認手順（観察モードなので害はない）で補う
 
 ### 5.6 agent-harness-eval での with / without 評価
@@ -303,9 +303,9 @@ AHE 0.8.0 の、実在する仕組みだけで組む: タスクの YAML、プロ
 
 近い順に次の 3 つ。
 
-1. **自分のリポジトリの fix コミットを掘る**: $E1B_REPOS_DIR/ の 6 リポジトリの `fix:` と revert から、不具合を入れたコミットを特定する。本物の不具合なので一番近い。限界: 件数が読めず、特定に人手がかかる。正解キーの文は fix のコミットメッセージに引きずられる
+1. **自分のリポジトリの fix コミットを掘る**: 手元の関連リポジトリの `fix:` と revert から、不具合を入れたコミットを特定する。本物の不具合なので一番近い。限界: 件数が読めず、特定に人手がかかる。正解キーの文は fix のコミットメッセージに引きずられる
 2. **cc-review-tool-eval の 12 件**（`bench/defects.json` と `MATCH` をそのまま使える）: 限界: 合成のリポジトリに仕込んだ欠陥で、ファイルをまたぐ種類に偏っている。対照がないので、同じリポジトリの問題のない変更を足す必要がある。評価のプロンプトは網羅を優先するよう指示しており、確信の高い指摘だけを出す `/code-review` とは前提が違う
-3. **公開 OSS の fix を逆に当てる**（fix を戻して、不具合を入れる diff を作る）: 限界: fix の逆は、もともと不具合を入れた変更より小さく、怪しさが目立つので、再現率が高めに出る。学習データに含まれている恐れがある。導入先のコードの性質を表さない
+3. **公開 OSS の fix を逆に当てる**（fix を戻して、不具合を入れる diff を作る）: 限界: fix の逆は、もともと不具合を入れた変更より小さく、怪しさが目立つので、再現率が高めに出る。学習データに含まれている恐れがある。実運用のコードの性質を表さない
 
 どれを使っても、**記事の「生の指摘・検証後・最終」の段階ごとの再現率は測れない**（同梱のレビューの中は見えない）。測れるのは最終の出力だけ。
 
@@ -316,7 +316,7 @@ AHE 0.8.0 の、実在する仕組みだけで組む: タスクの YAML、プロ
 | 0 | v0.1 を自分の環境に入れ、2 週間観察する。`report` で、台帳に拾えた割合、結果の内訳、stale の大きさ、verify の実行率、hook の p95 時間を見る | 台帳に拾えた割合が 90% 以上。hook の p95 が 1 秒未満 |
 | 1 | E1 と E2 を回す。チェックリストを自分のリポジトリで使う | 5.6 の基準 |
 | 2 | enforce を作る（PreToolUse の deny、`Unverified-Reason:`、同じ session_id で 2 回止めたら通す、gateguard の deny とは分けて数える） | 観察で「止めていたはず」のうち、誤りが 10% 未満（20 件を人が見る） |
-| 3 | 導入先のエンジニアに observe で配る。掘り起こしと刈り込みを月 1 回、手で回す | — |
+| 3 | 導入先で observe として配る。掘り起こしと刈り込みを月 1 回、手で回す | — |
 | 4 | SQL 向け（プロジェクトの `verify` か、別名のスキル） | Trino で小さく試せる場所が決まること |
 
 ## 6. 未解決リスク
@@ -327,15 +327,15 @@ AHE 0.8.0 の、実在する仕組みだけで組む: タスクの YAML、プロ
 | 2 | 実行の記録は「verify を始めた時点」のもの。終わったか、通ったかは分からない | verify 中に直したコミットが stale に数えられる。逆に、失敗した verify の後でも verified になりうる | 判定の対象を、コミットに含まれるファイルに絞って誤判定を減らす。enforce の前に、観察の結果を 20 件、人が見る |
 | 3 | `if` はベストエフォート。`git -C`、スクリプトや alias 経由のコミット、利用者の `!` コマンドは拾えない | 台帳に拾えない割合が分からないまま残る | `report` で `git log` と突き合わせる。attribution の trailer を切っている環境（Riku の環境もそう）では Claude のコミットを見分けられないので、推定値になる |
 | 4 | Node が入っていない端末がある（Claude Code 本体はネイティブのバイナリ） | hook が起動せず、`onFailure: "continue"` で黙って素通りする | INSTALL で検出して止める。`doctor` で起動を確かめる |
-| 5 | 管理設定（`allowManagedHooksOnly`、`strictPluginOnlyCustomization`）が、手元でどう設定されているか分からない | 自分では入れられない、または verify の実行率が 0 になる | INSTALL で検出し、管理者向けの断片を出して終える |
-| 6 | UserPromptExpansion を追加した版が changelog にない。導入先の 2.1.321 で発火するか未確認 | 利用者が打った `/verify` が記録されず、none が増える | 導入先の smoke test で確かめる。動かなければ、PostToolUse(Skill) だけで記録し、その旨を `report` に出す |
+| 5 | 管理設定（`allowManagedHooksOnly`、`strictPluginOnlyCustomization`）が、導入先でどう設定されているか分からない | 自分では入れられない、または verify の実行率が 0 になる | INSTALL で検出し、管理者向けの断片を出して終える |
+| 6 | UserPromptExpansion を追加した版が changelog にない。導入先の Claude Code 2.1.321（固定版）で発火するか未確認 | 利用者が打った `/verify` が記録されず、none が増える | 導入先の smoke test で確かめる。動かなければ、PostToolUse(Skill) だけで記録し、その旨を `report` に出す |
 | 7 | ECC の gateguard など、ほかの PreToolUse の deny と並ぶ | enforce を作るとき、拒否の理由が 2 つ並び、「2 回止めたら通す」の数え方がずれる | 初版は PostToolUse だけなので影響なし。enforce では、自分の deny だけを session_id ごとに数える |
 | 8 | 正解キーが 5 件しかない。判定モデル（既定は haiku）の偏り | 採否を統計的に決められない。過学習の恐れ | 20 件そろうまでは記録として扱う。グレーダーは決定的な照合を主にし、LLM の判定は副にする。`calibrate` で一致率を出す |
 | 9 | `/code-review` は背景で動くので、指摘が届く前にコミットが進む | 指摘がコミット後に届き、役に立たない | 台帳には「実行されたか」だけを残す。前景で動かす方法（`CLAUDE_CODE_DISABLE_BACKGROUND_TASKS=1`）を README に書く。既定にはしない（ほかの背景機能も止まるため） |
 | 10 | 台帳は各リポジトリの `.git` の下にあり、その端末にしか残らない | チーム全体で「検証されていないコミット」を引けない（記事の stamp とは違う） | 初版はこれでよい。共有が要るなら、次の段階で `git notes`（コミットの後に別の操作として付けるので、連結コマンドで壊れない）を検討する |
 | 11 | 直接コミットでは、HEAD から読むチェックリストも 1 つ前のコミットで書き換えられる | 2 段階で、自分のチェックを変えられる | 「チェックを変える変更」の警告を必ず出し、台帳に `self_check_change` を残す。人が見る |
 | 12 | 文書にない `includeCodeReviewSuggestion` を使えば、`/code-review` もコミット前の指示に入る | 使えば便利だが、予告なく変わりうる | 使わない。試すのは自分の環境だけにし、結果を記録する |
-| 13 | sources/ の文書は 2.1.327 時点で、導入先の 2.1.321 より新しい | 文書にある動きが、導入先の版にはまだない恐れ | 2.1 節の最低版の一覧で確かめた。どれも 2.1.321 より前。ほかは smoke test で確かめる |
+| 13 | sources/ の文書は 2.1.327 時点で、導入先の Claude Code 2.1.321（固定版）より新しい | 文書にある動きが、導入先の版にはまだない恐れ | 2.1 節の最低版の一覧で確かめた。どれも 2.1.321 より前。ほかは smoke test で確かめる |
 
 ## 付録: DESIGN.md に入れるべき修正（要約）
 
@@ -382,7 +382,7 @@ Codex（gpt-6.2-astra）の独立レビュー（`XREVIEW-codex.md`、VERDICT: CH
 | チェックリストの読み取り範囲と警告 | 修正: 未追跡 symlink は辿らない。自己変更の警告は先頭に置き、切り詰めるのは項目のほう |
 | 既存の Git hook とデータの保持 | 一部修正: スナップショットは `core.hooksPath` を空にして実行。clean filter は正しい hash のために残す。未追跡ファイルの内容がオブジェクト庫に書かれること、台帳の行を消しても残ることは INSTALL_FOR_CLAUDE.md に明記 |
 | 既存ハーネスと配布単位 | 同意（互いの無効化は不要）。Codex の verify スキルが行動の指示（「全部が通っていなければコミットしない」）であることを、部分導入表に明記 |
-| 原本との差と評価 | 同意・修正: README の「食い違いはレビュー・ノート優先」を、原本が最上位という記述に直した。原本からの変更案は本ノートに残し、承認待ち。評価は E1b で Claude 側「有用でない」（PR 本文と README）。個人の観察フェーズと導入先配布の採否は別に判断する |
+| 原本との差と評価 | 同意・修正: README の「食い違いはレビュー・ノート優先」を、原本が最上位という記述に直した。原本からの変更案は本ノートに残し、承認待ち。評価は E1b で Claude 側「有用でない」（PR 本文と README）。個人の観察フェーズと導入・配布の採否は別に判断する |
 | 文書と実機テスト | 同意・修正: README と SMOKE.md の食い違いを解消。Claude で確認済み（Skill hook、commit 行）と、未確認（UserPromptExpansion、PowerShell、Codex の実際の PostToolUse、Windows 実機）を分けて記載。Codex の fixture は文書から作ったもので、実機採取ではないと明記 |
 
 ### 同意しなかったこと

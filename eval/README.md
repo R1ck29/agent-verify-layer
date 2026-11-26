@@ -8,7 +8,7 @@
 | --- | --- |
 | P0 `claude-baseline` | 層なし。fixture の `.claude/verification/checklist.json` は HEAD にあるが、何も読ませない |
 | P1 `claude-static-rules` | 層なし。ただし同じチェックリストの**全項目**を、常時読み込まれる `CLAUDE.md` に書く（「CLAUDE.md にルールを書くだけで足りるのでは」という既存ハーネスとの重複を確かめる対照） |
-| P2 `claude-verify-layer` | 層あり。導入と同じ経路 B（`scripts/install.js --apply --rules`）で、一時ホームの settings.json に hook を入れる |
+| P2 `claude-verify-layer` | 層あり。導入手順と同じ経路 B（`scripts/install.js --apply --rules`）で、一時ホームの settings.json に hook を入れる |
 
 全プロファイル共通: `model: sonnet`、`billing: subscription`、`inherit_env: [CLAUDE_CODE_OAUTH_TOKEN]`（トークンの値はどこにも書かない）。fixture は、4 つの小さな Python ライブラリに、記録済みの `.claude/skills/verify/SKILL.md`（`python3 -m unittest` を実行するだけ）と、HEAD にコミット済みのチェックリストを持たせたもの。AHE にタスクごとの git 準備のキーがないため、fixture を複製したあとの `install` の共通手順 `profiles/common/seed-git.sh` が、作業ツリーを 1 コミットの git リポジトリにする（日時・作者は固定）。
 

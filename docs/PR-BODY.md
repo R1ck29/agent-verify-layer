@@ -29,7 +29,7 @@ Codex gpt-6.2-astra の独立レビュー（VERDICT: CHANGES_REQUESTED。ブロ�
 ## 未確認（隠さずに書きます）
 
 - Claude で**実機確認済み**: Skill の hook、`Bash(git commit *)` の `if`、commit 行、`report` の突き合わせ（`docs/SMOKE.md`）。
-- **未確認**: `UserPromptExpansion`（利用者が打った `/verify`）、PowerShell の `if`、Windows の実機、導入先の Claude Code 2.1.321。
+- **未確認**: `UserPromptExpansion`（利用者が打った `/verify`）、PowerShell の `if`、Windows の実機、導入先の Claude Code 2.1.321（固定版）。
 - **Codex は実機未確認**: PostToolUse `^Bash$` が実際の `git commit`（unified exec 経由を含む）で発火するか、`/hooks` での信頼と再確認、`codex exec` での発火、AGENTS.md の 2 行で `$verify` と `mark verify` が使われる割合、Windows の command 文字列。テストの Codex 入力は文書から作った fixture で、実機で採取したものではありません。
 
 ## テスト計画

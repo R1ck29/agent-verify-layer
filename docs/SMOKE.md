@@ -56,7 +56,7 @@ ECC_GATEGUARD=off claude -p "In a.js change the greeting from hello to hi, then 
    - `.git/claude-verify/ledger.jsonl`（`kind: run` の `via` が `model`、`kind: commit` の `session_verify` が `true` か）
    - stream-json の中に、この層の hook（PostToolUse、`vl.js hook run verify` / `hook commit`）の `hook_started` / `hook_response` があり、`exit_code` が 0 か
 4. Claude が `/verify` を呼ばずにコミットしたなら、`result: none` の commit 行ができるはずです。それは「標準の指示が守られなかった」という観察で、この層の動作としては正しい結果です。
-5. 利用者が `/verify` を打つ経路（UserPromptExpansion）は、対話セッションで `/verify` を打ってから `report` を見て、`via: user` の行ができるかを確かめる。導入先の 2.1.321 では、ここが最初の確認点になる。
+5. 利用者が `/verify` を打つ経路（UserPromptExpansion）は、対話セッションで `/verify` を打ってから `report` を見て、`via: user` の行ができるかを確かめる。導入先の Claude Code 2.1.321（固定版）では、ここが最初の確認点になる。
 6. 結果を、この文書の末尾に追記する（過去の記録は書き換えない）。
 
 ---

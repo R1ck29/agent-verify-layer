@@ -150,7 +150,7 @@ function checkEnvironment(add) {
     add('info', bash ? `Git Bash あり: ${bash}` : 'Git Bash が見つかりません（Bash ツールが無く、PowerShell ツールだけで動く構成の可能性）。hook は Bash|PowerShell の両方に配線済みです');
     add('info', `CLAUDE_CODE_USE_POWERSHELL_TOOL=${process.env.CLAUDE_CODE_USE_POWERSHELL_TOOL || '(未設定)'}`);
   }
-  if (truthy(process.env.CLAUDE_CODE_USE_BEDROCK)) add('info', '推論経路: `CLAUDE_CODE_USE_BEDROCK`（フラグを取りに行かないため、標準の verify 指示は既定値に従います）');
+  if (truthy(process.env.CLAUDE_CODE_USE_BEDROCK)) add('info', '推論経路: `CLAUDE_CODE_USE_BEDROCK` が有効（フラグを取りに行かないため、標準の verify 指示は既定値に従います）');
   if (truthy(process.env.CLAUDE_CODE_DISABLE_GIT_INSTRUCTIONS)) add('ng', '環境変数 CLAUDE_CODE_DISABLE_GIT_INSTRUCTIONS が有効です。標準の verify 指示が消えます');
   const mode = loadConfig().mode;
   add(mode === 'off' ? 'warn' : 'info', `config: ${configPath()}（mode=${mode}${mode === 'off' ? '。off の間は台帳に何も書きません' : ''}）`);

@@ -23,7 +23,7 @@ agent-verify-layer（旧名 claude-verify-layer）は、コミットが「verify
 | Windows の Git Bash と PowerShell | `where bash`、`Get-Command pwsh, powershell`、環境変数 `CLAUDE_CODE_GIT_BASH_PATH`、`CLAUDE_CODE_USE_POWERSHELL_TOOL` | Git Bash がないと Bash ツールが登録されない。PowerShell ツールが有効だと主シェルは PowerShell になる。hook は `Bash\|PowerShell` の両方に配線済みなので、どちらでも動く |
 | Node | `node --version`（18 以上が必要）。Windows は `where node` | なければ第 6 節へ |
 | git | `git --version`（2.30 以上を推奨） | なければ導入できない |
-| 推論の経路 | 環境変数 `CLAUDE_CODE_USE_BEDROCK` など | その推論経路ではフラグを取りに行かないため、標準の verify 指示は既定値に従う |
+| 推論の経路 | 環境変数 `CLAUDE_CODE_USE_BEDROCK` など | その経路ではフラグを取りに行かないため、標準の verify 指示は既定値に従う |
 | GitHub に届くか | 利用者に聞く。確かめるなら、認証を求められない公開の URL に `GIT_TERMINAL_PROMPT=0 git ls-remote https://github.com/git/git HEAD`（5 秒で打ち切る） | 届かなくても、ZIP をローカルのマーケットプレイスとして使えば導入できる |
 | 管理設定 | macOS `/Library/Application Support/ClaudeCode/managed-settings.json`、Linux `/etc/claude-code/managed-settings.json`、Windows `C:\Program Files\ClaudeCode\managed-settings.json`。キーは `allowManagedHooksOnly`、`strictPluginOnlyCustomization`、`disableAllHooks`、`includeGitInstructions`、`skillOverrides`、`enabledPlugins` | 第 3 節で使う。サーバー管理の設定は、ファイルでは見えない。`/status` の `Setting sources` で管理元を確かめ、`/hooks` に「管理設定の hook だけが動く」旨が出ていないかも見る |
 | 利用者・プロジェクトの settings | `~/.claude/settings.json`、`<repo>/.claude/settings.json`、`<repo>/.claude/settings.local.json`。同じキーに加え、`env` の `CLAUDE_CODE_DISABLE_GIT_INSTRUCTIONS`、既存の `hooks` | 既存の hook は壊さない。特に PreToolUse と PostToolUse の `Bash`、`Skill`、`UserPromptExpansion` を数えて報告する（件数だけでよい） |
@@ -31,7 +31,7 @@ agent-verify-layer（旧名 claude-verify-layer）は、コミットが「verify
 | `verify` が標準の指示の対象か | 環境変数 `CLAUDE_CODE_DISABLE_GIT_INSTRUCTIONS`、設定 `includeGitInstructions: false`、`skillOverrides` の `verify` / `simplify` が `user-invocable-only` か `off`、プロジェクトの `verify` の `disable-model-invocation: true`、`--bare` / `--safe-mode` の使用 | どれかに当たると標準の指示が消え、verify の実行率は 0 になる |
 | コミットに反応する既存 hook | ECC の gateguard など（PreToolUse の Bash）。settings と有効なプラグインを見る | 同じイベントの hook は並列に動く。この層は PostToolUse だけなので衝突しない。ほかを無効にするのは提案にとどめる |
 | Codex | `codex --version`、`$CODEX_HOME`（未設定なら `~/.codex`）があるか | どちらもなければ Codex の部分（第 9 節）は飛ばす。あれば第 9 節の検出も行う |
-| プラグイン配布 | 利用者に聞く。`claude plugin marketplace list` も見る | あれば、配布担当に ZIP の内容を導入先のマーケットプレイスへ登録してもらうのが最も確実 |
+| 導入先のプラグイン配布 | 利用者に聞く。`claude plugin marketplace list` も見る | あれば、配布担当に ZIP の内容を導入先のマーケットプレイスへ登録してもらうのが最も確実 |
 
 そのあと `node <展開先>/scripts/vl.js doctor`（読むだけ。使い捨てのリポジトリで hook を試し、利用者のリポジトリや設定には書かない）を実行し、出力を結果に加えます。
 
@@ -117,7 +117,7 @@ node <展開先>/scripts/install.js --apply --rules
 ## 5. 導入後の確認
 
 1. `node <展開先>/scripts/vl.js doctor` — 各 hook に擬似入力を流し、終了コード 0 と出力の形を確かめます。NG があれば直し方を利用者に伝えます。WARN は内容を読んで報告します。
-2. 任意（モデル費用は 1 回分）: 使い捨てのリポジトリで Claude Code を 1 回動かし、利用者に `/verify` を打ってもらい（同梱の `/verify` は利用者が打つコマンドで、あなたからは呼べません）、そのあとコミットさせ、`node <展開先>/scripts/vl.js report` で run と commit の行が増えたことを確かめます。`/verify` を打った記録（UserPromptExpansion）は、導入先の Claude Code の版によって発火しないことがあります。動かない場合は PostToolUse(Skill) だけで記録され、`none` が増えます。そのことを報告します。
+2. 任意（モデル費用は 1 回分）: 使い捨てのリポジトリで Claude Code を 1 回動かし、利用者に `/verify` を打ってもらい（同梱の `/verify` は利用者が打つコマンドで、あなたからは呼べません）、そのあとコミットさせ、`node <展開先>/scripts/vl.js report` で run と commit の行が増えたことを確かめます。`/verify` を打った記録（UserPromptExpansion）は、導入先の Claude Code（固定版）によって発火しないことがあります。動かない場合は PostToolUse(Skill) だけで記録され、`none` が増えます。そのことを報告します。
 3. 各リポジトリへの導入（リポジトリごとに 1 回）: 利用者に `/verify` を 1 回打ってもらい、記録された `.claude/skills/verify/SKILL.md` を（利用者の承認のうえで）コミットします。続けてもう 2 回 `/verify` を打ってもらい、結果が同じかを見ます。**`.claude/skills/verify/` には自分で書きません**（`/verify` が自分の記録として使う場所です）。
 4. 使い方: `node <展開先>/scripts/vl.js report` で、台帳に拾えた割合、結果の内訳、verify の実行率、hook の所要時間を見ます。
 

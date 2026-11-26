@@ -1,7 +1,7 @@
 """LLM backends: the Claude Code CLI (`claude`) and the Codex CLI (`codex`).
 
 WikiSkill never talks to the network itself. Every model call goes through one of
-these CLIs, so whatever authentication the CLI already uses (Anthropic, `CLAUDE_CODE_USE_BEDROCK`,
+these CLIs, so whatever authentication the CLI already uses (API keys or a cloud provider,
 an internal gateway, ...) is reused as-is.
 
 Two calls are needed:
@@ -59,7 +59,7 @@ DEFAULTS: Dict[str, Dict[str, object]] = {
 }
 
 
-_MODEL_RE = re.compile(r"[\w.:/@+-]+")  # Anthropic, OpenAI and cloud-inference ids / ARNs
+_MODEL_RE = re.compile(r"[\w.:/@+-]+")  # provider model ids / ARNs
 _LIVE: set = set()  # running CLI processes, so Ctrl+C in the main thread can stop worker-thread runs
 _LIVE_LOCK = threading.Lock()
 

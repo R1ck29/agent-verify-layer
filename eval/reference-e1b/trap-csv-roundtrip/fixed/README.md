@@ -9,7 +9,7 @@ AI エージェント（Claude Code / Codex）に同じ種類の業務タスク�
 
 - **Python 3.9 以上の標準ライブラリだけ**で動きます（`pip install` 不要）。Windows / macOS / Linux 対応。
 - モデルは手元の **`claude` / `codex` コマンド経由でのみ**呼び出します。WikiSkill 自身はネットワークに接続しないため、
-  CLI が `CLAUDE_CODE_USE_BEDROCK` や認証済みゲートウェイで認証済みなら、そのまま使えます。
+  CLI が既存の認証経路（`CLAUDE_CODE_USE_BEDROCK` や導入先のゲートウェイなど）で認証済みなら、そのまま使えます。
 - 育ったスキルは Claude Code や Codex のスキルとしてそのまま使えます。
 
 ## しくみ
@@ -30,7 +30,7 @@ AI エージェント（Claude Code / Codex）に同じ種類の業務タスク�
 ## 準備
 
 1. **Python 3.9 以上**: ターミナルで `python3 --version`（Windows は `py --version`）を実行してバージョンを確認します。
-   入っていなければ手元の手順で Python をインストールしてください。
+   入っていなければ導入先の手順で Python をインストールしてください。
 2. **`claude` または `codex` コマンド**: `claude -p "hello"` または `codex exec "hello"` が返答すれば OK です。
 3. **WikiSkill の入手**（どちらか）:
    - Git: `git clone https://github.com/R1ck29/wikiskill.git`
@@ -54,7 +54,7 @@ python -m wikiskill check --model sonnet
 python -m wikiskill evolve examples/sales-analysis --workspace workspaces/sales --model haiku --iterations 4
 ```
 
-売上 CSV の集計タスクでスキルを育てます。答えは「金額は税抜で報告する」という**データに書かれていない業務ルール**に
+売上 CSV の集計タスクでスキルを育てます。答えは「金額は税抜で報告する」という**データに書かれていない運用ルール**に
 従っているため、エージェントは失敗から学ぶ必要があります。止めても同じコマンドで続きから再開します。
 
 ```bash
@@ -171,5 +171,5 @@ python -m unittest discover -s tests -t .
 ## ドキュメント
 
 - [docs/SUITE_FORMAT.md](docs/SUITE_FORMAT.md) — 自分の業務のタスクと採点方法の書き方
-- [docs/CONFIGURATION.md](docs/CONFIGURATION.md) — CLI の設定、導入時の注意点
+- [docs/CONFIGURATION.md](docs/CONFIGURATION.md) — CLI の設定、閉じた作業環境での注意点
 - [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) — 仕組み、コード構成、論文との対応と差分
