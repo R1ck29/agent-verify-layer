@@ -5,8 +5,9 @@ const os = require('node:os');
 const path = require('node:path');
 const { spawnSync } = require('node:child_process');
 const { git, repoRoot, isolatedGitEnv } = require('./git');
-const { claudeDir, configPath, loadConfig } = require('./config');
+const { claudeDir, configPath, loadConfig, loadV2Config } = require('./config');
 const { isOwnHandler, readJsonFile, allHandlers, managedSettingsPath } = require('./settings');
+const { diagnoseV02 } = require('./hooks-v02');
 
 const VL = path.resolve(__dirname, '..', 'vl.js');
 const MIN_VERIFY_INSTRUCTION = [2, 1, 286];
@@ -23,7 +24,10 @@ function lt(a, b) {
 }
 
 function tryRun(cmd, args) {
-  const r = spawnSync(cmd, args, { encoding: 'utf8', timeout: 8000, windowsHide: true, shell: process.platform === 'win32' && cmd === 'claude' });
+  const r = spawnSync(cmd, args, {
+    encoding: 'utf8', timeout: 8000, windowsHide: true, shell: process.platform === 'win32' && cmd === 'claude',
+    stdio: ['ignore', 'pipe', 'pipe'],
+  });
   return r.error || r.status !== 0 ? null : (r.stdout || '').trim();
 }
 
@@ -152,6 +156,21 @@ function checkEnvironment(add) {
   add(mode === 'off' ? 'warn' : 'info', `config: ${configPath()}（mode=${mode}${mode === 'off' ? '。off の間は台帳に何も書きません' : ''}）`);
 }
 
+function checkV02(add, config) {
+  if (config.mode === 'off') return;
+  add('info', `v0.2: mode=${config.mode}, runner=${config.runner}`);
+  const tools = [
+    ['python3', ['-I', '-B', '--version'], 'python3'],
+    ['python3', ['-I', '-B', '-c', 'import pytest; print(pytest.__version__)'], 'pytest'],
+    ['strace', ['-V'], 'strace'],
+  ];
+  for (const [cmd, args, name] of tools) {
+    const version = tryRun(cmd, args);
+    add(version ? 'ok' : 'info', `v0.2: ${name} ${version ? `あり（${version.split(/\r?\n/)[0]}）` : '未検出'}`);
+  }
+  add('info', 'v0.2: 実セッションでの開始イベントと Stop の確認手順は docs/SMOKE.md を参照してください');
+}
+
 // Feeds a sample input of each hook event to vl.js inside a throw-away repo.
 function checkHooksSmoke(add) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'vl-doctor-'));
@@ -230,12 +249,16 @@ function run(flags) {
   const results = [];
   const add = (level, msg) => results.push({ level, msg });
   const root = repoRoot(path.resolve(flags.repo || process.cwd()));
+  const v02 = root ? loadV2Config(root) : { mode: 'off' };
+  const v02Active = v02.mode !== 'off';
   checkEnvironment(add);
   const files = loadSettingsFiles(root);
   checkSettings(add, files);
   checkWiring(add, files);
+  checkV02(add, v02);
+  diagnoseV02(add, 'Claude', 'claude', files.map(({ data }) => data), v02Active);
   checkSkills(add, root);
-  require('./doctor-codex').checkCodex(add, root);
+  require('./doctor-codex').checkCodex(add, root, process.env, v02Active);
   checkHooksSmoke(add);
 
   const ng = results.filter((r) => r.level === 'ng').length;

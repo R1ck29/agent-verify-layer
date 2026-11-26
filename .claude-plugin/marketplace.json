@@ -5,13 +5,13 @@
   },
   "metadata": {
     "description": "展開したディレクトリをローカルのマーケットプレイスとして追加するための定義",
-    "version": "0.1.0"
+    "version": "0.2.0"
   },
   "plugins": [
     {
       "name": "verify-layer",
       "description": "検証レイヤー（観察モード）: verify / code-review とコミットをローカルの台帳に記録し、HEAD 側のチェックリストを照合する",
-      "version": "0.1.0",
+      "version": "0.2.0",
       "source": "./"
     }
   ]

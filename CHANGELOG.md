@@ -26,6 +26,18 @@
 - `install.js` が `module.exports` より前に `main()` を呼んでいたため、`--agent codex` が毎回「t.removeOwn is not a function」で失敗していた
 - 実機の Claude Code 2.1.325 で、`if: "Skill(verify)"` の PostToolUse hook が起動せず、run 行が台帳に書かれなかった（commit 行が `none` になる）。Skill の hook を `if` なしの `matcher: "Skill"` 1 本（`vl.js hook skill`）にし、スクリプト側で `tool_input.skill` から verify / 入れ子の verify / code-review（別名 `review`）を判定して記録し、ほかのスキルでは何もせず終了するようにした。`hook run <verify|code-review>` は `hook skill` に置き換わった（`install.js --apply` で入れ直すと古い登録は置き換わる）。Bash の `if` は実機で当たったので変更なし。詳細は `docs/SMOKE.md`
 
+## [0.2.0] - 2026-11-27
+
+### 追加
+
+- `verify-diff` が依頼開始時と検証時の隔離コピーで公開入口を比較します。指定 assertion と実引数を計測し、既存公開テストの回帰を確認して、最終スナップショットに結び付いた証拠を台帳に残します。
+- リポジトリ単位の `verifyV2.mode` と、Claude Code・Codex 用の開始および Stop hook を追加しました。`observe` は記録のみ行い、`enforce` は対応ランナーで未検証の場合に依頼ごとに最大 1 回介入します。
+- 公開テストからのランナー判定と設定生成、`verify2` スキル、導入・削除コマンド、doctor 診断を追加しました。既存の v0.1 観察モードも利用できます。
+
+### 修正
+
+- Node で直接 `await` する等値比較を扱い、計測した実引数とケース入力が異なる実行を未検証にします。
+
 ## [0.1.0] - 2026-11-18
 
 観察モードだけの初版。仕様は `docs/REVIEW-NOTES.md` 第 5 節「調整済み計画」です（設計書 `docs/DESIGN-source.md` と食い違う点はレビューノートを優先）。

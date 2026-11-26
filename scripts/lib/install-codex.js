@@ -9,6 +9,7 @@ const { readJsonFile } = require('./settings');
 const { repoRoot, scrubbedEnv } = require('./git');
 const { configPath } = require('./config');
 const codex = require('./codex');
+const { v02Groups, v02Script } = require('./hooks-v02');
 
 const ROOT = path.resolve(__dirname, '..', '..');
 const SKILL_SRC = path.join(ROOT, 'codex', 'skills', 'verify');
@@ -120,24 +121,24 @@ function assertInsideRepo(project, dest, files) {
   }
 }
 
-function handleRepoSkill(opts, report) {
+function handleRepoSkill(opts, report, { name = 'verify', directory = '.agents', source = SKILL_SRC } = {}) {
   const dir = path.resolve(opts.projectDir || process.cwd());
   const project = repoRoot(dir, { fullEnv: scrubbedEnv() });
   if (!project) {
     throw new Error(opts.projectDir ? `指定した ${dir} は Git リポジトリ内ではありません（--repo-skill はリポジトリ単位です）` : `${dir} は Git リポジトリ内ではありません。--repo-skill はリポジトリの中で実行するか、--project-dir で指定してください`);
   }
-  const dest = path.join(project, '.agents', 'skills', 'verify');
-  const files = listFiles(SKILL_SRC);
+  const dest = path.join(project, directory, 'skills', name);
+  const files = listFiles(source);
   assertInsideRepo(project, dest, files);
   const same = files.every((f) => {
     try {
-      return fs.readFileSync(path.join(dest, f), 'utf8') === fs.readFileSync(path.join(SKILL_SRC, f), 'utf8');
+      return fs.readFileSync(path.join(dest, f), 'utf8') === fs.readFileSync(path.join(source, f), 'utf8');
     } catch {
       return false;
     }
   });
   const exists = fs.existsSync(path.join(dest, 'SKILL.md'));
-  report.targets.push(`verify スキル: ${dest}${same ? '（雛形と同じ）' : exists ? '（別の内容であり。上書きしません）' : ''}`);
+  report.targets.push(`${name} スキル: ${dest}${same ? '（雛形と同じ）' : exists ? '（別の内容であり。上書きしません）' : ''}`);
   if (opts.action === 'uninstall') {
     if (!exists) return;
     if (!same) {
@@ -157,19 +158,34 @@ function handleRepoSkill(opts, report) {
   }
   if (same) return;
   if (exists) {
-    report.notes.push(`${dest} は既にあるため上書きしません（雛形は ${SKILL_SRC}）`);
+    report.notes.push(`${dest} は既にあるため上書きしません（雛形は ${source}）`);
     return;
   }
   if (opts.action === 'check') {
-    report.changes.push(`verify スキルを置く: ${dest}`);
+    report.changes.push(`${name} スキルを置く: ${dest}`);
     return;
   }
   for (const f of files) {
     const to = path.join(dest, f);
     fs.mkdirSync(path.dirname(to), { recursive: true });
-    fs.copyFileSync(path.join(SKILL_SRC, f), to, fs.constants.COPYFILE_EXCL);
+    fs.copyFileSync(path.join(source, f), to, fs.constants.COPYFILE_EXCL);
   }
-  report.wrote.push(`verify スキル: ${dest}（コミットするかは利用者が決めます）`);
+  report.wrote.push(`${name} スキル: ${dest}（コミットするかは利用者が決めます）`);
+}
+
+function runV02Skill(opts) {
+  const agent = opts.agent || 'claude';
+  const directory = agent === 'codex' ? '.agents' : '.claude';
+  const source = agent === 'codex' ? path.join(ROOT, 'codex', 'skills', 'verify2') : path.join(ROOT, 'skills', 'verify2');
+  const report = { action: opts.action, agent, scope: 'project',
+    settingsFile: `${directory}/skills/verify2`, targets: [], changes: [], notes: [], wrote: [] };
+  try {
+    handleRepoSkill(opts, report, { name: 'verify2', directory, source });
+    return { code: 0, report };
+  } catch (error) {
+    report.error = error.message;
+    return { code: 2, report };
+  }
 }
 
 // --- main ------------------------------------------------------------------------------------
@@ -213,7 +229,7 @@ function run(opts) {
   const before = read.data || {};
   let own;
   try {
-    own = codex.ownGroups(opts.node || 'node');
+    own = opts.v02 ? v02Groups('codex', opts.node || 'node') : codex.ownGroups(opts.node || 'node');
   } catch (e) {
     report.error = `${e.message}。何も書いていません（--node か vl.js のパスを、シェルで 1 語として書ける場所にしてください）`;
     return { code: 2, report };
@@ -224,8 +240,10 @@ function run(opts) {
     return { code: 2, report };
   }
   const target = t.writeTarget(hooksFile);
-  const registration = t.hookRegistration('codex', target);
-  const { settings: stripped, removed } = t.removeOwn(before, (h, event, group) => codex.isOwnCodexHandler(h, event, group, registration.paths));
+  const registration = t.hookRegistration(opts.v02 ? 'codex-v02' : 'codex', target);
+  const { settings: stripped, removed } = t.removeOwn(before, (h, event, group) => opts.v02
+    ? v02Script('codex', h, event, group, registration.paths)
+    : codex.isOwnCodexHandler(h, event, group, registration.paths));
   const after = opts.action === 'uninstall' ? stripped : t.addOwn(stripped, own);
   const same = JSON.stringify(after) === JSON.stringify(before);
   report.installedHandlers = removed;
@@ -289,11 +307,12 @@ function run(opts) {
       t.atomicWrite(configPath(), JSON.stringify(data, null, 2) + '\n', configTarget);
       report.wrote.push(`設定: ${configPath()}（mode=${opts.mode}。Claude と共通）`);
     }
-    report.notes.push('Codex を起動して /hooks を開き、verify-layer の hook（PostToolUse ^Bash$）を確認して信頼してください。信頼するまで実行されません。hook の定義が変わると（--apply で入れ直したときを含む）再び確認が要ります');
+    const events = opts.v02 ? 'UserPromptSubmit / Stop' : 'PostToolUse ^Bash$';
+    report.notes.push(`Codex を起動して /hooks を開き、verify-layer の hook（${events}）を確認して信頼してください。信頼するまで実行されません。hook の定義が変わると（--apply で入れ直したときを含む）再び確認が要ります`);
   } else {
     report.notes.push('各リポジトリの台帳（.git/claude-verify/）は残しています。消すかどうかは利用者が決めてください');
   }
   return { code: 0, report };
 }
 
-module.exports = { run, nextAgentsText, SKILL_SRC };
+module.exports = { run, runV02Skill, nextAgentsText, SKILL_SRC };

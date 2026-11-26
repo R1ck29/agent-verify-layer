@@ -65,7 +65,15 @@ async function install() {
       const result = nextLoad(url, context);
       if (url.startsWith('file:')) {
         const rel = relative(fileURLToPath(url));
-        if (rel) copyFiles.add(rel);
+        if (rel) {
+          copyFiles.add(rel);
+          try {
+            const destination = relative(realpath(fileURLToPath(url)));
+            if (destination) copyFiles.add(destination);
+          } catch {
+            state.problems.push('loaded module realpath unavailable');
+          }
+        }
         if (url === state.entryUrl && rel) {
           try {
             state.modulePath = relative(realpath(fileURLToPath(url)));
@@ -231,7 +239,9 @@ async function install() {
       state.linkError = error.message;
     }
   });
-  process.on('exit', () => writeFile(output, JSON.stringify(state), { mode: 0o600 }));
+  process.on('exit', () => writeFile(output, JSON.stringify({
+    ...state, loadedFiles: [...copyFiles].filter((file) => file !== relative(testFile)),
+  }), { mode: 0o600 }));
 
   const worker = new Worker(new URL('./node-inspector.mjs', import.meta.url), {
     execArgv: [], workerData: { testUrl, shape, stateKey },

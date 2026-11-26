@@ -5,6 +5,7 @@ import base64
 import builtins
 from contextlib import contextmanager
 from dataclasses import dataclass
+from dis import opname
 import inspect
 import math
 import os
@@ -424,7 +425,15 @@ class CaseEvidence:
                 self.input_reference(element)
 
     def profile(self, frame: types.FrameType, event: str, arg: object) -> None:
-        if event != "call" or id(frame) in self.frames:
+        if id(frame) in self.frames:
+            if event == "return" and self.case["expected"]["kind"] == "value":
+                if frame.f_lasti >= 0 and opname[frame.f_code.co_code[frame.f_lasti]] in ("RETURN_VALUE", "RETURN_CONST"):
+                    try:
+                        typed(arg, set(), expected=True)
+                    except (TypeError, ValueError):
+                        self.error = "Return value has no supported literal comparison"
+            return
+        if event != "call":
             return
         case_frame = self.case_frame(frame.f_back)
         if case_frame is None:
@@ -533,10 +542,17 @@ class CaseEvidence:
 
     def audit(self, event: str, args: tuple) -> None:
         process = event in PROCESS_EVENTS
-        if not self.monitoring or self.inside_hook or not (process or event in AUDITED_PATHS):
+        if not self.monitoring or self.inside_hook or not (process or event == "exec" or event in AUDITED_PATHS):
             return
         self.inside_hook = True
         try:
+            if event == "exec":
+                filename = args[0].co_filename
+                if not filename.startswith("<"):
+                    source = self.realpath(filename)
+                    if source != self.file and in_repo(self.root, source):
+                        self.loaded_module_paths.add(source)
+                return
             if not self.user_frame(sys._getframe(1)):
                 return
             if process:
@@ -576,6 +592,7 @@ class CaseEvidence:
             "modulePath": module_path, "absence": absence,
             "exceptionFromEntry": exception_origin,
             "references": list(self.references.values()), "reason": reason,
+            "loadedFiles": sorted(os.path.relpath(name, self.root) for name in self.loaded_module_paths),
         }
 
 

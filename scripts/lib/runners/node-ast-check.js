@@ -1,6 +1,7 @@
 'use strict';
 
 const { parse } = require('../../../vendor/acorn.cjs');
+const { sameValue } = require('../case-policy');
 
 function parseSource(source, file) {
   const options = { ecmaVersion: 'latest', locations: true };
@@ -95,17 +96,6 @@ function member(node, base, key) {
     node.property.type === 'Identifier' && node.property.name === key;
 }
 
-function deepMatchTyped(actual, expected) {
-  const normalize = (typed) => {
-    if (Array.isArray(typed)) return typed.map(normalize);
-    if (typed && typeof typed === 'object') {
-      return Object.fromEntries(Object.keys(typed).sort().map((key) => [key, normalize(typed[key])]));
-    }
-    return typed;
-  };
-  return JSON.stringify(normalize(actual)) === JSON.stringify(normalize(expected));
-}
-
 function checkNodeCase(source, caseData) {
   try {
     return { ok: true, ...nodeShape(source, caseData) };
@@ -173,6 +163,7 @@ function nodeShape(source, caseData) {
 
   const method = comparison.callee.property.name;
   const [actual, wanted] = comparison.arguments;
+  let wantedDeclaration;
   let entryCall;
   if (expected.kind === 'exception') {
     if (wanted.type !== 'Identifier' || wanted.name !== expected.type) {
@@ -183,7 +174,19 @@ function nodeShape(source, caseData) {
     if (method === 'rejects' && awaited) entryCall = actual;
   } else if (expected.kind === 'value' && ['strictEqual', 'deepStrictEqual'].includes(method) && !awaited) {
     const { serializeInput } = require('./node-values');
-    if (!deepMatchTyped(serializeInput([literalValue(wanted)]).args[0], expected.value)) {
+    let literal = wanted;
+    if (wanted.type === 'Identifier') {
+      const declarations = callback.body.body.slice(0, callback.body.body.indexOf(assertion))
+        .filter((statement) => statement.type === 'VariableDeclaration')
+        .flatMap((statement) => statement.declarations)
+        .filter(({ id }) => id.type === 'Identifier' && id.name === wanted.name);
+      if (declarations.length !== 1 || !declarations[0].init) {
+        throw new Error('expected one literal binding before the assertion');
+      }
+      wantedDeclaration = declarations[0].id;
+      literal = declarations[0].init;
+    }
+    if (!sameValue(serializeInput([literalValue(literal)]).args[0], expected.value)) {
       throw new Error('literal expectation does not match the case');
     }
     entryCall = actual.type === 'AwaitExpression' ? actual.argument : actual;
@@ -198,6 +201,8 @@ function nodeShape(source, caseData) {
   const allowedEntry = new Set([binding.declaration, binding.property, entryCall.callee]);
   const importedLocals = new Set(imports.map(({ name }) => name));
   walk(tree, (node, parent) => {
+    if (wantedDeclaration && node.type === 'Identifier' && node.name === wanted.name &&
+        node !== wanted && node !== wantedDeclaration) throw new Error('expectation binding may only be used once');
     if (node.type === 'Identifier' && node.name === context && !allowedContext.has(node)) {
       throw new Error('testing context may only be used for the plan and assertion');
     }

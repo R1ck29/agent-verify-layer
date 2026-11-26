@@ -6,6 +6,7 @@
 //   node scripts/install.js --uninstall [--rules] [--purge]
 //   node scripts/install.js --agent codex [--check|--apply|--uninstall] [--agents-md] [--repo-skill]
 //     (Codex CLI: $CODEX_HOME/hooks.json; see scripts/lib/install-codex.js)
+//   node scripts/install.js --v02 [--agent claude|codex] [--check|--apply|--uninstall] [--repo-skill]
 // Other options: --settings-file PATH, --project-dir DIR, --node PATH, --force
 // Own hooks are recognised by the current or previously installed absolute vl.js path;
 // foreign hooks are never edited, removed or reordered.
@@ -15,6 +16,7 @@ const path = require('node:path');
 const { claudeDir, configDir, configPath } = require('./lib/config');
 const { repoRoot, git, scrubbedEnv } = require('./lib/git');
 const { isOwnHandler, readJsonFile, managedSettingsPath } = require('./lib/settings');
+const { v02Groups, v02Script } = require('./lib/hooks-v02');
 
 const ROOT = path.resolve(__dirname, '..');
 const VL = path.join(ROOT, 'scripts', 'vl.js');
@@ -325,17 +327,22 @@ function parseArgs(argv) {
     else if (a === '--hooks-file') o.hooksFile = val(a, i++);
     else if (a === '--agents-md') o.agentsMd = true;
     else if (a === '--repo-skill') o.repoSkill = true;
+    else if (a === '--v02') o.v02 = true;
     else throw new Error(`不明なオプション: ${a}`);
   }
   if (o.mode !== undefined && !['observe', 'off'].includes(o.mode)) throw new Error('--mode は observe か off です（enforce は v0.1 にありません）');
   if (o.agent !== undefined && !['claude', 'codex'].includes(o.agent)) throw new Error(`--agent は claude か codex です: ${o.agent}`);
-  const codexOnly = ['hooksFile', 'agentsMd', 'repoSkill'].filter((k) => o[k] !== undefined);
+  if (o.v02 && (o.mode || o.rules || o.purge || o.agentsMd)) {
+    throw new Error('--v02 のモードはリポジトリの .verify-layer.json で設定します。--mode / --rules / --purge / --agents-md は v0.1 用です');
+  }
+  const codexOnly = ['hooksFile', 'agentsMd', ...(!o.v02 ? ['repoSkill'] : [])].filter((k) => o[k] !== undefined);
   if (o.agent !== 'codex' && codexOnly.length) throw new Error('--hooks-file / --agents-md / --repo-skill は --agent codex と一緒に使います');
   if (o.agent === 'codex' && (o.rules || o.settingsFile)) throw new Error('--rules / --settings-file は Claude 用です（Codex は --agents-md / --hooks-file）');
   return o;
 }
 
 function run(opts) {
+  if (opts.v02 && opts.repoSkill) return require('./lib/install-codex').runV02Skill(opts);
   if (opts.agent === 'codex') return require('./lib/install-codex').run(opts);
   const t = resolveTargets(opts);
   const report = { action: opts.action, scope: t.scope, settingsFile: t.settingsFile, changes: [], notes: [], wrote: [] };
@@ -353,14 +360,16 @@ function run(opts) {
   if (problem) report.notes.push(problem);
   const before = read.data || {};
   const nodeCmd = opts.node || 'node';
-  const ownGroups = buildOwnGroups(nodeCmd);
+  const ownGroups = opts.v02 ? v02Groups('claude', nodeCmd) : buildOwnGroups(nodeCmd);
   const shape = hooksShapeError(before, ownGroups);
   if (shape) {
     report.error = `${t.settingsFile} の ${shape}。書き換えると中身が失われるため、何も書いていません。直してから再実行してください`;
     return { code: 2, report };
   }
-  const registration = hookRegistration('claude', target);
-  const { settings: stripped, removed } = removeOwn(before, (h, event, group) => isOwnHandler(h, event, group, registration.paths));
+  const registration = hookRegistration(opts.v02 ? 'claude-v02' : 'claude', target);
+  const { settings: stripped, removed } = removeOwn(before, (h, event, group) => opts.v02
+    ? v02Script('claude', h, event, group, registration.paths)
+    : isOwnHandler(h, event, group, registration.paths));
   report.installedHandlers = removed;
   report.foreignHandlers = (() => {
     let n = 0;
@@ -380,9 +389,13 @@ function run(opts) {
     if (!same) report.changes = describeGroups(ownGroups);
     report.notes.push(`既存の hook ${report.foreignHandlers} 件は変更しません`);
     if (managedBlocks()) report.notes.push('管理設定の allowManagedHooksOnly が有効です。--apply しても hook は動きません（管理者向けの配布が必要）');
-    const cfg = readJsonFile(configPath());
-    report.config = cfg.exists ? (cfg.data ? `mode=${cfg.data.mode}` : '読めません') : '未作成（--apply で {"mode":"observe"} を作成）';
-    report.rules = fs.existsSync(t.rulesFile) ? `あり: ${t.rulesFile}` : `なし（--rules で ${t.rulesFile} に置く）`;
+    if (opts.v02) {
+      report.notes.push('v0.2 のモードは各リポジトリの .verify-layer.json にある verifyV2 で設定します');
+    } else {
+      const cfg = readJsonFile(configPath());
+      report.config = cfg.exists ? (cfg.data ? `mode=${cfg.data.mode}` : '読めません') : '未作成（--apply で {"mode":"observe"} を作成）';
+      report.rules = fs.existsSync(t.rulesFile) ? `あり: ${t.rulesFile}` : `なし（--rules で ${t.rulesFile} に置く）`;
+    }
     return { code: 0, report };
   }
 
@@ -396,7 +409,7 @@ function run(opts) {
     report.changes = removed ? [`自分の hook ${removed} 件を外す`] : [];
   }
 
-  const cfg = opts.action === 'apply' ? readJsonFile(configPath()) : null;
+  const cfg = opts.action === 'apply' && !opts.v02 ? readJsonFile(configPath()) : null;
   const configTarget = cfg && (!cfg.exists || opts.mode) ? privateWriteTarget(configPath()) : null;
   const writeRegistration = planRegistration(registration, opts.action, !same);
   if (!same) {

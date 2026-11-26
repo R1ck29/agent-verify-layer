@@ -375,6 +375,6 @@ test('verify skill template: valid frontmatter, ends with the mark step, not a C
   assert.match(sections[sections.length - 1], /mark verify --agent codex/);
   assert.match(text, /\.claude\/skills\/verify\/SKILL\.md/); // the checks have one source
   assert.doesNotMatch(text, /vl\.js"/); // no machine-specific path in a committed file
-  assert.equal(fs.existsSync(path.join(ROOT, 'skills')), false);
+  assert.equal(fs.existsSync(path.join(ROOT, 'skills', 'verify')), false);
   assert.equal(JSON.parse(fs.readFileSync(path.join(ROOT, '.claude-plugin', 'plugin.json'), 'utf8')).skills, undefined);
 });

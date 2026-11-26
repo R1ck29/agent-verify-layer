@@ -6,6 +6,7 @@ const path = require('node:path');
 const { pathToFileURL } = require('node:url');
 const { spawnSync } = require('node:child_process');
 const { checkNodeCase } = require('./node-ast-check');
+const { sameValue } = require('../case-policy');
 
 const reporter = path.join(__dirname, 'node-reporter.mjs');
 const transport = path.join(__dirname, 'node-transport.cjs');
@@ -75,17 +76,24 @@ function run(root, cwd, nodeArgs, timeoutMs, temp, capture) {
   return { outcomes, success: summaries[0].success };
 }
 
-function supportedNodeArgs(args) {
+function supportedNodeArgs(args, flagsOnly = false) {
   if (!Array.isArray(args)) throw new Error('invalid node test command');
+  const flags = [];
   for (let i = 0; i < args.length; i++) {
     const arg = args[i];
     if (typeof arg !== 'string' || !arg) throw new Error('invalid node test argument');
     if (!arg.startsWith('-')) continue;
-    if (/^--test-(?:name|skip)-pattern=.+$/.test(arg)) continue;
-    if (/^--test-(?:name|skip)-pattern$/.test(arg) && typeof args[++i] === 'string') continue;
+    if (/^--test-(?:name|skip)-pattern=.+$/.test(arg)) {
+      flags.push(arg);
+      continue;
+    }
+    if (/^--test-(?:name|skip)-pattern$/.test(arg) && typeof args[++i] === 'string') {
+      flags.push(arg, args[i]);
+      continue;
+    }
     throw new Error('unsupported option in node test command');
   }
-  return args;
+  return flagsOnly ? flags : args;
 }
 
 function runSuite({ root, config = {}, timeoutMs, tests }) {
@@ -95,8 +103,10 @@ function runSuite({ root, config = {}, timeoutMs, tests }) {
     const explicitFiles = tests ? [...new Set(tests.map((test) => typeof test === 'string' ? test : test.file))]
       : config.nodeFiles;
     const cwd = safeCwd(root, config.nodeCwd ?? config.nodeCommand?.cwd);
-    const args = explicitFiles ? explicitFiles.map((file) => copyPath(root, file))
-      : supportedNodeArgs(config.nodeArgs ?? config.nodeCommand?.args ?? []);
+    const configuredArgs = config.nodeArgs ?? config.nodeCommand?.args ?? [];
+    const args = explicitFiles ? [
+      ...supportedNodeArgs(configuredArgs, true), ...explicitFiles.map((file) => copyPath(root, file)),
+    ] : supportedNodeArgs(configuredArgs);
     return tempRun(root, (temp) => {
       const { outcomes } = run(root, cwd, args, timeoutMs, temp);
       if (outcomes.some(({ envelope, file, error, status }) => !file || envelope ||
@@ -145,6 +155,7 @@ function runCase({ root, caseData, timeoutMs }) {
         modulePath: state.modulePath,
         assertions: state.assertions.length,
         references: state.references,
+        loadedFiles: state.loadedFiles,
       };
       if (state.childStarted) return errorResult('Node child process references could not be measured', evidence);
       if (state.problems.length) return errorResult(state.problems.join('; '), evidence);
@@ -160,6 +171,7 @@ function runCase({ root, caseData, timeoutMs }) {
         return errorResult('requested Node test did not complete exactly once', evidence);
       }
       if (!evidence.loaded || !evidence.called) return errorResult('public entry load or assertion call not measured', evidence);
+      if (!sameValue(evidence.input, caseData.input)) return errorResult('actual arguments do not match the case input', evidence);
 
       const [comparison] = state.assertions;
       const exceptionExpectation = caseData.expected.kind === 'exception';

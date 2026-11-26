@@ -168,4 +168,54 @@ function additionAllowed({ prompt, caseData, evidence, modulePath, beforeFiles, 
   return pathHints(prompt, name, isModule, beforeFiles, afterFiles, publicTestFiles).every((match) => match(modulePath));
 }
 
-module.exports = { canonical, sameValue, validateCase, appearsInPrompt, additionAllowed };
+function promptHasInput(prompt, input, runner) {
+  const rawLiterals = [];
+  // Recover calls embedded in prose, keeping nested literals and their order intact.
+  for (const call of prompt.matchAll(/[$A-Za-z_][$\w]*(?:\.[$A-Za-z_][$\w]*)*\s*\(/g)) {
+    let depth = 1;
+    let quote = '';
+    const start = call.index + call[0].length;
+    for (let index = start; index < prompt.length; index++) {
+      const char = prompt[index];
+      if (quote) {
+        if (char === '\\') index++;
+        else if (char === quote) quote = '';
+      } else if (char === '"' || char === "'") quote = char;
+      else if (char === '(') depth++;
+      else if (char === ')' && --depth === 0) {
+        rawLiterals.push(prompt.slice(call.index, index + 1));
+        break;
+      }
+    }
+  }
+  for (const match of prompt.matchAll(/`([^`\r\n]*)`|"((?:\\.|[^"\\\r\n])*)"|'((?:\\.|[^'\\\r\n])*)'/g)) {
+    rawLiterals.push(match[0]);
+    if (match[1] !== undefined) rawLiterals.push(match[1]);
+  }
+  for (const [match] of prompt.matchAll(/(?<![\w.])(?:-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?n?|true|false|null|undefined|True|False|None)(?![\w.])/g)) {
+    rawLiterals.push(match);
+  }
+  if (!input.kwargs.length && input.args.length === 1 && input.args[0].type === 'str' &&
+      rawLiterals.includes('`' + input.args[0].value + '`')) return true;
+  if (runner !== 'node') {
+    return require('./ast-guard').samePythonInput({}, null, input, [
+      ...rawLiterals, ...prompt.split(/[\r\n。！？]/).map((line) => line.trim()),
+    ]);
+  }
+  const { parseSource, literalValue } = require('./runners/node-ast-check');
+  const { serializeInput } = require('./runners/node-values');
+  for (const raw of rawLiterals) {
+    try {
+      const [statement, extra] = parseSource('(' + raw + ')', 'prompt.mjs').body;
+      if (extra) continue;
+      const value = statement.expression;
+      const args = value.type === 'CallExpression' ? value.arguments : [value];
+      if (sameValue(serializeInput(args.map(literalValue)), input)) return true;
+    } catch {
+      // A fragment of prose may not be a literal or an example call.
+    }
+  }
+  return false;
+}
+
+module.exports = { canonical, sameValue, validateCase, appearsInPrompt, additionAllowed, promptHasInput };

@@ -2,7 +2,49 @@
 
 （旧名 claude-verify-layer。2026-11-18 に Codex 対応を見据えて改名。Claude Code のプラグイン名 `verify-layer` は変えていません。Codex 対応の計画とレビューは [docs/CODEX-SUPPORT-PLAN.md](docs/CODEX-SUPPORT-PLAN.md)）
 
-Claude Code と Codex CLI の「コミット前の検証」を**測る**ための、観察だけの層です（v0.1.0。Codex は 0.170 の文書に基づく対応で、実機の確認はこれから。下の「Codex」）。
+Claude Code と Codex CLI 向けの検証レイヤーです。既定の v0.1 観察モードはコミット前の検証を記録します。v0.2 は、リポジトリで有効化すると依頼中の変更を隔離コピーで比較し、終了時に証拠を照合します。
+
+## v0.2 の使い方
+
+1. 利用するホストの開始・Stop hook を、導入先で登録します。下の例は Claude Code 用です。Codex CLI では `--agent claude` を `--agent codex` に替えます。確認だけなら `--apply` の代わりに `--check`、削除は `--uninstall` を使います。
+
+   ```sh
+   node /path/to/verify-layer/scripts/install.js --v02 --agent claude --apply
+   node /path/to/verify-layer/scripts/install.js --v02 --agent claude --repo-skill --apply
+   ```
+
+2. 対象リポジトリで `node /path/to/verify-layer/scripts/vl.js verify-diff --generate-config` を実行します。公開テストの収集結果に基づいてランナーと保護パスを選ぶため、信頼できるリポジトリで実行してください。出力の `verifyV2` をリポジトリ直下の `.verify-layer.json` に保存します。
+
+   ```json
+   {
+     "verifyV2": {
+       "mode": "observe",
+       "runner": "node",
+       "protectedPaths": ["test/core.test.mjs"]
+     }
+   }
+   ```
+
+3. 新しい依頼を開始し、hook が返す依頼 ID とコマンドを使います。`verify2` の手順に沿って境界候補を 3〜5 件挙げ、最も誤りやすい 1 件を公開入口で確かめるテストを追加します。指定 assertion をテスト本体の直下に置き、ケース JSON の `input` に型付き実引数、`inputFiles` に前後で共通に使うデータを記入して `verify-diff --case <JSON>` を実行します。ケース JSON はリポジトリ外に置くと、ケースの編集で作業ツリーの ID が変わりません。テンプレートは [verify2 スキル](skills/verify2/SKILL.md) にあります。
+4. 実装やテストを追加で編集したら、同じ最終状態で必要なケースを再実行します。`verify-diff --status` に hook から受け取った `--agent`、`--session`、`--request` を付けると状態を確認できます。
+
+| モード | 終了時の動作 |
+| --- | --- |
+| `off` | v0.2 を無効にします。`verifyV2` または `mode` を省略した場合も同じです。 |
+| `observe` | 判定を記録して終了を許可します。設定生成時の既定です。 |
+| `enforce` | リポジトリ単位で明示的に選びます。未検証時に依頼ごとに最大 1 回、境界検証を求めます。対応外ランナー、ケース取り下げ、確認された仕様矛盾では該当理由を記録して終了を許可します。 |
+
+異なるケース ID は 1 依頼で最大 3 件です。比較で失敗したケースは実引数、期待値、テスト、参照ファイルの状態が固定されます。期待値の誤りは `verify-diff --withdraw <caseId> --reason "<理由>"` で取り下げ、最終報告に理由を含めます。
+
+Verify はローカルで動作し、モデル API を呼びません。v0.2 の介入は最大 1 追加ターンです。ランナーに渡す時間予算は `timeoutMs` で短縮でき、既定および上限は 30 秒です。隔離コピーの準備時間もホストの hook・試行時間に含まれます。評価時のターン数、実行時間、費用の上限は各プロファイルで揃えます。[設計 rev12 §6.4](docs/V02-DESIGN.md#64-費用上限実行順序定額プラン運用規則)
+
+Linux で pytest、unittest、Node の公開テストを扱います。Node の追加ケースには `t.assert` とモジュールロード・入口の計測を使えるバージョンが必要です。ランナーをまたぐ構成や収集漏れは `unsupported` です。共有可変参照、対応する型付き値で表せない引数、参照の初期状態の不一致、子プロセスの参照を追跡できない場合は未検証になります。検証結果が示すのは選択した境界と既存公開テストで観測した動作です。[既知の限界 Issue #2](https://github.com/R1ck29/agent-verify-layer/issues/2)
+
+実ホストでの発火・理由配送・再入は別途確認します。構造テストとホスト別の確認手順は [スモーク手順](docs/SMOKE.md#v02-の開始と-stop-の確認) を参照してください。
+
+## v0.1 観察モード
+
+以下は Claude Code と Codex CLI のコミット前検証を観察する v0.1 の手順です。Codex は 0.170 の文書に基づく対応です。
 
 - verify（と code-review）が実行されたか、そのあとのコミットが**検証した状態のままか**を、各リポジトリの `.git/claude-verify/ledger.jsonl` に記録する
 - HEAD にコミット済みの `.claude/verification/checklist.json` を今回の diff に照合し、当たった項目だけを verify の開始時に Claude へ渡す

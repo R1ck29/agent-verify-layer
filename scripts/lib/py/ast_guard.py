@@ -720,10 +720,61 @@ def compare(before: dict[str, str], after: dict[str, str], protected: list[str])
     return violations
 
 
+def matches_literal_input(sources, symbol, requested, fragments) -> bool:
+    def typed(value):
+        kind = type(value)
+        if value is None:
+            return {"type": "none", "value": None}
+        if kind in (bool, int, float, str):
+            return {"type": kind.__name__, "value": value}
+        if kind is bytes:
+            from base64 import b64encode
+            return {"type": "bytes", "value": b64encode(value).decode("ascii")}
+        if kind in (list, tuple):
+            return {"type": kind.__name__, "value": [typed(item) for item in value]}
+        if kind is dict and all(type(key) is str for key in value):
+            return {"type": "dict", "value": [[key, typed(item)] for key, item in value.items()]}
+        raise ValueError("Not a supported literal")
+
+    def matches(node):
+        try:
+            if isinstance(node, ast.Call):
+                args = [typed(ast.literal_eval(arg)) for arg in node.args]
+                kwargs = [[item.arg, typed(ast.literal_eval(item.value))] for item in node.keywords]
+            else:
+                args = [typed(ast.literal_eval(node))]
+                kwargs = []
+            return {"args": args, "kwargs": kwargs} == requested
+        except (SyntaxError, ValueError, TypeError):
+            return False
+
+    for source in fragments:
+        try:
+            expression = ast.parse(source, mode="eval").body
+        except SyntaxError:
+            continue
+        if matches(expression):
+            return True
+    for file, source in sources.items():
+        tree = ast.parse(source, filename=file)
+        names = {symbol}
+        for node in ast.walk(tree):
+            if isinstance(node, ast.ImportFrom):
+                names.update(alias.asname or alias.name for alias in node.names if alias.name == symbol)
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Call):
+                call = node.func
+                if (getattr(call, "id", None) in names or getattr(call, "attr", None) in names) and matches(node):
+                    return True
+    return False
+
+
 def main() -> None:
     request = json.load(sys.stdin)
     if request["action"] == "inspect":
         result = inspect(request["sources"])
+    elif request["action"] == "same-input":
+        result = matches_literal_input(request["sources"], request["symbol"], request["input"], request["fragments"])
     else:
         result = compare(request["before"], request["after"], request["protected"])
     print(json.dumps(result, sort_keys=True, default=str))

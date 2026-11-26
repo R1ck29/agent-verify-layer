@@ -7,6 +7,7 @@ const os = require('node:os');
 const path = require('node:path');
 const codex = require('./codex');
 const { readJsonFile, allHandlers } = require('./settings');
+const { diagnoseV02 } = require('./hooks-v02');
 
 const DOCUMENTED_VERSION = [0, 170, 0]; // the docs copied under sources/codex/ are for 0.170
 const AGENTS_MAX_BYTES = 32 * 1024; // project_doc_max_bytes default
@@ -127,7 +128,7 @@ function checkAgentsMd(add, home) {
   if (text !== null && Buffer.byteLength(text) > AGENTS_MAX_BYTES) add('warn', `Codex: ${file} が 32 KiB を超えています。既定の project_doc_max_bytes で末尾が読まれず、追記した行が落ちることがあります`);
 }
 
-function checkCodex(add, root, env = process.env) {
+function checkCodex(add, root, env = process.env, v02Active = false) {
   const home = codex.codexHome(env);
   if (!fs.existsSync(home) && codex.codexVersion(env) === null) {
     add('info', `Codex: ${home} も codex コマンドもないため、Codex の項目は飛ばしました`);
@@ -135,6 +136,11 @@ function checkCodex(add, root, env = process.env) {
   }
   checkVersion(add, env);
   checkHooks(add, home, root, env);
+  if (v02Active) {
+    const files = [path.join(home, 'hooks.json')];
+    if (root) files.push(path.join(root, '.codex', 'hooks.json'));
+    diagnoseV02(add, 'Codex', 'codex', files.map((file) => readJsonFile(file).data), true);
+  }
   checkProjectTrust(add, home, root);
   checkSkill(add, root);
   checkAgentsMd(add, home);

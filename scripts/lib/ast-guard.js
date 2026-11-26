@@ -11,7 +11,7 @@ const PYTHON_GUARD = path.join(__dirname, 'py', 'ast_guard.py');
 const PYTHON_SETTINGS = new Set(['pytest.ini', '.pytest.ini', 'pyproject.toml', 'setup.cfg', 'tox.ini']);
 const NODE_SOURCE = /\.(?:js|mjs|cjs)$/;
 
-function python(request) {
+function python(request, timeout = 15000) {
   const scratch = fs.mkdtempSync(path.join(os.tmpdir(), 'vl-ast-'));
   try {
     const filename = path.join(scratch, 'input.json');
@@ -22,7 +22,8 @@ function python(request) {
         cwd: scratch,
         stdio: [input, 'pipe', 'pipe'],
         encoding: 'utf8',
-        timeout: 15000,
+        env: { PATH: process.env.PATH, HOME: scratch, TMPDIR: scratch, LC_ALL: 'C.UTF-8' },
+        timeout,
         maxBuffer: 8 * 1024 * 1024,
       });
       if (result.status !== 0 || result.error) {
@@ -51,8 +52,15 @@ function pythonSources(snapshot) {
     .map(([file, entry]) => [file, plainText(entry)]));
 }
 
-function inspectPython(snapshot) {
-  return python({ action: 'inspect', sources: pythonSources(snapshot) });
+function inspectPython(snapshot, timeout) {
+  const sources = pythonSources(snapshot);
+  if (!Object.keys(sources).length) {
+    return {
+      testFiles: [], testcaseFiles: [], tests: [], loadTests: [], parseErrors: {}, definitions: [],
+      hasPytestConfig: false, hasPytestDependency: false, pytestConfig: null, pytestOptions: {},
+    };
+  }
+  return python({ action: 'inspect', sources }, timeout);
 }
 
 function sameEntry(left, right) {
@@ -410,6 +418,44 @@ function collectDefinitions(snapshot) {
   return [...result].sort();
 }
 
+function samePythonInput(sources, symbol, input, fragments = []) {
+  return python({ action: 'same-input', sources, symbol, input, fragments });
+}
+
+function samePublicInput(snapshot, files, entry, input) {
+  const { sameValue } = require('./case-policy');
+  const { parseSource, importedNames, literalValue, walk } = require('./runners/node-ast-check');
+  const { serializeInput } = require('./runners/node-values');
+  const symbol = entry.symbol.split('.').at(-1);
+  const pySources = {};
+  for (const file of files) {
+    if (file.endsWith('.py')) {
+      pySources[file] = plainText(snapshot.files[file]);
+    } else if (NODE_SOURCE.test(file)) {
+      const tree = parseSource(plainText(snapshot.files[file]), file);
+      const names = new Set([symbol, ...importedNames(tree)
+        .filter((item) => item.symbol === symbol).map((item) => item.name)]);
+      let match = false;
+      walk(tree, (node) => {
+        if (node.type !== 'CallExpression') return;
+        const callee = node.callee;
+        const name = callee.type === 'MemberExpression' ? callee.property.name ?? callee.property.value : callee.name;
+        if (!names.has(name)) return;
+        let actual;
+        try {
+          actual = serializeInput(node.arguments.map(literalValue));
+        } catch {
+          return;
+        }
+        match ||= sameValue(input, actual);
+      });
+      if (match) return true;
+    }
+  }
+  return Object.keys(pySources).length > 0 && samePythonInput(pySources, symbol, input);
+}
+
 module.exports = {
   checkProtection, collectDefinitions, defaultNodeTest, inspectNodeScripts, inspectPython,
+  samePublicInput, samePythonInput,
 };

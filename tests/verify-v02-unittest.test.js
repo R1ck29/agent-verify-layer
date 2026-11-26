@@ -57,6 +57,18 @@ test('unittest records the designated assertion, actual call and exact input', t
   assert.equal(result.modulePath, 'example.py');
 });
 
+test('unittest cannot certify a return value with custom equality', t => {
+  const result = run(t, { source: [
+    'class CustomResult:',
+    '    def __eq__(self, other):',
+    '        return True',
+    'def boundary(x):',
+    '    return CustomResult()',
+  ].join('\n') });
+  assert.equal(result.status, 'error', JSON.stringify(result));
+  assert.match(result.reason, /literal comparison/);
+});
+
 test('unittest measures both raises forms, including exception provenance and no-raise failure', t => {
   const expected = { kind: 'exception', type: 'ValueError' };
   for (const body of [

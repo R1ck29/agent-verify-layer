@@ -60,11 +60,13 @@ function removeLock(lock, owner) {
 // An atomic directory creation keeps the SHA check and append together across hook processes.
 // For an old lock, only a confirmed dead local owner can be cleaned up.
 // Returns { locked: false } when the lock could not be had (the caller records nothing).
-function withLock(cwd, fn, { waitMs = Number(process.env.VL_LOCK_WAIT_MS) || 2500, staleMs = 15000, gitOptions } = {}) {
+function withLock(cwd, fn, {
+  waitMs = Number(process.env.VL_LOCK_WAIT_MS) || 2500, staleMs = 15000, gitOptions, lockPath,
+} = {}) {
   const wait = Number.isFinite(waitMs) ? Math.max(0, waitMs) : 2500;
   const dir = ledgerDir(cwd, gitOptions);
   if (!dir) return { locked: false };
-  const lock = path.join(dir, 'ledger.lock');
+  const lock = lockPath ?? path.join(dir, 'ledger.lock');
   const hostname = os.hostname();
   const owner = path.join(lock, `owner-${process.pid}-${randomUUID()}`);
   try {
@@ -193,7 +195,7 @@ function requestTransaction(cwd, agent, session, fn, options) {
       if (err.code !== 'ENOENT') throw err;
     }
     return fn(state, (value) => writePrivateJson(file, value));
-  }, { ...options, gitOptions: { fullEnv: scrubbedEnv() } });
+  }, { ...options, gitOptions: { fullEnv: scrubbedEnv() }, lockPath: file + '.lock' });
 }
 
 module.exports = {
