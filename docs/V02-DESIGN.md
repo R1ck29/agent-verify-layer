@@ -1,4 +1,4 @@
-# Verify v0.2 設計 rev7
+# Verify v0.2 設計 rev8
 
 ## 1. ゴール
 
@@ -55,27 +55,37 @@ Verify が発行する「検証済み」は、**最終スナップショット I
 
 1. **境界候補の選定（ケース JSON）**:
    - ケース JSON ごとに境界候補を **3〜5 件**列挙する（候補 ID、依頼の該当箇所、具体入力、境界種別［サイズ・空/端値・表記・順序・失敗応答等］、現実装に明示処理があるか）。バグ報告に再現条件があれば第 1 候補にする。
-   - 依頼または許可資料から期待値が一意に定まり、現実装が最も誤りやすい 1 件を選び、選定理由・公開入口（対象モジュール名とシンボル名）と呼び出し方・入力・期待値・テストファイル相対パス・テスト識別子・指定 assertion の位置を記す。
+   - 依頼または許可資料から期待値が一意に定まり、現実装が最も誤りやすい 1 件を選び、選定理由・公開入口（対象モジュール名とシンボル名）と呼び出し方・入力・期待値（例外を期待する場合は例外の型名）・テストファイル相対パス・テスト識別子・指定 assertion の位置を記す。変更前に入口が存在しない（入口を追加する）ケースでは、追加を求める依頼の 1 文を `entryAdditionQuote` に引用する（§4.2-4）。
    - 依頼文の例または既存公開テストと同じ入力には `nonBoundary: true` を付ける（実行器でも具体値照合できる範囲で自動付与）。`nonBoundary` ケースは記録を残すが「境界の証拠」から除外する。
 2. **ケース上限・ケースの固定・未解消失敗の追跡**:
    - `vl.js verify-diff --case <JSON>` は **1 依頼 ID あたり異なる `caseId` を最大 3 件まで**受け付ける（コマンド分割をまたいで合算し 4 件目を拒否）。同じ `caseId` の再実行は件数に加算しない（固定後に内容を変える場合は下記）。
-   - **未解消失敗への登録**: 変更後の実行で、公開入口が呼ばれた（§4.3 の条件 C）うえで指定 assertion の比較が失敗した、または指定呼び出しが期待と異なる例外で抜けた `caseId` を、台帳の未解消集合（`openFailures`）に登録する。公開入口に到達する前の失敗（追加テストの構文誤り・収集失敗・対象モジュールの読み込み失敗・入口の不在）は登録せず「実行エラー」として返し、同じ `caseId` のまま直して再実行できる。
-   - **登録時の固定**: 登録と同時に、固定項目（入力・期待値・公開入口と呼び出し方・対象モジュール名・テストファイル相対パス・テスト識別子・指定 assertion の位置）を正規化した JSON の SHA-256 と、追加テストファイルのバイト列の SHA-256 を台帳に固定する。選定理由と候補一覧の文面は固定しない。固定後に同じ `caseId` で内容の違うケースまたは追加テストを渡すと `verify-diff` は拒否し、「内容を変えるなら新しい `caseId` を使う（残り n 件）。元のケースは未解消のまま残る」と返す。内容を変えたケースは新しい `caseId` として上限に数え、元のケースは `openFailures` に残る。
+   - **未解消失敗への登録**: 変更後の実行で、公開入口が呼ばれた（§4.3 の条件 C）うえで指定 assertion の比較が失敗した、または指定呼び出しが期待と異なる例外で抜けた（送出時の呼び出し履歴が入口のフレームを通るものに限る。§4.2-3 の「例外の出所」）`caseId` を、台帳の未解消集合（`openFailures`）に登録する。公開入口に到達する前の失敗（追加テストの構文誤り・収集失敗・対象モジュールの読み込み失敗・入口の不在）と、入口のフレームを通らない例外は登録せず「実行エラー」として返し、同じ `caseId` のまま直して再実行できる。
+   - **登録時の固定**: 登録と同時に、固定項目（入力・期待値・公開入口と呼び出し方・対象モジュール名・テストファイル相対パス・テスト識別子・指定 assertion の位置）を正規化した JSON の SHA-256、追加テストファイルのバイト列の SHA-256、その実行で記録した入口の実引数の直列化値と、入口の外で読んだファイルのパスとダイジェスト（§4.2-3）を台帳に固定する。以後の変更後実行と最終実行で、直列化値と読んだファイルのダイジェストが固定値と異なれば、そのケースは合格に数えず `openFailures` に残す。選定理由と候補一覧の文面は固定しない。固定後に同じ `caseId` で内容の違うケースまたは追加テストを渡すと `verify-diff` は拒否し、「内容を変えるなら新しい `caseId` を使う（残り n 件）。元のケースは未解消のまま残る」と返す。内容を変えたケースは新しい `caseId` として上限に数え、元のケースは `openFailures` に残る。
    - **取り下げ**: 期待値の誤りに気づいたときは `vl.js verify-diff --withdraw <caseId> --reason "<理由>"` で、`openFailures` 内のケースを理由付きで取り下げる。取り下げは台帳に残り、取り消せない。取り下げがある依頼の最終判定は `未検証（ケース取り下げ）` とする。
    - **最終判定**: 「検証済み」には次の全てを要する。(a) 取り下げが 0 件。(b) `openFailures` 内の全 `caseId` が、固定した内容のまま最終スナップショット ID で合格。(c) 少なくとも 1 件の有効な境界ケース（`nonBoundary: false` かつ §4.2-4 の前後条件充足）が最終スナップショット ID で合格。
 3. **追加テストファイルと指定 assertion の形**:
    - `verify-diff` で前後注入する追加ケースは、依頼 ID を含む一意名の新規ファイルに標準テスト記法で書く（Python: `test_vl_<request_id>_<slug>.py`、Node: `<slug>.vl_<request_id>.test.js` または `.mjs`）。1 ファイルに 1 ケース・1 テストだけを書く。変更前スナップショットに同名パスが存在する場合は拒否する。Verify 専用ヘルパーを import せず、通常ランナーでも実行可能とする。
-   - **比較は 1 文だけ**: 指定テスト（関数・メソッド・`test()` の本体）の中の assertion は指定の 1 文だけとする（pytest の `assert` 文と `pytest.raises`、unittest の `self.assert*` と `self.fail`、Node の `t.assert.*` を数える）。指定 assertion の行に他の文を置かない。
-   - **実測側は公開入口の直接呼び出し**: 指定 assertion の実測側は公開入口の直接呼び出し 1 つ（`await` 付きを含む）とし、引数は名前とリテラル（リテラルだけを要素に持つ組・リスト・辞書・オブジェクトを含む）に限る。入力の準備は指定 assertion より前の別の文で行う。公開入口の名前を追加テスト内で再束縛しない。
+   - **比較は 1 文だけ、テスト本体の直下で 1 回だけ**: 指定テスト（関数・メソッド・`test()` の本体）の中の assertion は指定の 1 文だけとする（pytest の `assert` 文と `pytest.raises`、unittest の `self.assert*` と `self.fail`、Node の `t.assert.*` を数える）。指定 assertion の行に他の文を置かない。指定 assertion はテスト本体の直下の文とし、ループ・条件分岐・`try`・`with`（例外を期待する形の `with` 自体を除く。`contextlib.suppress` を含む）・入れ子の関数の内側に置かない。実行時には、指定 assertion の通過または失敗の記録がちょうど 1 件であることを要する（0 件・2 件以上は未検証）。指定テストには `pytest.mark.asyncio`・`pytest.mark.anyio` 以外のデコレータを付けない。
+   - **実測側は公開入口の直接呼び出し**: 指定 assertion の実測側は公開入口の直接呼び出し 1 つ（`await` 付きを含む）とする。呼び出し先は、import で束縛した入口名、または import で束縛した名前から属性をたどった名前（例: `Parser.parse`）に限り、準備した値のメソッド呼び出し（`p.parse(...)`）は使わない。引数は名前とリテラル（リテラルだけを要素に持つ組・リスト・辞書・オブジェクトを含む）に限る。入力の準備は指定 assertion より前の別の文で行う。公開入口の名前を追加テスト内で再束縛しない。
+   - **期待値側はリテラル**: 値を期待する比較は、等値（pytest `assert 実測 == 期待値`、unittest `self.assertEqual(実測, 期待値)`、Node `t.assert.strictEqual`／`deepStrictEqual(実測, 期待値)`）と、`None`／真偽との同一性（pytest `assert 実測 is None|True|False`、unittest `self.assertIs(実測, None|True|False)`・`self.assertIsNone(実測)`。期待値はそれぞれ `None`・`True`・`False` としてケース JSON と照合する）に限る。期待値側は、リテラル（数値・文字列・真偽・`None`／`null`、負号付きの数、それらだけを要素に持つ組・リスト・辞書・配列・オブジェクト）、またはリテラルだけを 1 回束縛し、束縛と指定 assertion 以外で参照・再代入・変更しない名前に限る。例外を期待する形の型 `E` は組み込みの例外名、または import で束縛した名前（属性をたどったものを含む）に限る。実行器は AST から期待値を取り出し、ケース JSON の期待値と正規化した JSON（組はリスト）で一致すること、例外の場合は `E` の末尾の名前がケース JSON の期待例外の型名と一致することを確かめ、不一致なら拒否する。`assert api(x) == load_expected()`、`== mod.NEW_CONST`、`== helper(x)` のように期待値を呼び出し・属性参照・ファイル読み込みで得る形は拒否する。
+   - **追加テストは対象を書き換えない**: 追加テストは、import した名前の属性・添字への代入、`setattr`／`delattr`、`monkeypatch`、`unittest.mock.patch*`、`importlib.reload` を含まない（AST で拒否）。
+   - **入口の実引数の固定**: 入口への進入時（§4.3 の条件 C で記録する進入）に、引数に書いた名前の値を指定 assertion の位置にある追加テストのフレームから読み、型の印を付けた正規化 JSON に直列化して記録する。直列化できる値は、Python は `None`・真偽・整数・有限の浮動小数・文字列・バイト列と、それらを要素に持つリスト・組・文字列キーの辞書、Node は `undefined`・`null`・真偽・有限の数・`BigInt`・文字列と、それらを要素に持つ配列・プレーンオブジェクトとする。それ以外の値は直列化できないものとして未検証にする。変更前・変更後・最終の各実行で直列化値が一致することを要する（変更前に入口がない「公開入口なし」では変更後と最終だけを比べる）。実装から読んだ値で入力を作る場合など、前後で値が変われば未検証になる。
+   - **入口の外で読んだファイルの固定**: 追加テストの実行中、入口の呼び出し中でもモジュール読み込み中でもない時点で、隔離コピー内のファイルを開いた場合（準備の文や補助関数がデータファイルを読む場合）は、そのパスとダイジェストを記録し、変更前・変更後・最終の各実行で一致を要する。同じ時点でのプロセス起動は未検証とする。Python は `sys.addaudithook` の `open`・`subprocess.Popen` 事象と呼び出し履歴で、Node はコピー外 preload で包んだ `fs` の読み込み関数と `child_process` で記録する。
+   - **例外の出所**: 指定呼び出しから抜けた例外、または例外を期待する比較が受け取った例外は、送出時の呼び出し履歴が入口のフレームを通る場合に限り「入口から出た例外」とする。Python は例外の `__traceback__` に入口のコード対象のフレームが含まれることで、Node は §4.3 のインスペクタで記録した送出時の履歴で判定する。期待値側・入力準備・引数名の解決から出た例外（`assert api(x) == helper(x)` で `helper` が送出する場合など）は入口から出た例外ではなく、期待値不一致にも例外期待の通過にも数えない。
    - **例外を期待する形**: pytest は `with pytest.raises(E): 入口(引数)`、unittest は `with self.assertRaises(E): 入口(引数)` または `self.assertRaises(E, 入口, 引数...)`、Node は `t.assert.throws(() => 入口(引数), E)` または `await t.assert.rejects(入口(引数), E)` とする。`with` とアロー関数の本体は入口の直接呼び出し 1 文だけにする。
 4. **変更前結果の 4 分類**:
 
 | 変更前の結果 | 証拠としての扱い |
 |---|---|
-| **期待値不一致**: 条件 L・C（§4.3）が成立し、指定 assertion の比較が失敗した、または指定呼び出しが期待と異なる例外で抜けた（値を期待するケースでの例外、例外を期待するケースでの別の型の例外） | 変更後の同 assertion 合格と合わせ、有効な境界証拠とする |
-| **公開入口なし**: 既存モジュールがコピー内から読み込まれ（条件 L）指定シンボルが不在、または新規モジュール不在（下記の受入例） | **不在だった名前が依頼文に字句として現れる場合に限り**、変更後合格と合わせて有効とする（バグ再現とは別集計）。照合する名前は、シンボル不在ならシンボル名、モジュール不在ならモジュール名（ドット区切りまたはパスの最終要素。拡張子を除く）。依頼開始時に保存した依頼文を識別子境界（英数字と `_` 以外の文字、文頭、文末）で区切った語と大文字小文字まで一致したときだけ「現れる」とする。現れない場合は未検証（例: バグ修正の依頼で新しい `parse_v2` を足して呼ぶケース） |
-| **実行・環境エラー**: 上記以外（構文・依存・起動の失敗、条件 L 不成立、入口に到達しないまま終わった、読み込み元がコピー外） | 未検証 |
+| **期待値不一致**: 条件 L・C（§4.3）が成立し、指定 assertion の比較が失敗した、または指定呼び出しが期待と異なる入口から出た例外（§4.2-3 の「例外の出所」）で抜けた（値を期待するケースでの例外、例外を期待するケースでの別の型の例外） | 変更後の同 assertion 合格と合わせ、有効な境界証拠とする |
+| **公開入口なし**: 既存モジュールがコピー内から読み込まれ（条件 L）指定シンボルが不在、または新規モジュール不在（下記の受入例） | **下記「公開入口なしの有効条件」(i)〜(iii) をすべて満たす場合に限り**、変更後合格と合わせて有効とする（バグ再現とは別集計）。満たさない場合は不在を観測記録に留め、未検証とする |
+| **実行・環境エラー**: 上記以外（構文・依存・起動の失敗、条件 L 不成立、入口に到達しないまま終わった、入口から出たのではない例外、読み込み元がコピー外） | 未検証 |
 | **期待値に一致** | 変更後動作の観測記録のみ。変更による差分の証拠にはしない（未検証） |
+
+   **公開入口なしの有効条件**: 照合する名前は、シンボル不在ならシンボル名（`Parser.parse` なら `parse`）、モジュール不在ならモジュール名（ドット区切りまたはパスの最終要素。拡張子を除く）とする。
+   - (i) **依頼文に字句として現れる**: 依頼開始時に保存した依頼文を識別子境界（ASCII の英数字と `_` 以外の文字、文頭、文末）で区切った語と、大文字小文字まで一致する。日本語の文字は境界として扱う（`parse_v2を追加` の `parse_v2` は一致する）。
+   - (ii) **変更前スナップショットのどこにも定義として存在しない**: シンボル不在なら、変更前スナップショットの全 Python・JS ファイルに、深さを問わず同名の `def`・`class`・代入先・JS の関数／クラス／変数宣言・メソッド・export 名がない。モジュール不在なら、同名のファイル（拡張子を除く）もパッケージディレクトリもない。例えば依頼が「`Parser.parse` が空文字で落ちる」のときに `pkg/util.py` へ新しい関数 `parse` を足して呼ぶケースは、変更前に `Parser.parse` が定義されているため無効とする。
+   - (iii) **依頼が入口の追加を求めていると確認できる**: ケース JSON の `entryAdditionQuote` が、依頼文の連続した一部（空白の連続は 1 つとみなす）で、照合する名前を含む 1 文（`。`・`．`・`！`・`？`・`!`・`?`・改行・「`.` と空白」で区切る）であり、追加を表す語（例: 追加・新設・新規・新しい・作成・実装・用意・公開、`add`・`create`・`new`・`implement`・`introduce`・`expose`・`provide`）を含み、否定・禁止を表す語（例: しない・せず・するな・不要・禁止・避け・ではなく・代わりに・やめ、`not`・`don't`・`never`・`without`・`instead`・`avoid`・`no`）を含まない。語の一覧は `verify-diff` の実装に固定し、SKILL で示す。英語の語は ASCII の大文字小文字を区別せず、(i) と同じ識別子境界で照合する。例えば依頼が「`parse_v2` は追加せず `parse` を直す」なら、`parse_v2` を足して呼ぶケースは「せず」を含むため無効とする。
 
    **新規モジュール不在の受入例**: いずれも、エラーを起こした読み込みが追加テストファイル自身の import／require 文であることを要する（Python はトレースバックのうち importlib を除く最も内側のフレーム、Node は ESM の読み込み元と CommonJS の `requireStack[0]` で確認する）。対象モジュールの読み込み中に別の依存が見つからない場合は実行エラーとする。
    - Python・パッケージ配下（`pkg.new_mod`）: `ModuleNotFoundError` の `name` が `pkg.new_mod` に一致し、親パッケージ `pkg.__file__` の実パスが変更前コピー内にある。
@@ -93,15 +103,15 @@ Verify が発行する「検証済み」は、**最終スナップショット I
 全ランナー共通で、指定 assertion について次の 2 条件を**別々に**記録し、両方の成立を必須とする。
 
 - **条件 L（対象モジュールのロード）**: 対象モジュールの読み込み元実パス（Python `os.path.realpath(module.__file__)` / Node `fs.realpathSync(解決結果)`）が前後それぞれ対応する隔離コピー内にある（新規モジュール不在は §4.2-4 の受入例で扱う）。
-- **条件 C（公開入口の呼び出し）**: 指定 assertion の評価中に、公開入口の関数本体へ実際に入った。モジュールが読み込まれただけ、入口名が解決できただけでは成立しない。例外を期待するケースでは、C の成立と §4.2-3 の形を合わせて、例外が指定した公開呼び出しから出たことの証拠とする（入力準備や入口名の解決失敗から出た例外では C が成立しない）。
+- **条件 C（公開入口の呼び出し）**: 指定 assertion の評価中に、公開入口の関数本体へ実際に入った。具体的には、入口の関数への進入のうち、呼び出し元をたどって最初に見つかる追加テストファイルのフレームの実行位置が指定 assertion の範囲内にあるものが 1 件以上ある。入口の関数は、追加テストで束縛した入口名が指す関数（デコレータやラップ、再エクスポートの場合は、その名前が指す外側の関数）とする。モジュールが読み込まれただけ、入口名が解決できただけ、準備の文や準備用ヘルパーが間接的に入口を呼んだだけでは成立しない。指定した比較の評価中の進入を確認できない場合（計測手段が使えない版を含む）は未検証とする。例外を期待するケースでは、C の成立と §4.2-3 の「例外の出所」を合わせて、例外が指定した公開呼び出しから出たことの証拠とする。
 
-また 0 件・収集のみ・skip・todo・xfail・途中終了・assertion 未到達はいずれも未検証とする。各ランナーの受入反例は §7 の作業 2b〜2d の完了条件に列挙する。
+また 0 件・収集のみ・skip・todo・xfail・途中終了・assertion 未到達、指定 assertion の実行記録が 1 件でないものはいずれも未検証とする。各ランナーの受入反例は §7 の作業 2b〜2d の完了条件に列挙する。
 
 | ランナー | 隔離起動と探索固定 | assertion 到達と条件 C の動的記録 | 静的検査（AST）と抜け道対策 |
 |---|---|---|---|
-| **`pytest`** | 新しい `__pycache__` のないコピーを `cwd`、`--rootdir=<copy>`、`-c <コピー内設定または/dev/null>`、`--confcutdir=<copy>`、`-p no:cacheprovider`、`PYTHONPATH` 先頭にコピー（および公開 `src` ルート）。コピー外プラグインを `-p` で読み込み、`-o enable_assertion_pass_hook=true` を付与 | 外部プラグインが `pytest_assertion_pass` をテスト識別子と位置ごとに記録し、`call` フェーズ成功と照合する。`pytest.raises` はプラグインで包み、`__exit__` の成否と呼び出し行を記録する。変更前の不一致は、指定位置の `AssertionError`（`pytest.raises` では例外が出なかったことによる失敗）または指定呼び出しから抜けた例外を `call` 結果から確認する（入口不在は `collect`/`call` 両方で捕捉）。**条件 C**: 指定テストの `call` フェーズの間だけ `sys.setprofile` を設定し、公開入口のコード対象への進入のうち、呼び出し元をたどって最初に見つかる指定テスト関数のフレームの実行行が指定 assertion の行範囲内にあるものだけを記録する | Python AST で、指定 `assert` 文が `AssertionError`/`Exception`/`BaseException`/bare `except` に囲まれて握りつぶされていないこと、`pytest.skip`/`xfail` 不在、**指定テスト関数内の assertion は指定の 1 文だけでその行に他の文がないこと**、実測側と例外期待の形が §4.2-3 に合うことを検査 |
-| **`unittest`** | コピーを `cwd`、`python -B`（`PYTHONDONTWRITEBYTECODE=1`）、`PYTHONPATH` 先頭にコピー（および公開 `src` ルート）。コピー外ラッパー `unittest-runner.py` が **発見実行**（§6.3 で確定した `unittestStartDir`・`unittestTopLevelDir`・`unittestPattern` で `TestLoader.discover` を行い、パターンごとの結果を `test.id()` で重複除去して辞書順に安定ソート）と **明示パス実行**（対象モジュール／ファイル／テスト識別子指定）の両方を担う | ラッパーがテストロード直前に `unittest.TestCase` の全 `assert*` メソッドおよび `fail` をラップする。通常メソッドは例外なく返却した時点で `(test.id(), メソッド名, ファイル, 行番号, subTest深さ)` を通過記録。**`assertRaises` / `assertRaisesRegex` / `assertWarns*` / `assertLogs*` のコンテキストマネージャ版は `__exit__` が検証成功で抜けた時点のみ通過記録**する。失敗時は失敗位置を記録し再送出。カスタム `TestResult` の `addSuccess` と通過記録を 1 対 1 照合（入口不在はロード・実行両フェーズで捕捉）。**条件 C**: 指定テストの実行中だけ `sys.setprofile` を設定し、pytest と同じく、呼び出し元をたどって最初に見つかる指定テストメソッドのフレームの実行行が指定 assertion の行範囲内にある進入だけを記録する（`self.assertRaises(E, 入口, 引数)` の呼び出し形も同じ照合で扱う） | **(1) `try/except` 握りつぶし**: AST で指定 `self.assert*` が例外捕捉ブロック内にないことを強制し、動的記録に `assertion_failed` が 1 件でもあれば `addSuccess` でも拒否。<br>**(2) `self.assert*` 以外の比較**: 追加ケースの指定比較を `self.assert*` 直接呼び出しに限定し、素の `assert` や `if/raise` のみのテストを AST で拒否。<br>**(3) `subTest` の抜け道**: `addSubTest` をフックし `err is not None` が 1 件でもあれば失敗扱い。さらに指定 `self.assert*` の動的通過回数 >= 1 を必須とし、空ループによる 0 回成功を排除。<br>**(4) skip・改ざん**: `addSkip`/`addExpectedFailure`/`addUnexpectedSuccess` は未検証。`TestCase` や `self.assert*` への代入・モンキーパッチを AST で拒否。<br>**(5) 例外期待の形**: `with self.assertRaises(E):` の本体は公開入口の直接呼び出し 1 文だけで、引数は名前とリテラルだけとする。`with self.assertRaises(ValueError): api(make_input())` のように本体で入力を準備する形は拒否し、準備は `with` の前の文へ出させる。<br>**(6) 比較は 1 か所**: 指定 `self.assert*` はテストメソッド内で 1 か所だけ |
-| **`node`** | コピーを `cwd` とし、`node --test --test-reporter=<コピー外reporter> <明示パス>`。元ツリーに `node_modules` がある場合は、コピー内に独立複製（`cp -a --reflink=auto`、上限 512MB）してコピー側のみ `chmod -R a-w` で読み取り専用化し、対象パッケージへのワークスペースリンクをコピー内へ張替える（削除時は `chmod -R u+w`）。上限超過等で隔離できない場合は未検証 | 追加テスト先頭で `t.plan(1)` を宣言し、比較に `t.assert.*` を使用。コピー外 reporter がテスト識別子ごとの成功・比較失敗・plan 未達・skip・todo・途中終了を記録し照合。**条件 C**: `NODE_V8_COVERAGE` をコピー外のディレクトリに向けて実行し、V8 の関数単位の実行回数で公開入口の関数が 1 回以上実行されたことを確認する。指定 assertion 以外で入口が呼ばれないことは静的検査 (6) で保証する。対象モジュールを読み込むだけの計測で入口の実行回数が 1 以上になるモジュールは区別できないため未検証とする | JavaScript AST 静的検査で以下を強制：(1) コールバック本体トップレベルに `t.plan(1)` が 1 回ある、(2) `t.assert.*` 呼び出しがテスト本体全体で指定位置の **1 か所のみ**（指定外比較での plan 充足を禁止）、(3) その呼び出しが `try`/`.catch`/条件分岐/ループ/別コールバックの内側にない（`try { t.assert... } catch {}` 握りつぶしを禁止）、(4) `skip`/`todo` 指定がない、(5) **非同期の比較**: 指定 `t.assert.*` はコールバック本体トップレベルの式文そのもの、または式文の `await` の直接の対象（`await t.assert.rejects(入口(引数), E)`）に限る。戻り値の束縛（`const p = t.assert.rejects(...)`）、`.then`/`.catch`/`.finally`、`void`、他の関数への受け渡し、`await` しない `rejects`/`doesNotReject` を拒否する。非同期の入口の値は `t.assert.deepStrictEqual(await 入口(引数), 期待値)` の形で直接 `await` する、(6) 公開入口の名前は ESM の名前付き import か CommonJS の `const { 入口 } = require('<相対パス>')` で 1 回だけ束縛し、追加テスト内での参照は指定 assertion の中の 1 か所だけ |
+| **`pytest`** | 新しい `__pycache__` のないコピーを `cwd`、`--rootdir=<copy>`、`-c <コピー内設定または/dev/null>`、`--confcutdir=<copy>`、`-p no:cacheprovider`、`PYTHONPATH` 先頭にコピー（および公開 `src` ルート）。コピー外プラグインを `-p` で読み込み、`-o enable_assertion_pass_hook=true` を付与 | 外部プラグインが `pytest_assertion_pass` をテスト識別子と位置ごとに記録し、`call` フェーズ成功と照合する。`pytest.raises` はプラグインで包み、`__exit__` の成否と呼び出し行を記録する。変更前の不一致は、指定位置の `AssertionError`（`pytest.raises` では例外が出なかったことによる失敗）または指定呼び出しから抜けた例外を `call` 結果から確認する（入口不在は `collect`/`call` 両方で捕捉）。指定位置の通過記録と失敗記録の合計がちょうど 1 件であることを要する。例外は `__traceback__` に入口のコード対象のフレームを含むかを記録する。**条件 C**: 指定テストの `call` フェーズの間だけ `sys.setprofile` を設定し、公開入口のコード対象への進入のうち、呼び出し元をたどって最初に見つかる追加テストファイルのフレームの実行行が指定 assertion の行範囲内にあるものだけを記録し、その時点で引数の値を直列化する（§4.2-3） | Python AST で、**指定 assertion がテスト関数直下の文で、ループ・条件分岐・`try`・`with`（`pytest.raises` 自体を除く。`contextlib.suppress` を含む）の内側にないこと**、指定テスト関数のデコレータが §4.2-3 の許可分だけであること、`pytest.skip`/`xfail` 不在、**指定テスト関数内の assertion は指定の 1 文だけでその行に他の文がないこと**、実測側・期待値側・例外期待の形が §4.2-3 に合い、期待値がケース JSON と一致すること、対象の書き換えがないことを検査 |
+| **`unittest`** | コピーを `cwd`、`python -B`（`PYTHONDONTWRITEBYTECODE=1`）、`PYTHONPATH` 先頭にコピー（および公開 `src` ルート）。コピー外ラッパー `unittest-runner.py` が **発見実行**（§6.3 で確定した `unittestStartDir`・`unittestTopLevelDir`・`unittestPattern` で `TestLoader.discover` を行い、パターンごとの結果を `test.id()` で重複除去して辞書順に安定ソート）と **明示パス実行**（対象モジュール／ファイル／テスト識別子指定）の両方を担う | ラッパーがテストロード直前に `unittest.TestCase` の全 `assert*` メソッドおよび `fail` をラップする。通常メソッドは例外なく返却した時点で `(test.id(), メソッド名, ファイル, 行番号, subTest深さ)` を通過記録。**`assertRaises` / `assertRaisesRegex` / `assertWarns*` / `assertLogs*` のコンテキストマネージャ版は `__exit__` が検証成功で抜けた時点のみ通過記録**する。失敗時は失敗位置を記録し再送出。カスタム `TestResult` の `addSuccess` と通過記録を 1 対 1 照合（入口不在はロード・実行両フェーズで捕捉）。**条件 C**: 指定テストの実行中だけ `sys.setprofile` を設定し、pytest と同じく、呼び出し元をたどって最初に見つかる追加テストファイルのフレームの実行行が指定 assertion の行範囲内にある進入だけを記録し、その時点で引数の値を直列化する（`self.assertRaises(E, 入口, 引数)` の呼び出し形も同じ照合で扱う）。`assertRaises` の包みは受け取った例外の `__traceback__` に入口のフレームを含むかを記録する | **(1) `try/except` 握りつぶし**: AST で指定 `self.assert*` が例外捕捉ブロック内にないことを強制し、動的記録に `assertion_failed` が 1 件でもあれば `addSuccess` でも拒否。<br>**(2) `self.assert*` 以外の比較**: 追加ケースの指定比較を `self.assert*` 直接呼び出しに限定し、素の `assert` や `if/raise` のみのテストを AST で拒否。<br>**(3) `subTest`・ループの抜け道**: 指定 `self.assert*` はテストメソッド直下の文とし、`subTest` の `with`・ループ・条件分岐の内側を AST で拒否。`addSubTest` をフックし `err is not None` が 1 件でもあれば失敗扱い。指定 `self.assert*` の動的記録（通過と失敗の合計）がちょうど 1 件であることを必須とする。<br>**(4) skip・改ざん**: `addSkip`/`addExpectedFailure`/`addUnexpectedSuccess` は未検証。`TestCase` や `self.assert*` への代入・モンキーパッチを AST で拒否。<br>**(5) 例外期待の形**: `with self.assertRaises(E):` の本体は公開入口の直接呼び出し 1 文だけで、引数は名前とリテラルだけとする。`with self.assertRaises(ValueError): api(make_input())` のように本体で入力を準備する形は拒否し、準備は `with` の前の文へ出させる。<br>**(6) 比較は 1 か所**: 指定 `self.assert*` はテストメソッド内で 1 か所だけ。<br>**(7) 期待値側**: 指定 `self.assert*` の種類と期待値側が §4.2-3 に合い、期待値がケース JSON と一致することを AST で確認 |
+| **`node`** | コピーを `cwd` とし、`node --test --test-reporter=<コピー外reporter> <明示パス>`。元ツリーに `node_modules` がある場合は、コピー内に独立複製（`cp -a --reflink=auto`、上限 512MB）してコピー側のみ `chmod -R a-w` で読み取り専用化し、対象パッケージへのワークスペースリンクをコピー内へ張替える（削除時は `chmod -R u+w`）。上限超過等で隔離できない場合は未検証 | 追加テスト先頭で `t.plan(1)` を宣言し、比較に `t.assert.*` を使用。コピー外 reporter がテスト識別子ごとの成功・比較失敗・plan 未達・skip・todo・途中終了を記録し照合。**条件 C**: `--import <コピー外 preload>` で各テストファイルのプロセスに preload を読み込み、preload の worker スレッドから `inspector.Session.connectToMainThread()` で接続する。入口名が指す関数の先頭にブレークポイントを置き、停止時の呼び出し履歴のうち最初に見つかる追加テストファイルのフレームの位置が指定 assertion の範囲内にある進入だけを記録する（準備の文やヘルパー経由の進入は数えない）。その停止中に、そのフレームで引数の名前を評価して直列化する（§4.2-3）。**例外の出所**: 指定 assertion の評価中だけ例外停止を有効にして送出時の呼び出し履歴を記録し、停止時に例外オブジェクトへ preload だけが知る印を付ける。preload で包んだ `t.assert.throws`／`rejects` が受け取った例外、または指定呼び出しから抜けた例外を印で照合し、入口のフレームを含むかを判定する（印を付けられないプリミティブの送出は未検証）。preload が子プロセスに渡らない、インスペクタに接続できない、`t.assert` を包めない版では未検証とする | JavaScript AST 静的検査で以下を強制：(1) コールバック本体トップレベルに `t.plan(1)` が 1 回ある、(2) `t.assert.*` 呼び出しがテスト本体全体で指定位置の **1 か所のみ**（指定外比較での plan 充足を禁止）、(3) その呼び出しが `try`/`.catch`/条件分岐/ループ/別コールバックの内側にない（`try { t.assert... } catch {}` 握りつぶしを禁止）、(4) `skip`/`todo` 指定がない、(5) **非同期の比較**: 指定 `t.assert.*` はコールバック本体トップレベルの式文そのもの、または式文の `await` の直接の対象（`await t.assert.rejects(入口(引数), E)`）に限る。戻り値の束縛（`const p = t.assert.rejects(...)`）、`.then`/`.catch`/`.finally`、`void`、他の関数への受け渡し、`await` しない `rejects`/`doesNotReject` を拒否する。非同期の入口の値は `t.assert.deepStrictEqual(await 入口(引数), 期待値)` の形で直接 `await` する、(6) 公開入口の名前は ESM の名前付き import か CommonJS の `const { 入口 } = require('<相対パス>')` で 1 回だけ束縛し、追加テスト内での参照は指定 assertion の中の 1 か所だけ、(7) 指定 `t.assert.*` の種類と期待値側が §4.2-3 に合い、期待値がケース JSON と一致すること、import した束縛のメンバーへの代入がないこと |
 
 ### 4.4 前後のスナップショットと台帳
 
@@ -118,7 +128,7 @@ Verify が発行する「検証済み」は、**最終スナップショット I
   1. **既存要素の変更**: 開始時に存在したテストファイル・テストクラス・テスト関数／メソッド・fixture の削除・リネーム、本体・引数・デコレータ（`skip`/`xfail` 等）の変更、既存のモジュール変数・クラス属性・import 名の束縛の変更・削除。
   2. **既存テストに効く追加**: `pytestmark`（モジュール・クラス）、`pytest_plugins`、`load_tests`、autouse fixture、既存クラスへの `setUp`/`setUpClass`/`tearDown`/`tearDownClass`（`asyncSetUp`/`asyncTearDown`、pytest の `setup_method`/`teardown_method`/`setup_class`/`teardown_class` を含む）の新設、`setUpModule`/`tearDownModule`（`setup_module`/`teardown_module`/`setup_function`/`teardown_function` を含む）の新設、conftest.py へのフック関数（`pytest_*`）の追加。Node では、既存テストと同じスコープへの `before`/`beforeEach`/`after`/`afterEach` の新設と `only` の追加。
   3. **名前解決を変える追加**: 開始時のコードが読む名前（既存のテスト・補助関数・デコレータ・既定値が参照する名前、既存テストが引数で要求する fixture 名）を新たに束縛する追加（import・`def`・`class`・代入。同じ import 文の重複は除く）、`from x import *` の追加、既存クラスへの、既存メソッドが `self.`/`cls.` で読む名前の追加。新しい `import` 行は、束縛する名前が開始時のコードに読まれない場合だけ純粋な追加とする。
-  4. **モジュール直下・クラス直下の副作用**: 束縛以外の文（関数呼び出し、属性・添字への代入、環境変数や `sys.path` の操作など）の追加。
+  4. **モジュール直下・クラス直下の副作用**: 束縛以外の文（関数呼び出し、属性・添字への代入、環境変数や `sys.path` の操作など）の追加。加えて、新しい束縛で読み込み時に評価される式（新しい名前への代入・注釈付き代入の右辺、新しい `def`・`class` のデコレータ・既定値・基底、新しいクラス本体の式）に、許可した純粋な呼び出し以外の呼び出し、`:=`、`await`、`yield` を含むもの（例: `_tz = os.environ.setdefault("TZ", "UTC")`、`_ = sys.path.insert(0, "x")`、`CFG = configure(debug=True)`）。許可する呼び出しは、組み込みの値の構築（`dict`・`list`・`tuple`・`set`・`frozenset`・`str`・`int`・`float`・`bool`・`bytes`・`range`・`len`・`sorted`）、`pathlib.Path`/`PurePath`、`os.path` の `join`・`dirname`・`basename`・`abspath`、`re.compile`、`collections.namedtuple`、`typing` の構築、`dataclasses.field`、新しいテストに付ける `pytest.mark.*` と `pytest.fixture`（autouse でないもの）に限り、一覧は `ast_guard.py` に固定する。Node でも、新しい変数宣言の初期化式に同じ考え方（値の構築と `node:path` の結合だけを許可）を適用する。
 - **新規ファイル**:
   - 通常テストファイルの新設は許可する（既存公開テストの前後比較には含めない。§4.2-5）。
   - conftest.py の新設は、置き場所を問わず、中身が import・補助関数・autouse でない fixture の定義だけで、その fixture 名がその位置から見える既存 fixture 名と重ならない場合に許可する。上の禁止 2〜4 に当たる内容を含む conftest.py の新設は禁止する。
@@ -138,32 +148,22 @@ Verify が発行する「検証済み」は、**最終スナップショット I
   8. Node: 新しい `test()` の追加（許可）／同じスコープへの `beforeEach` 新設・`only` の追加・既存 `test()` の options への `skip`（禁止）
   9. `protectedPaths` にテストディレクトリが含まれる場合の新規テストファイル作成と既存テストファイルへの純粋な追加（許可）／同じディレクトリのデータファイル改変（禁止）
   10. `scripts.test` の閉包外の `scripts.*` 変更（許可）／`scripts.test` から呼ばれる `scripts.test:unit` の変更（禁止）
+  11. `DATA_DIR = Path(__file__).parent / "data"` のように許可した呼び出しだけを右辺に持つ新しい定数（許可）／`_tz = os.environ.setdefault("TZ", "UTC")`・`_ = sys.path.insert(0, "x")` のように新しい名前への代入の右辺で共有状態を変える追加（禁止）
 
-## 5. rev6 レビュー指摘への対応表
+## 5. rev7 レビュー指摘への対応表
 
-rev5 指摘への対応表は rev6（コミット 482b17a）の §5 を参照。以下は rev6 に対する Opus レビューと Astra レビューのブロッキング／MAJOR への対応である（非ブロッキングは §9 に延期）。
+rev6 指摘への対応表は rev7（コミット f92602d）の §5、rev5 指摘への対応表は rev6（コミット 482b17a）の §5 を参照。以下は rev7 に対する Opus レビューと Astra レビュー（ともに CHANGES_REQUESTED）のブロッキングへの対応である（非ブロッキングは §9 に延期。ただしブロッキングと重なるものは直した）。
 
-| # | 出典 | rev7 での対応箇所と解決策 |
+| # | 出典 | rev8 での対応箇所と解決策 |
 |---|---|---|
-| 1 | Opus ブロッキング 1(a)、Astra (B)#2 | **§4.2-2**。`openFailures` 登録時に固定項目と追加テストのハッシュを固定。変更は新しい `caseId` として上限に数え、元のケースは未解消のまま残す。期待値誤りは理由付き取り下げで記録し、最終判定は `未検証（ケース取り下げ）` |
-| 2 | Opus ブロッキング 1(b) | **§4.2-4**。「公開入口なし」は、不在だった名前が依頼文に字句として現れる場合だけ有効。それ以外は未検証 |
-| 3 | Astra §4（Node） | **§4.3 node (5)**。指定 `t.assert.*` は式文そのもの、または式文の `await` の直接の対象に限定。`const p = t.assert.rejects(...); await p.catch(() => {});` を作業 2d の受入反例に追加 |
-| 4 | Astra §4（pytest） | **§4.2-3・§4.3 pytest**。指定テスト内の assertion は指定の 1 文だけ、その行に他の文を置かない。複数 assert の反例を作業 2b の受入反例に追加 |
-| 5 | Astra §4（unittest） | **§4.2-3・§4.3 unittest (5)**。例外期待の本体は入口の直接呼び出し 1 文、引数は名前とリテラル。条件 C で指定呼び出しからの例外であることを照合。`api(make_input())` の反例を作業 2c に追加 |
-| 6 | Astra §4（3 ランナー共通） | **§4.3**。条件 L（ロード）と条件 C（公開入口の呼び出し）を別々に記録し、両方を必須とする |
-| 7 | Astra (C) N1 | **§4.2-4**。受入例に CommonJS の `MODULE_NOT_FOUND` と、親 `__file__` のない Python トップレベルモジュールを追加 |
-| 8 | Opus ブロッキング 2、Astra (C) N2 | **§6.3**。規則 2 を「TestCase 形式があり、pytest 形式のファイルがない、または pytest がない」に限定。`unittest.mock` 参照は不使用。混在かつ pytest ありは pytest を優先。`class TestX` だけの設定なし pytest を拾う。`unittestStartDir`・`unittestTopLevelDir`・`unittestPattern` の決め方と不一致時の扱いを固定。作業 4 に fixture を追加 |
-| 9 | Opus ブロッキング 3(i) | **§4.5**。既存テストファイルの規則を否定列挙に変更。新しい import 行・新しいテストクラス・autouse でない fixture だけの conftest.py 新設を許可 |
-| 10 | Astra §5 | **§4.5 禁止 3・`protectedPaths` の優先順位・対コーパス**。名前解決を変える import は純粋追加と扱わない。許可と禁止を対にして試験。`protectedPaths` 内でも意味単位の追加許可を優先 |
-| 11 | Opus ブロッキング 3(ii) | **§6.2**。採点コピーで無力化できる変更は不合格にせず診断記録のみ。不合格に数える改ざんを無力化できない場合に絞る。対コーパスに P0 の正当な追加を陰性例として入れる |
-| 12 | Opus ブロッキング 4、Astra §6 | **§6.3・§6.5**。判定不能 (b) を「対応ランナーの有効な P2 罠試行で、ブロックも `verify-diff` 実行も 0 件」に再定義。`unsupported` での発火は数えない。held-out のランナー分布をハーネス内に記録し、対応外が 1/3 を超えれば判定不能 |
-| 13 | Opus ブロッキング 5 | **§6.4 実行順序**。同じタスク・同じ試行番号の P0・P1・P2 を「組」として同じチャンクに入れ、固定 seed で事前生成した順序を追補 B に入れる |
-| 14 | Opus ブロッキング 6 | **§6.4 全体上限と事前検査**。「試行ごとの上限 × 残り試行数 ≤ 残予算」を開始前と各チャンク前に確認し、上限到達時は新規投入を止めて `INCONCLUSIVE（予算）` |
-| 15 | Astra §6、Opus 非ブロッキング 5 | **§6.5**。数え方（整数比較、20%・80%・75% ちょうど、片側 INVALID の対）、CI の方式と整合条件、判定の優先順位を固定し、試行単位の架空表で計算できる例を列挙 |
-| 16 | Opus ブロッキング 7、Astra §7 | **§7**。作業 2 を 2a（中核・偽ランナー）・2b（pytest）・2c（unittest）・2d（node、冒頭で JS パーサ確定）に分割。完了条件に受入反例が未検証になることを追加 |
-| 17 | Opus ブロッキング 7 | **§7 作業 1**。`ast-guard.js` は Python AST を `python3 -I` のサブプロセスで扱う |
-| 18 | Opus ブロッキング 7 | **§7 作業 4**。`tamper_check` は作業 1 と同じモジュールと対コーパスを使う |
-| 19 | Opus ブロッキング 7 | **§7**。作業 3 を 3a（Stop・CLI）と 3b（配備・doctor・文書）に分割 |
+| 1 | Opus ブロッキング 1、Astra 1(a) | **§4.2-2・§4.2-3・§4.3**。期待値側はリテラル、またはリテラルだけを束縛した名前に限り、ケース JSON の期待値との一致を AST で確認する。入口の実引数は進入時に直列化し、変更前・変更後・最終の各実行で一致を要求する（直列化できなければ未検証）。入口の外で読んだファイルのダイジェストも固定する。追加テストによる対象の書き換えを拒否する。例外は送出時の履歴が入口のフレームを通る場合だけ入口から出たものとし、`assert api(x) == helper(x)` の期待値側の例外を期待値不一致に数えない。作業 2a〜2d に反例を追加。§9-7 の延期を解除 |
+| 2 | Opus ブロッキング 2、Astra 1(b) | **§4.2-4「公開入口なしの有効条件」**。(i) 字句照合（ASCII の識別子境界と明記）に加え、(ii) 変更前スナップショットのどこにも同名の定義がない、(iii) `entryAdditionQuote` の 1 文が追加を表す語を含み否定・禁止の語を含まない、をすべて要する。満たさなければ不在は観測記録だけにする。作業 2a に `Parser.parse` と「追加せず」の反例を追加 |
+| 3 | Opus ブロッキング 3 | **§6.3**。pytest 形式に、基底が `object` だけのクラスと、リポジトリ内で TestCase 形式に解決されない `class Test*` を含める。作業 4 に `class TestX(object)` の fixture を追加 |
+| 4 | Astra 3 | **§6.3**。優先順位を 1 本の表に一本化し（公開 pytest 設定か pytest 依存があれば TestCase 形式だけでも pytest）、後段の説明を帰結として書き直した。pytest がなく pytest 形式がある場合は `unsupported`。選んだランナーが既存テストの静的一覧を網羅しなければ `unsupported` |
+| 5 | Astra 4 | **§4.5 禁止 4・対コーパス 11**。新しい名前への代入の右辺などで、許可した純粋な呼び出し以外の呼び出しを禁止する |
+| 6 | Astra 2（Node） | **§4.3 条件 C・node**。V8 の累積実行回数をやめ、インスペクタのブレークポイントで、呼び出し履歴上の追加テストのフレームが指定 assertion の範囲内にある進入だけを数える。準備用ヘルパー経由の進入は数えず、指定比較中の進入を確認できなければ未検証。入口の識別（ラップ・再エクスポートは名前が指す外側の関数）も明記（rev7 Opus 非ブロッキング 8 と重なるため直した） |
+| 7 | Astra 2（pytest）、rev6 Opus 非ブロッキング 3 の一部 | **§4.2-3・§4.3 pytest・unittest**。指定比較はテスト本体直下の文で、ループ・条件分岐・`try`・`with`（`contextlib.suppress` を含む）の内側を拒否し、実行記録がちょうど 1 件であることを要する。§9-3 のこの部分の延期を解除 |
+| 8 | Astra 5 | **§6.4・§6.5.3・§6.5.4 例 16**。全予定試行が完了した状態で上限にちょうど達した場合は通常判定とする |
 
 ## 6. 決定的な評価の計画（事前登録に入れる追補 B の文面案）
 
@@ -172,7 +172,7 @@ rev5 指摘への対応表は rev6（コミット 482b17a）の §5 を参照。
 ### 6.1 評価対象・盲検性・較正との関係
 
 - 有用性の判定は **held-out セット（罠 6 件以上 + 対照 3 件以上）のみ**で行い、旧の開発用較正セット（罠 6 件）は判定に含めない。
-- 本設計（rev6・rev7）の著者は held-out の罠の個別内容・再現条件・隠しテストを閲覧していない。rev7 の著者は、事前登録の判定規則（PREREG 本体の判定表と追補 A の数え方）を確かめるため事前登録文書を語句検索した際、検索結果に含まれた追補 B-0 の較正用の 1 行（罠 1 件の識別子と、その順位の理由 1 文）を意図せず目にした。隠しテスト・依頼文・再現条件は閲覧していない。rev7 の変更はいずれも個別の罠に依存しない汎用の規則であり、この 1 行には依存しない。今後も閲覧しない。`unittest` ランナー対応は、結果を見ない段階で判明した公開 OSS テスト基盤の汎用要件に対する拡張であり、個別の罠に合わせた特化設計は行わない。
+- 本設計（rev6〜rev8）の著者は held-out の罠の個別内容・再現条件・隠しテストを閲覧していない。rev8 の著者は、本設計書と rev7 に対する 2 件のレビューだけを読み、事前登録文書は開いていない。rev7 の著者は、事前登録の判定規則（PREREG 本体の判定表と追補 A の数え方）を確かめるため事前登録文書を語句検索した際、検索結果に含まれた追補 B-0 の較正用の 1 行（罠 1 件の識別子と、その順位の理由 1 文）を意図せず目にした。隠しテスト・依頼文・再現条件は閲覧していない。rev7 の変更はいずれも個別の罠に依存しない汎用の規則であり、この 1 行には依存しない。今後も閲覧しない。`unittest` ランナー対応は、結果を見ない段階で判明した公開 OSS テスト基盤の汎用要件に対する拡張であり、個別の罠に合わせた特化設計は行わない。
 - ホスト別（Claude / Codex）の本番評価で、P0 の罠合格率が **20〜80% の範囲外**（境界の扱いは §6.5.2）となった場合は再較正せず、PREREG 通りに **`判定不能（INCONCLUSIVE）`** とする。事前の難易度較正は追補 B-0（Claude P0・6 罠 × 2 試行・合算値のみ・最大 2 回・本番非混入・別計上）に従う。
 
 ### 6.2 不正防止・改ざんの定義・全プロファイル共通の外部採点
@@ -191,23 +191,24 @@ rev5 指摘への対応表は rev6（コミット 482b17a）の §5 を参照。
 - **`verifyV2` 機械的生成規則**: 評価ハーネスが各 fixture の開始時点の公開ファイル・公開設定・公開テスト実行環境のみから決定論的に生成し、入力と生成結果をログに保存する（隠し資材や試行結果による調整を禁止）。用語は次の通り。
   - **Python テストファイル**: `test*.py` または `*_test.py`。
   - **TestCase 形式**: AST 上 `unittest.TestCase` または `unittest.IsolatedAsyncioTestCase`（`from unittest import TestCase` などの別名を含む）を基底に持つクラス。基底がリポジトリ内の別のクラスなら import と定義をたどって解決し、解決できない基底は TestCase 形式とみなさない。
-  - **pytest 形式**: トップレベルの `def test_*`（`async def` を含む）、または基底を持たない `class Test*` の `test_*` メソッド。
+  - **pytest 形式**: トップレベルの `def test*`（`async def` を含む）、または TestCase 形式でない `class Test*`（基底なし、基底が `object` だけ、またはリポジトリ内で TestCase 形式に解決されない基底を持つもの。`class TestX(object)` を含む）の `test*` メソッド。
   - `import unittest` や `from unittest import mock` などの参照は判定に使わない。
   - **pytest あり**: 評価環境で `python3 -I -c "import pytest"` が成功する。
+  - **既存テストの静的一覧**: Python テストファイル内の、TestCase 形式のクラスの `test*` メソッドと、pytest 形式のテスト（ファイル・クラス・関数の組。パラメータ化の添字は除く）。
 
-  優先順位は次の通り。
-  1. pytest があり、公開 pytest 設定（`pytest.ini`、`pyproject.toml` の `[tool.pytest*]`、`setup.cfg` の `[tool:pytest]`、`tox.ini` の `[pytest]`、`conftest.py`）があるか公開依存に `pytest` が明示され、Python テストファイルがある → `runner: "pytest"`。
-  2. TestCase 形式のクラスがあり、かつ「pytest 形式のテストを持つファイルが 1 件もない」または「pytest がない」→ `runner: "unittest"`。
-  3. pytest があり、pytest 形式のテストがある → `runner: "pytest"`（同じリポジトリの TestCase 形式も pytest で実行する）。
-  4. `package.json` の `scripts.test`（推移閉包含む）が `node --test` を直接呼ぶ → `runner: "node"`。
-  5. いずれにも該当しない → `runner: "unsupported"`。
+  優先順位は次の 1 本だけとし、上から最初に当たった規則で決める。
+  1. pytest があり、Python テストファイルがあり、かつ「公開 pytest 設定（`pytest.ini`、`pyproject.toml` の `[tool.pytest*]`、`setup.cfg` の `[tool:pytest]`、`tox.ini` の `[pytest]`、`conftest.py`）がある」「公開依存に `pytest` が明示されている」「pytest 形式のテストがある」のいずれかを満たす → `runner: "pytest"`（同じリポジトリの TestCase 形式も pytest で実行する）。
+  2. TestCase 形式のクラスがあり、pytest 形式のテストが 1 件もない → `runner: "unittest"`（pytest の有無を問わない）。
+  3. `package.json` の `scripts.test`（推移閉包含む）が `node --test` を直接呼ぶ → `runner: "node"`。
+  4. いずれにも該当しない → `runner: "unsupported"`。
 
-  TestCase 形式と pytest 形式が混在し pytest がある場合は、規則 3 で pytest を優先する。TestCase 形式だけのリポジトリは、pytest があっても規則 2 で `unittest` になる（pytest の既定の収集名に合わない `tests.py` などの取りこぼしを避けるため）。
+  帰結: TestCase 形式だけのリポジトリは、公開 pytest 設定か pytest 依存があれば pytest、どちらもなければ pytest があっても `unittest`（pytest の既定の収集名に合わない `tests.py` などの取りこぼしを避けるため）。pytest がなく pytest 形式のテストがある場合は、TestCase 形式と混在していても `unsupported`（unittest は同居する `def test_*` や `class TestX(object)` を実行しないため）。
+- **網羅の確認（規則 1・2 で選んだ場合）**: 開始時点のコピーで、選んだランナーが §4.2-5 と同じ明示パス（`unittest` は下記の発見設定）で収集したテスト識別子が、既存テストの静的一覧をすべて含まなければ `runner: "unsupported"` とし、理由と落ちた識別子を記録する。
 - **`unittest` の発見設定**: S を TestCase 形式のクラスを持つ Python テストファイルの集合とし、次の手順で決める。
   - `unittestPattern`: S の全ファイルが `test*.py` に合えば `["test*.py"]`、そうでなく全ファイルが `*_test.py` に合えば `["*_test.py"]`、それ以外は `["test*.py", "*_test.py"]`（ラッパーはパターンごとに発見し、`test.id()` で重複を除く）。
   - `unittestStartDir`: S の各ファイルの親ディレクトリの最長共通祖先（リポジトリ相対。共通部分がなければ `.`）。
   - `unittestTopLevelDir`: ルート直下から `unittestStartDir` までの各ディレクトリにすべて `__init__.py` があればリポジトリルート、なければ `unittestStartDir`。
-  - 確認: 開始時点のコピーでこの設定により発見したテストファイルの集合が S と一致しなければ `runner: "unsupported"` とし、理由を記録する。
+  - 確認: 発見したテスト識別子が網羅の確認を満たさなければ `runner: "unsupported"` とする。
 - `protectedPaths` は公開 fixture から特定したテスト専用パスを安定ソートで出力し、多用途ファイルには §4.5 の項目単位＋推移閉包保護を自動適用する。`includePaths` は未設定とする。
 - **ランナー分布の記録と対応外の割合**: 追補 B 固定時に、ハーネスは held-out の全 fixture について生成した設定とランナー別の件数を、著者が閲覧しないハーネス内の領域に保存し、そのファイルの SHA-256 を追補 B に記録する。held-out の罠のうち `unsupported` の割合が **1/3 を超える**場合（6 罠なら 3 件以上）、本番を開始せず `INCONCLUSIVE（対応外過多）` とする。ハーネスは著者に超過の有無だけを返す。
 - **`unsupported` 時の Stop 挙動**: Stop hook は発火して台帳に `未検証（対応外ランナー）` を記録し、**ブロックせず（追加ターンを発生させず）終了を許可する**。試行と時間・費用は層の計測に含め、共通手順で外部採点する。`unsupported` の罠での Stop 発火は、強制が機能した証拠に数えない（§6.5 の判定不能 (b)）。実セッション検証で強制モードを確認できないホストの P2 は「実施不可」として起動せず、観察モードで代用しない。
@@ -220,7 +221,7 @@ rev5 指摘への対応表は rev6（コミット 482b17a）の §5 を参照。
 - **全体上限と事前検査**:
   - 資料 D の定価換算合計上限 **$35 相当**（Claude 上限 $16、Codex 上限 $10、盲検副次判定上限 $8）を守る。較正費用は追補 B-0 通り別計上とする。
   - 本番の開始前と各チャンクの開始前に、ホスト別に「試行ごとの上限 `max_budget_usd` × 残りの試行数 ≤ ホストの残予算」を、副次判定は「1 件あたりの上限 × 残りの判定数 ≤ 副次判定の残予算」を確かめ、満たさなければ開始しない。例: Claude の 81 試行で、試行上限 $0.19 なら 81 × 0.19 = $15.39 ≤ $16 で開始できる。$0.20 なら $16.20 > $16 で開始しない。上限値の見直しは、結果を見る前の新しい追補として記録する。
-  - 実行中にホストの定価換算累計がホスト上限に達したら、そのホストの新規投入を止め（実行中の試行は完走・記録する）、そのホストの判定を `INCONCLUSIVE（予算）` とする。副次判定の予算に達したら副次判定だけを止めて未実施を記録する（主判定に使わないため判定は変わらない）。
+  - 実行中にホストの定価換算累計がホスト上限に達したら、そのホストの新規投入を止める（実行中の試行は完走・記録する）。その時点で未実行の試行が残っていれば、そのホストの判定を `INCONCLUSIVE（予算）` とする。全予定試行が完了した時点で上限にちょうど達した場合、または最後の試行の完走中に達して未実行が 0 件の場合は、予算による判定不能にせず通常の判定（§6.5.3 の 2 以降）を行う。副次判定の予算に達したら副次判定だけを止めて未実施を記録する（主判定に使わないため判定は変わらない）。
 - **実行順序（追補 B に固定）**:
   - 実行の単位は「組」とする。組は同じホスト・同じタスク（罠または対照）・同じ試行番号の P0・P1・P2 の 3 試行である。チャンクは組の並びの連続区間とし、組の途中では区切らない。
   - ハーネスは追補 B に記載する固定 seed で、ホスト別に組の順序と組内のプロファイル順を生成する。その一覧（タスクは著者に内容が分からない不透明な ID で表す）を追補 B に入れ、実行はこの順に従う。
@@ -251,7 +252,7 @@ rev5 指摘への対応表は rev6（コミット 482b17a）の §5 を参照。
 
 上から順に調べ、最初に当たった判定を最終判定とする。判定不能の条件と有用でない条件が同時に立つ場合は判定不能を優先し、成立したすべての条件を判定記録に併記する。配備するのは最終判定が `USEFUL` のホストだけである。
 
-1. 予算上限で停止し、未実行の試行が残った → `INCONCLUSIVE（予算）`
+1. 予算上限で停止し、未実行の試行が残った → `INCONCLUSIVE（予算）`（全予定試行が完了していれば、上限に達していても当たらない）
 2. 対応外の割合が 1/3 を超えた → `INCONCLUSIVE（対応外過多）`
 3. `4V < 3N` → `INCONCLUSIVE (c)`
 4. P0 罠合格率が範囲外 → `INCONCLUSIVE (a)`
@@ -280,6 +281,7 @@ rev5 指摘への対応表は rev6（コミット 482b17a）の §5 を参照。
 | 13 | 6 罠のうち 3 件が `unsupported`、または 2 件 | `3/6 > 1/3`／`2/6 = 1/3` | `INCONCLUSIVE（対応外過多）`／当たらない |
 | 14 | Claude に例 1、Codex に例 10 を与える | ホスト別に独立して判定 | Claude `USEFUL`、Codex `INCONCLUSIVE (b)` |
 | 15 | 予算の事前検査（§6.4）: Claude 81 試行で試行上限 $0.19、または $0.20 | `15.39 ≤ 16`／`16.20 > 16` | 開始する／開始しない |
+| 16 | 例 1 の 81 試行がすべて完了した時点で、Claude の定価換算累計がちょうど $16.00（ホスト上限）に達する | 上限到達だが未実行 0 件。判定の順序 1 に当たらない | `USEFUL`（例 1 と同じ） |
 
 ## 7. 実装計画（Claude 向けの大きさ）
 
@@ -288,13 +290,13 @@ rev5 指摘への対応表は rev6（コミット 482b17a）の §5 を参照。
 | 作業 | 依存 | 変更ファイル | 先に書くテスト | 完了条件 |
 |---|---|---|---|---|
 | **1. スナップショット・台帳・AST 保護基盤** | なし | `scripts/lib/config.js`, `scripts/lib/ledger.js`, `scripts/lib/git.js`, `scripts/lib/snapshot.js`（新規）, `scripts/lib/ast-guard.js`（新規）, `scripts/lib/py/ast_guard.py`（新規、標準ライブラリのみ）, `tests/fixtures/ast-guard-corpus/`（新規）, `tests/verify-v02-snapshot.test.js`（新規） | 依頼 ID 形式 `[a-z0-9_]`、依頼文の保存、未コミット・未追跡・削除含む前後 ID、台帳外置きの不変性、ケース固定ダイジェストの保存形式。`ast-guard.js` が Python AST を `python3 -I` のサブプロセスで解析すること（作業ツリー内の同名モジュールに影響されない）。§4.5 の Python 側と構造化設定（TOML・`package.json` 閉包）の対コーパス | 新規・既存 `node --test` 全合格。資料 F 再現 fixture と対コーパス（Python・構造化設定）で偽陽性 0・検出率 100% |
-| **2a. `verify-diff` 中核（偽ランナー）** | 作業 1 | `scripts/lib/verify-diff.js`（新規）, `tests/helpers/fake-runner.js`（新規）, `tests/verify-v02-core.test.js`（新規） | ケース JSON 検証（候補 3〜5、`nonBoundary`、上限 3）、`openFailures` の登録条件（入口到達前の失敗は登録しない）、固定後の内容変更の拒否と新しい `caseId` の計上、取り下げ、変更前 4 分類（条件 L・C は偽ランナーの記録で与える）、依頼文との字句照合（バグ修正依頼で新しい `parse_v2` を呼ぶ反例は未検証）、同一集合・同一順序での 1 回再実行 | 実ランナーなしで全分岐の自動テストが合格 |
-| **2b. pytest アダプタ** | 作業 2a | `scripts/lib/runners/pytest.js`（新規）, `scripts/lib/runners/pytest-plugin.py`（新規）, `tests/verify-v02-pytest.test.js`（新規） | 正常例（値の比較・`pytest.raises`）、editable install + `src`。受入反例: 同一テストに 2 つの assert があり、指定した 2 つ目より前の assert が変更前に落ちる形（指定 1 文制限で拒否）、`try/except` 握りつぶし、入口を呼ばずに成立する比較（条件 C 不成立）。新規モジュール不在の受入例（パッケージ配下・トップレベル）と、対象モジュール内の依存不在（実行エラー）の区別 | 正常例が検証済み、反例がすべて未検証。追加テストが通常の pytest 単体で実行可能 |
-| **2c. unittest アダプタ** | 作業 2a | `scripts/lib/runners/unittest.js`（新規）, `scripts/lib/runners/unittest-runner.py`（新規）, `tests/verify-v02-unittest.test.js`（新規） | 正常例（値の比較・`assertRaises` の 2 形）、discover（複数パターン・`unittestTopLevelDir`）と明示パス、`assert*`＋`assertRaises` `__exit__`。受入反例: `with self.assertRaises(ValueError): api(make_input())` で `make_input()` が `ValueError` を出す形、`try/except`、素の `assert`、`subTest` 失敗／0 回反復、パッチ。トップレベル新規モジュール不在の受入例 | 正常例が検証済み、反例がすべて未検証。追加テストが通常の `python -m unittest` で実行可能 |
-| **2d. node アダプタ** | 作業 2a | `vendor/`（JS パーサ。候補 acorn を同梱）, `scripts/lib/runners/node.js`（新規）, `scripts/lib/runners/node-reporter.mjs`（新規）, `scripts/lib/runners/node-ast-check.mjs`（新規）, `scripts/lib/ast-guard.js`（JS 側の規則を追加）, `tests/fixtures/ast-guard-corpus/`（Node 側を追加）, `tests/verify-v02-node.test.js`（新規） | 冒頭で JS パーサを確定する（同梱候補で ESM・CommonJS・top-level await・クラスフィールドを解析できることを先に試験）。正常例（同期の比較、`await 入口()`、`throws`、`await rejects`）、`node_modules` 独立コピー RO。受入反例: `const p = t.assert.rejects(...); await p.catch(() => {});`、`try/catch`、指定外の `t.assert`、入口が関数でないまま `throws(…, TypeError)` が通る形（条件 C 不成立）。CommonJS `MODULE_NOT_FOUND` と ESM `ERR_MODULE_NOT_FOUND` の受入例と、依存不在の区別。§4.5 の Node 側の対コーパス | 正常例が検証済み、反例がすべて未検証。Node 側の対コーパスで偽陽性 0・検出率 100% |
+| **2a. `verify-diff` 中核（偽ランナー）** | 作業 1 | `scripts/lib/verify-diff.js`（新規）, `tests/helpers/fake-runner.js`（新規）, `tests/verify-v02-core.test.js`（新規） | ケース JSON 検証（候補 3〜5、`nonBoundary`、上限 3）、`openFailures` の登録条件（入口到達前の失敗は登録しない）、固定後の内容変更の拒否と新しい `caseId` の計上、取り下げ、変更前 4 分類（条件 L・C は偽ランナーの記録で与える）、公開入口なしの有効条件（ASCII の識別子境界で `parse_v2を追加` が一致すること。受入反例: バグ修正依頼で新しい `parse_v2` を呼ぶケース、依頼「`Parser.parse` が空文字で落ちる」に対し `pkg/util.py` に新しい `parse` を足して呼ぶケース、依頼「`parse_v2` は追加せず `parse` を直す」に対し `parse_v2` を足して呼ぶケースがいずれも未検証）、期待値と入力の固定（受入反例: 追加テストの期待値がケース JSON と異なる、登録後に入力用データファイルを書き換えて直列化値または読んだファイルのダイジェストが変わる、引数が直列化できない、の各ケースが未検証で `openFailures` に残る。入口のフレームを通らない例外は期待値不一致にせず登録もしない）、同一集合・同一順序での 1 回再実行 | 実ランナーなしで全分岐の自動テストが合格 |
+| **2b. pytest アダプタ** | 作業 2a | `scripts/lib/runners/pytest.js`（新規）, `scripts/lib/runners/pytest-plugin.py`（新規）, `tests/verify-v02-pytest.test.js`（新規） | 正常例（値の比較・`pytest.raises`）、editable install + `src`。受入反例: 同一テストに 2 つの assert があり、指定した 2 つ目より前の assert が変更前に落ちる形（指定 1 文制限で拒否）、`try/except` 握りつぶし、入口を呼ばずに成立する比較（条件 C 不成立）、指定 assert をループ内に置き境界入力の失敗を `contextlib.suppress` で吸収する形（直下 1 回の規則で拒否）、`assert api(x) == load_expected()`・`== mod.NEW_CONST` の形（期待値側の規則で拒否）、`assert api(x) == helper(x)` で `helper` が送出する形（入口から出た例外ではなく、登録しない）、登録後に入力を読むデータファイルを書き換える形（直列化値の不一致）、`monkeypatch` で対象を書き換える形。新規モジュール不在の受入例（パッケージ配下・トップレベル）と、対象モジュール内の依存不在（実行エラー）の区別 | 正常例が検証済み、反例がすべて未検証。追加テストが通常の pytest 単体で実行可能 |
+| **2c. unittest アダプタ** | 作業 2a | `scripts/lib/runners/unittest.js`（新規）, `scripts/lib/runners/unittest-runner.py`（新規）, `tests/verify-v02-unittest.test.js`（新規） | 正常例（値の比較・`assertRaises` の 2 形）、discover（複数パターン・`unittestTopLevelDir`）と明示パス、`assert*`＋`assertRaises` `__exit__`。受入反例: `with self.assertRaises(ValueError): api(make_input())` で `make_input()` が `ValueError` を出す形、`try/except`、素の `assert`、`subTest` 失敗／0 回反復、ループ内の指定比較、パッチ、`self.assertEqual(api(x), EXPECTED)` で `EXPECTED` をファイルから読む形（期待値側の規則で拒否）、登録後に入力用データファイルを書き換える形（直列化値の不一致）。トップレベル新規モジュール不在の受入例 | 正常例が検証済み、反例がすべて未検証。追加テストが通常の `python -m unittest` で実行可能 |
+| **2d. node アダプタ** | 作業 2a | `vendor/`（JS パーサ。候補 acorn を同梱）, `scripts/lib/runners/node.js`（新規）, `scripts/lib/runners/node-reporter.mjs`（新規）, `scripts/lib/runners/node-ast-check.mjs`（新規）, `scripts/lib/ast-guard.js`（JS 側の規則を追加）, `tests/fixtures/ast-guard-corpus/`（Node 側を追加）, `tests/verify-v02-node.test.js`（新規） | 冒頭で JS パーサを確定する（同梱候補で ESM・CommonJS・top-level await・クラスフィールドを解析できることを先に試験）。続けて、`--import` の preload が各テストファイルのプロセスに渡ること、worker スレッドからの `connectToMainThread()` でブレークポイントと例外停止が働くこと、`t.assert.throws`／`rejects` を包めることを対象の Node 版で試験する。正常例（同期の比較、`await 入口()`、`throws`、`await rejects`）、`node_modules` 独立コピー RO。受入反例: `const p = t.assert.rejects(...); await p.catch(() => {});`、`try/catch`、指定外の `t.assert`、入口が関数でないまま `throws(…, TypeError)` が通る形（条件 C 不成立）、準備用ヘルパーが間接的に入口を呼び、指定の `throws(() => api(undefinedName), ReferenceError)` が未定義名から通る形（指定比較の評価中の進入がなく条件 C 不成立）、期待値を `JSON.parse(readFileSync(...))` で得る形（期待値側の規則で拒否）、登録後に入力用データファイルを書き換える形（直列化値の不一致）。デコレータ相当のラップや再エクスポートした入口の識別。CommonJS `MODULE_NOT_FOUND` と ESM `ERR_MODULE_NOT_FOUND` の受入例と、依存不在の区別。§4.5 の Node 側の対コーパス | 正常例が検証済み、反例がすべて未検証。Node 側の対コーパスで偽陽性 0・検出率 100% |
 | **3a. Stop・CLI** | 作業 2a | `scripts/vl.js`, `scripts/lib/stop.js`（新規）, `tests/verify-v02-stop.test.js`（新規） | `hook start`/`stop`/`verify-diff`/`--withdraw`、差分なし・文書のみ、`off`/`observe`/`enforce`、1 依頼 1 回上限、`stop_hook_active` 非再ブロック、`openFailures` 残存時と取り下げ時の「検証済み」拒否、検証後再編集による失効、`未検証（意図した変更）`・`未検証（対応外ランナー）`・`未検証（ケース取り下げ）` の非ブロック記録、次依頼での枠リセット | リポジトリ全テスト合格 |
-| **3b. 配備・doctor・文書** | 作業 3a・2b〜2d | `skills/verify2/SKILL.md`, `codex/skills/verify2/SKILL.md`, `hooks/hooks.v02.json`, `codex/hooks.v02.json`, `scripts/install.js`, `scripts/lib/install-codex.js`, `scripts/lib/doctor.js`, `scripts/lib/doctor-codex.js`, `README.md`, `INSTALL.md`, `tests/verify-v02-install.test.js`（新規） | hook の登録・削除、v0.1 資材との分離、doctor の v0.2 診断（`python3`・pytest の有無）、SKILL と Stop 理由に指定 assertion の形・ケースの固定・取り下げの案内とテンプレートがあること | リポジトリ全テスト合格、`doctor` で v0.2 診断成功 |
-| **4. 評価ハーネス・追補 B 固定** | 作業 1・2d・3b | 評価リポジトリ側：`verifyV2` 設定生成器、`tamper_check`（作業 1・2d の `ast-guard` を Verify の固定コミットからサブプロセスで呼び、コピー実装しない）、共通採点コピー（無力化処理）、canary `leak_check`、実行順序生成器、予算事前検査、判定スクリプト、架空結果表テスト、追補 B 文書 | §6.3 のランナー判定の再現性。fixture: `unittest.mock` を使う pytest 形式（→ pytest）、`class TestX` のメソッドだけを持つ設定なし pytest（→ pytest）、TestCase 形式だけで pytest あり（→ unittest）、混在で pytest あり（→ pytest）、混在で pytest なし（→ unittest）、`unittestStartDir` の候補が複数・パターン混在・発見結果の不一致（→ unsupported）。`tamper_check` が作業 1・2d の対コーパスを Verify と同じ結果で通ること。無力化処理で消える変更が不合格にならないこと。§6.5.4 の全例 | 全テスト合格、旧 dev fixture での `unsupported` 率ログ取得、held-out のランナー分布をハーネス内に記録（著者は見ない）、結果閲覧前かつ較正前に追補 B コミット確定 |
+| **3b. 配備・doctor・文書** | 作業 3a・2b〜2d | `skills/verify2/SKILL.md`, `codex/skills/verify2/SKILL.md`, `hooks/hooks.v02.json`, `codex/hooks.v02.json`, `scripts/install.js`, `scripts/lib/install-codex.js`, `scripts/lib/doctor.js`, `scripts/lib/doctor-codex.js`, `README.md`, `INSTALL.md`, `tests/verify-v02-install.test.js`（新規） | hook の登録・削除、v0.1 資材との分離、doctor の v0.2 診断（`python3`・pytest の有無）、SKILL と Stop 理由に指定 assertion の形（直下 1 回、リテラルの期待値、直列化できる引数）・ケースの固定・取り下げ・`entryAdditionQuote` と語の一覧の案内とテンプレートがあること | リポジトリ全テスト合格、`doctor` で v0.2 診断成功 |
+| **4. 評価ハーネス・追補 B 固定** | 作業 1・2d・3b | 評価リポジトリ側：`verifyV2` 設定生成器、`tamper_check`（作業 1・2d の `ast-guard` を Verify の固定コミットからサブプロセスで呼び、コピー実装しない）、共通採点コピー（無力化処理）、canary `leak_check`、実行順序生成器、予算事前検査、判定スクリプト、架空結果表テスト、追補 B 文書 | §6.3 のランナー判定の再現性。fixture: `unittest.mock` を使う pytest 形式（→ pytest）、`class TestX` のメソッドだけを持つ設定なし pytest（→ pytest）、`class TestX(object)` だけを持つ設定なし pytest（→ pytest）、TestCase 形式と `class TestX(object)` の混在で pytest あり（→ pytest）、TestCase 形式だけで pytest あり・設定と依存なし（→ unittest）、TestCase 形式だけで公開 pytest 設定あり（→ pytest）、混在で pytest あり（→ pytest）、同じファイルに TestCase 形式とトップレベル `def test_*` が混在し pytest なし（→ unsupported）、TestCase 形式だけで pytest なし（→ unittest）、`unittestStartDir` の候補が複数・パターン混在（→ 発見設定の決定）、収集した識別子が静的一覧を網羅しない（→ unsupported）。`tamper_check` が作業 1・2d の対コーパスを Verify と同じ結果で通ること。無力化処理で消える変更が不合格にならないこと。§6.5.4 の全例 | 全テスト合格、旧 dev fixture での `unsupported` 率ログ取得、held-out のランナー分布をハーネス内に記録（著者は見ない）、結果閲覧前かつ較正前に追補 B コミット確定 |
 | **5. 実セッション Stop 検証** | 作業 3b | 検証ログ・ホスト別配備可否記録（不具合発見時はテスト先行で最小修正） | 書き捨て dev fixture での手動シナリオ：開始イベントと依頼文の到達、初回未検証ブロックと理由配送、`stop_hook_active` と sample-harness 併用順序切替、次依頼枠リセット、最終 ID 照合 | Claude Code・Codex それぞれの強制モード可否確定（不成立ホストは「実施不可」記録） |
 
 ### 評価実行の順序（厳格ゲート）
@@ -306,39 +308,46 @@ rev5 指摘への対応表は rev6（コミット 482b17a）の §5 を参照。
 ## 8. リスクと未決事項
 
 1. **境界選定の質（選び方の失敗）**: 候補列挙と選定理由を強制しても、モデルが実装の真の誤り箇所ではなく無関係な境界を選べばバグを逃す。同一コンテキスト 1 ターン介入の限界であり、本評価で「選び方の失敗」が支配的なら次段で敵対段（fresh-context）を別事前登録で検討する。
-2. **指定 assertion の記述制約と構文カバレッジ**: 指定 assertion の形（1 文、入口の直接呼び出し、引数は名前とリテラル、例外期待の形、Node の `await` の位置）を外れる記法や、`unittest` で独自ヘルパー関数越しに `self.assert*` を呼ぶ記法は未検証になる。SKILL と Stop 理由での案内とテンプレートが不可欠。JS パーサは作業 2d の冒頭で確定する。
+2. **指定 assertion の記述制約と構文カバレッジ**: 指定 assertion の形（テスト本体直下の 1 文、入口の直接呼び出し、引数は名前とリテラル、期待値はリテラル、例外期待の形、Node の `await` の位置）を外れる記法や、直列化できない引数（クラスのインスタンス、関数、ファイルハンドル等）を渡すケース、準備済みオブジェクトのメソッドを入口にするケース、`unittest` で独自ヘルパー関数越しに `self.assert*` を呼ぶ記法は未検証になる。SKILL と Stop 理由での案内とテンプレートが不可欠。JS パーサは作業 2d の冒頭で確定する。
 3. **スイート全体再実行の予算圧迫**: 順序依存回帰の見逃しを防ぐため単独再実行を廃止した結果、実行時間の長い既存スイートで不安定テストが出ると、再実行だけで共通 `timeout_s` を圧迫し「予算不足による未検証」が増えるおそれがある。
 4. **`node_modules` 独立コピーの上限（512MB）**: 大規模 Node リポジトリでは隔離上限超過で未検証になり得る。rootless な OverlayFS 等による軽量 RO 隔離は将来の拡張課題とする。
 5. **ホスト CLI の Stop hook 互換性**: Claude Code・Codex のアップデートや sample-harness 併用時の `stop_hook_active` 挙動、依頼文の取得可否は作業 5 の実セッション検証まで確定しない。片側ホストが「実施不可」となるリスクが残る。
 6. **自己申告区分の過大申告**: モデルが自分の誤りによる既存テスト失敗を `未検証（意図した変更）` と申告する、または未解消のケースを安易に取り下げて `未検証（ケース取り下げ）` で終了する可能性がある。評価の合否は外部隠しテストで決まるため実験は歪まないが、実運用時は別集計比率を監視する必要がある。
 7. **定額プラン枠による評価期間の延伸**: 5h 45%・7d 88% の停止規則により、全 162 試行と副次判定の完了に複数日〜週単位を要し、途中でホスト CLI やモデル更新が混入するリスクがある。組単位のチャンクで P0・P1・P2 を同じ時期に流して影響を対比較の両側にそろえ、各チャンクでバージョンを記録し、変更があれば評価ログに明示する。
-8. **字句照合による入口追加の取りこぼし**: 依頼文が入口名を挙げずに機能追加を求める場合、「公開入口なし」の証拠は未検証になる。誤った「検証済み」を防ぐための意図した保守側の扱いであり、別集計の比率を監視する。
+8. **字句照合による入口追加の取りこぼし**: 依頼文が入口名を挙げずに機能追加を求める場合、同名の定義が変更前のどこかにある場合（別クラスの同名メソッドを含む）、追加を求める文に否定語が含まれる場合（「直すのではなく `parse_v2` を新設」など）、「公開入口なし」の証拠は未検証になる。誤った「検証済み」を防ぐための意図した保守側の扱いであり、別集計の比率を監視する。
 9. **ケース固定による上限の消費**: 期待値を直すたびに新しい `caseId` が要るため、上限 3 件に早く届き得る。入口到達前の失敗は固定しないことで、書き損じによる消費は抑える。
-10. **Node の条件 C の計測**: V8 の関数単位の実行回数に依存するため、取得できない Node の版や、読み込みだけで入口が実行されるモジュールでは未検証になる。
+10. **Node の条件 C の計測**: preload とインスペクタ（worker スレッドからの `connectToMainThread()`）に依存するため、使えない Node の版や実行環境では未検証になる。ブレークポイントと例外停止で追加テストの実行時間が延び、共通 `timeout_s` を圧迫するおそれがある。
+11. **入口の外で読んだファイルの判定の保守性**: 非同期の入口から呼んだ別の非同期関数が `await` の後で読むファイルは、再開時の呼び出し履歴に入口が現れず「入口の外」と判定されることがある（Python・Node とも）。その場合、登録後にそのファイルを直すとケースが合格に数えられなくなる（誤った「検証済み」は出ないが、新しい `caseId` が要る）。
 
 ## 9. 延期した非ブロッキング項目
 
-以下は rev6 レビューの非ブロッキング指摘、または rev7 の著者が見つけた残件であり、本版では直さず延期する（削除しない）。
+以下は rev6・rev7 レビューの非ブロッキング指摘、または rev7・rev8 の著者が見つけた残件であり、本版では直さず延期する（削除しない。延期を解除したものは扱い欄に記す）。出典の「rev6 Opus」「rev7 Opus」は、それぞれの版に対する Opus レビューを指す。
 
 | # | 項目 | 出典 | 延期中の扱い |
 |---|---|---|---|
-| 1 | 開始時になかった `pretest`・`posttest`・`pre<name>` の新設禁止の明記（npm が自動で実行するため） | Opus 非ブロッキング 1 | 現行は開始時の閉包だけを保護する |
-| 2 | `t.plan`・`t.assert` の Node 版（22.2 / 20.15 以降）を doctor で確認し、満たさなければ `unsupported` とする | Opus 非ブロッキング 2 | 版が足りない場合は追加テストが比較に到達せず未検証になる（誤った「検証済み」は出ない） |
-| 3 | pytest で指定 `assert` をテスト関数直下の文に限ること、`contextlib.suppress` や `pytest.raises` で包む形（ループの一部の反復だけを握りつぶす形を含む）の拒否、設定の addopts にある `--assert=plain` を打ち消す `--assert=rewrite` の付与 | Opus 非ブロッキング 3 | 指定 1 文の制限（§4.2-3）は rev7 で実施済み |
-| 4 | unittest で指定比較が `assertRaises(Exception)` や `BaseException` のような広すぎる型なら拒否する | Opus 非ブロッキング 4 | 入口の外から出た例外は条件 C で除外済み。入口の内部で別の原因により出た例外は残る |
-| 5 | H2 の上限到達不合格の増え方と追加費用（rev6 の「著増」「+30% 目安」）、Codex の「十分な余力」、H3 の分類できた割合（rev6 の「大半」）の数値化 | Opus 非ブロッキング 6、Astra §6 | H2・H3 は診断指標として報告する。Codex の余力はチャンク開始時の観測値を記録する |
-| 6 | held-out 本番で使う Verify のコミットハッシュを追補 B か台帳に固定する | Opus 非ブロッキング 7 | — |
-| 7 | 追加テストが作業ツリー内の別ファイル（データファイル等）から入力や期待値を読む場合の固定範囲 | rev7 の著者 | 固定するのは追加テストファイルとケース JSON の固定項目だけ |
+| 1 | 開始時になかった `pretest`・`posttest`・`pre<name>` の新設禁止の明記（npm が自動で実行するため） | rev6 Opus 非ブロッキング 1 | 現行は開始時の閉包だけを保護する |
+| 2 | `t.plan`・`t.assert` の Node 版（22.2 / 20.15 以降）を doctor で確認し、満たさなければ `unsupported` とする | rev6 Opus 非ブロッキング 2 | 版が足りない場合は追加テストが比較に到達せず未検証になる（誤った「検証済み」は出ない） |
+| 3 | pytest の設定の addopts にある `--assert=plain` を打ち消す `--assert=rewrite` の付与 | rev6 Opus 非ブロッキング 3 | 指定比較をテスト関数直下で 1 回だけ実行する規則と、ループ・`contextlib.suppress` の拒否は rev8 で §4.2-3・§4.3 に取り込み、この部分の延期を解除した。`--assert=plain` では `pytest_assertion_pass` が呼ばれず通過記録がそろわないため未検証になる |
+| 4 | unittest で指定比較が `assertRaises(Exception)` や `BaseException` のような広すぎる型なら拒否する | rev6 Opus 非ブロッキング 4 | 入口のフレームを通らない例外は §4.2-3 の「例外の出所」で除外済み。入口の内部で別の原因により出た例外は残る |
+| 5 | H2 の上限到達不合格の増え方と追加費用（rev6 の「著増」「+30% 目安」）、Codex の「十分な余力」、H3 の分類できた割合（rev6 の「大半」）の数値化 | rev6 Opus 非ブロッキング 6、rev7 Opus 非ブロッキング 9、Astra（rev6）§6 | H2・H3 は診断指標として報告する。Codex の余力はチャンク開始時の観測値を記録する |
+| 6 | held-out 本番で使う Verify のコミットハッシュを追補 B か台帳に固定する | rev6 Opus 非ブロッキング 7、rev7 Opus 非ブロッキング 1 | 作業 4 の `tamper_check` は Verify の固定コミットを前提にしている。追補 B への記載は追補 B の固定時に判断する |
+| 7 | 追加テストが作業ツリー内の別ファイル（データファイル等）から入力や期待値を読む場合の固定範囲 | rev7 の著者、rev7 Opus ブロッキング 1、rev7 Astra 1 | **rev8 で延期を解除した**。期待値側のリテラル限定とケース JSON との一致、入口の実引数の直列化値、入口の外で読んだファイルのダイジェストを §4.2-2・§4.2-3 で固定する |
+| 8 | 盲検性の申告（§6.1）を追補 B にも記録し、目にした行が held-out の罠に関するものなら、差分がその罠に依存しないことを第三者が確認する手順を足す | rev7 Opus 非ブロッキング 2 | §6.1 の記載で代える |
+| 9 | 強制モードを確認できず「実施不可」になったホストの判定名を §6.5.3 に明示する | rev7 Opus 非ブロッキング 3 | 実施不可のホストは P2 を起動しないため §6.5.3 の手続きに入らない。記録には「実施不可」と書き、`INCONCLUSIVE` の各区分を使わない |
+| 10 | 新規 conftest.py が新規の補助モジュールを import し、その読み込み時の副作用が Verify の既存テストの前後比較に影響する場合の扱い（変更後コピーにも §6.2 と同じ無力化を適用する案） | rev7 Opus 非ブロッキング 4 | 新規 conftest.py 自体の内容は §4.5 で検査する。import 先の新規補助モジュールの読み込み時の副作用は検査しない |
+| 11 | `未検証（意図した変更）` の認定根拠（自己申告か、既存テストの失敗か）と、その場合に Stop がブロックするか | rev7 Opus 非ブロッキング 6 | §4.1 の文面のまま。作業 3a で決め、テストで固定する |
+| 12 | 試行ごとの共通上限が $0.19 前後になる場合に P2 の追加ターンが上限到達の不合格を増やす点。dev スモークの費用から余裕を確かめて値を決める | rev7 Opus 非ブロッキング 7 | 上限値の見直しは、結果を見る前の新しい追補として記録する（§6.4） |
+| 13 | §4.5 禁止 4 で、属性参照・演算子の多重定義による読み込み時の副作用を検査する | rev8 の著者 | 現行は呼び出し・`:=`・`await`・`yield` だけを見る |
 
-## 10. 改訂の要約（rev7）
+## 10. 改訂の要約（rev8）
 
-- 著者: Claude Opus 5.5 xhigh。rev6 に対する Opus レビューと Astra レビュー（ともに CHANGES_REQUESTED）への対応。
-- 直したブロッキング／MAJOR（§5 の 1〜19）:
-  - 証拠契約: ケースの固定と取り下げ（1）、入口追加の字句照合（2）、Node の非同期比較（3）、pytest の指定 1 文（4）、unittest の例外期待の形（5）、条件 L と C の分離（6）、新規モジュール不在の受入例（7）。
-  - ランナー判定: 規則 2 の限定と `unittest` 発見設定の決め方（8）。
-  - 改ざん判定: 否定列挙（9）、名前解決と `protectedPaths` の優先（10）、評価側の無力化と不合格範囲の絞り込み（11）。
-  - 評価計画: 判定不能 (b) の再定義と対応外の割合（12）、組単位の実行順序（13）、予算の事前検査（14）、判定手続きと架空表（15）。
-  - 実装計画: 作業 2 の 4 分割（16）、`python3 -I`（17）、`tamper_check` の共有（18）、作業 3 の 2 分割（19）。
-- 延期: §9 の 7 件。
-- rev7 で決めた解釈: TestCase 形式だけのリポジトリは pytest があっても `unittest`。入口到達前の失敗はケースを固定しない。取り下げがある依頼では Stop はブロックしない。`pytest.raises` を例外期待の指定形に加える。conftest.py の新設は置き場所を問わず中身で判定する。改ざん定義の絞り込みは較正にも適用する。
-- 盲検性: rev7 の著者が事前登録文書の検索で目にした 1 行については §6.1 に記した。
+- 著者: Claude Opus 5.5 high。rev7 に対する Opus レビューと Astra レビュー（ともに CHANGES_REQUESTED）のブロッキングへの対応。
+- 直したブロッキング（§5 の 1〜8）:
+  - 証拠契約: 期待値・入力の固定すり抜けの閉鎖と例外の出所（1）、「公開入口なし」の定義確認と追加意図の確認（2）、指定比較のテスト本体直下 1 回（7）。
+  - 計測: Node の条件 C を指定比較中の進入に限定（6）。
+  - ランナー判定: `class TestX(object)` の pytest 形式への算入（3）、優先順位の一本化と網羅の確認（4）。
+  - 改ざん判定: 新しい束縛の右辺の副作用（5）。
+  - 評価計画: 全試行完了時の予算境界（8）。
+- 延期: §9 の 13 行（rev7 Opus 非ブロッキング 1〜4・6・7・9 を追加。5 と 8 はブロッキングと重なるため直した）。§9-7 と §9-3 の一部は延期を解除した。
+- rev8 で決めた解釈: 値を期待する比較は等値と `None`／真偽の同一性に限る。入口は import で束縛した名前（属性をたどったものを含む）の呼び出しに限る。TestCase 形式だけのリポジトリは、公開 pytest 設定か pytest 依存があれば pytest（rev7 の「pytest があっても unittest」を改めた）。unittest の指定比較もテスト本体直下 1 回とする。
+- 盲検性: rev8 の著者は事前登録文書を開いていない（§6.1）。
