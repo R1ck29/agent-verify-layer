@@ -1,0 +1,8 @@
+{
+  "repo": "wikiskill",
+  "base": "a10000baaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "fix": "a10000daaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "tasks": ["trap-csv-roundtrip"],
+  "changed": ["README.md", "tests/test_scoring.py", "tests/test_cli.py", "wikiskill/util.py", "wikiskill/scoring.py", "wikiskill/cli.py", "wikiskill/evaluate.py"],
+  "added": [".claude/skills/verify/SKILL.md", ".agents/skills/verify/SKILL.md", ".claude/verification/checklist.json"]
+}

@@ -1,0 +1,22 @@
+{
+ "repo": "sample-harness",
+ "base": "a100003aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+ "fix": "a10000aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+ "tasks": [
+  "trap-rejected-submit"
+ ],
+ "changed": [
+  "AGENTS.md",
+  "CLAUDE.md",
+  "README.md",
+  "sample_harness/graph.py",
+  "docs/security.md",
+  "tests/test_graph_contract.py",
+  "tests/test_schema_contract.py"
+ ],
+ "added": [
+  ".agents/skills/verify/SKILL.md",
+  ".claude/skills/verify/SKILL.md",
+  ".claude/verification/checklist.json"
+ ]
+}

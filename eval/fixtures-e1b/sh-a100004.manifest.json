@@ -1,0 +1,19 @@
+{
+  "repo": "sample-harness",
+  "base": "a100004aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "fix": "a100008aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "tasks": [
+    "trap-stop-hook-decode"
+  ],
+  "changed": [
+    "README.md",
+    "sample_harness/claude_hook.py",
+    "sample_harness/paths.py"
+  ],
+  "added": [
+    ".agents/skills/verify/SKILL.md",
+    ".claude/skills/verify/SKILL.md",
+    ".claude/verification/checklist.json",
+    "tests/test_stop_hook_contract.py"
+  ]
+}

@@ -1,0 +1,12 @@
+# P1: 層なし。ただし checklist.json の全項目を、常時読み込まれる CLAUDE.md（利用者全体の指示）に書く。
+# 「CLAUDE.md にルールを書くだけで足りるのでは」を確かめる対照。CLAUDE.md は tools/gen-static-rules.py で checklist.json から作る。
+id: claude-static-rules
+agent: claude_code
+model: sonnet
+billing: subscription
+inherit_env: [CLAUDE_CODE_OAUTH_TOKEN]
+install:
+  - run: 'sh {profile_dir}/common/seed-git.sh {workdir}'
+  - copy: static-rules/CLAUDE.md
+    to: "{config_dir}/CLAUDE.md"
+hash_paths: [static-rules/CLAUDE.md]
