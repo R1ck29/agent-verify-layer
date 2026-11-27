@@ -291,7 +291,14 @@ def check_case(tree: ast.Module, case: dict, runner: str) -> StaticCase:
 
 
 def in_repo(root: str, pathname: str) -> bool:
-    return pathname == root or pathname.startswith(root + os.sep)
+    # String prefix only: this runs under path audit hooks, so it must not stat.
+    root_n = os.path.normcase(os.path.normpath(root))
+    path_n = os.path.normcase(os.path.normpath(pathname))
+    return path_n == root_n or path_n.startswith(root_n + os.sep)
+
+
+def relative_to_root(root: str, pathname: str) -> str:
+    return Path(os.path.relpath(pathname, root)).as_posix()
 
 
 def resolve_binding(frame: types.FrameType, name: str) -> object:
@@ -317,6 +324,7 @@ def function_code(binding: object) -> types.CodeType | None:
 
 class CaseEvidence:
     def __init__(self, root: Path, case: dict, runner: str):
+        root = Path(root).resolve()
         self.root = str(root)
         self.file = str(copy_path(root, case["testFile"]))
         self.case = case
@@ -356,7 +364,7 @@ class CaseEvidence:
         if not isinstance(pathname, str):
             return None
         real = self.realpath(pathname)
-        return os.path.relpath(real, self.root) if in_repo(self.root, real) and real != self.root else None
+        return relative_to_root(self.root, real) if in_repo(self.root, real) and real != self.root else None
 
     def module_path(self) -> str | None:
         return self.location(sys.modules.get(self.case["entry"]["module"]))
@@ -390,7 +398,7 @@ class CaseEvidence:
             for candidate in dict.fromkeys((lexical, real)):
                 if not in_repo(self.root, candidate):
                     continue
-                relative = os.path.relpath(candidate, self.root)
+                relative = relative_to_root(self.root, candidate)
                 if "__pycache__" in Path(relative).parts or candidate == self.file:
                     continue
                 metadata_only = metadata and (
@@ -616,7 +624,7 @@ class CaseEvidence:
             "modulePath": module_path, "absence": absence,
             "exceptionFromEntry": exception_origin,
             "references": list(self.references.values()), "reason": reason,
-            "loadedFiles": sorted(os.path.relpath(name, self.root) for name in self.loaded_module_paths),
+            "loadedFiles": sorted(relative_to_root(self.root, name) for name in self.loaded_module_paths),
         }
 
 

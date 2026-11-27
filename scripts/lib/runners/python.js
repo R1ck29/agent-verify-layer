@@ -5,17 +5,25 @@ const os = require('node:os');
 const path = require('node:path');
 const { spawnSync } = require('node:child_process');
 
+function windowsProcessEnv() {
+  const env = {};
+  for (const key of [
+    'PATHEXT', 'SYSTEMROOT', 'SYSTEMDRIVE', 'WINDIR', 'COMSPEC',
+    'USERPROFILE', 'HOMEDRIVE', 'HOMEPATH', 'APPDATA', 'LOCALAPPDATA',
+    'ProgramData', 'ProgramFiles', 'ProgramW6432', 'OS',
+    'NUMBER_OF_PROCESSORS', 'PROCESSOR_ARCHITECTURE',
+  ]) {
+    if (process.env[key]) env[key] = process.env[key];
+  }
+  return env;
+}
+
 function environment(home) {
   const env = {
     PATH: process.env.PATH || process.env.Path,
-    HOME: home, TMPDIR: home, LC_ALL: 'C.UTF-8',
+    HOME: home, TMPDIR: home, TEMP: home, TMP: home, LC_ALL: 'C.UTF-8',
+    ...(process.platform === 'win32' ? windowsProcessEnv() : {}),
   };
-  // Windows child processes need these; a PATH-only env often fails to start.
-  if (process.platform === 'win32') {
-    for (const key of ['PATHEXT', 'SYSTEMROOT', 'SYSTEMDRIVE', 'WINDIR', 'COMSPEC', 'USERPROFILE']) {
-      if (process.env[key]) env[key] = process.env[key];
-    }
-  }
   return env;
 }
 
@@ -29,8 +37,9 @@ function invoke(runner, action, { root, caseData, config = {}, timeoutMs = 30000
         cwd: work, env: environment(work), timeout: timeoutMs, stdio: 'ignore',
       }).status === 0;
     }
-    const copy = fs.realpathSync(root);
-    const relative = path.relative(copy, fs.realpathSync(work));
+    const resolved = typeof fs.realpathSync.native === 'function' ? fs.realpathSync.native : fs.realpathSync;
+    const copy = resolved(root);
+    const relative = path.relative(copy, resolved(work));
     if (relative === '' || (!path.isAbsolute(relative) && !relative.startsWith('..' + path.sep))) {
       return { ...fallback, reason: 'Python runner state must reside outside the copy' };
     }
