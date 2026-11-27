@@ -5,7 +5,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
-const { Repo } = require('./helpers');
+const { Repo, hasNativeTestAssert, skipWithoutNativeAssert } = require('./helpers');
 const { parseSource, checkNodeCase } = require('../scripts/lib/runners/node-ast-check');
 const { checkNodeProtection } = require('../scripts/lib/runners/node-guard');
 const { runCase, runSuite } = require('../scripts/lib/runners/node');
@@ -33,6 +33,7 @@ const caseData = (overrides = {}) => ({
   expected,
   ...overrides,
 });
+
 
 function fixture(t, files) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'vl-node-'));
@@ -89,7 +90,7 @@ test('Node guard permits pure tests and values while rejecting hooks, only, skip
   ]) assert.ok(checkNodeProtection(before, changed, { file: 'test.mjs' }), changed);
 });
 
-test('Node case measures only the requested assertion and imported function call', (t) => {
+test('Node case measures only the requested assertion and imported function call', { skip: skipWithoutNativeAssert }, (t) => {
   const root = fixture(t, {
     'edge.mjs': 'export const edge = async () => "fixed";',
     [testFile]: source('t.assert.strictEqual(await api(""), "fixed");'),
@@ -116,14 +117,23 @@ test('Node suite distinguishes reported pass/fail/skip and records file membersh
       test('fail', () => { throw new Error('mismatch'); });
       test('skip', {skip:true}, () => {});
     `,
+    'passing.mjs': `import { test } from 'node:test';
+      test('pass', () => {});
+      test('todo', {todo:true}, () => { throw new Error('pending'); });
+    `,
   });
+  const passing = runSuite({ root, tests: ['passing.mjs'], timeoutMs: 5000 });
+  assert.equal(passing.ok, true, JSON.stringify(passing));
+  assert.deepEqual(passing.files, ['passing.mjs']);
+  assert.deepEqual(passing.tests.map(({ status }) => status), ['pass', 'skip']);
+
   const r = runSuite({root, config: {}, timeoutMs: 5000});
   assert.equal(r.ok, true, JSON.stringify(r));
   assert.deepEqual(r.files, ['test/old.test.mjs']);
   assert.deepEqual(r.tests.map(({status}) => status), ['pass', 'fail', 'skip']);
 });
 
-test('Node measures a thrown or rejected exception from the actual entry frame', (t) => {
+test('Node measures a thrown or rejected exception from the actual entry frame', { skip: skipWithoutNativeAssert }, (t) => {
   const root = fixture(t, { 'edge.mjs': '', [testFile]: '' });
   const expected = { kind: 'exception', type: 'RangeError' };
   for (const [statement, implementation] of [
@@ -148,7 +158,7 @@ test('Node measures a thrown or rejected exception from the actual entry frame',
   assert.equal(unrelated.called, false);
 });
 
-test('Node rejects non-JSON shapes and shared mutable arguments', (t) => {
+test('Node rejects non-JSON shapes and shared mutable arguments', { skip: skipWithoutNativeAssert }, (t) => {
   const root = fixture(t, { 'edge.mjs': 'export const edge = () => "fixed";', [testFile]: '' });
   const comparison = 't.assert.strictEqual(api(x), "fixed");';
   const plain = typed('object', [['x', typed('number', 1)]]);
@@ -180,7 +190,7 @@ test('Node rejects non-JSON shapes and shared mutable arguments', (t) => {
   }
 });
 
-test('Node captures copy-internal exists, permissions, failed unlink, and promised stat', (t) => {
+test('Node captures copy-internal exists, permissions, failed unlink, and promised stat', { skip: skipWithoutNativeAssert }, (t) => {
   const root = fixture(t, {
     'edge.mjs': `import { existsSync, accessSync, unlinkSync, constants } from 'node:fs';
       import { stat } from 'node:fs/promises';
@@ -228,14 +238,38 @@ test('Node distinguishes a missing direct module or symbol from an unrelated dep
     "});",
   ].join('\n'));
   const cjs = caseData({testFile: cjsFile, entry: {module: './edge.cjs', symbol: 'edge', call: 'api'}});
-  assert.equal(runCase({ root, caseData: cjs, timeoutMs: 5000 }).absence, 'module');
+  const missing = runCase({ root, caseData: cjs, timeoutMs: 5000 });
+  assert.equal(missing.status, 'absent', JSON.stringify(missing));
+  assert.equal(missing.absence, 'module');
+  assert.equal(missing.modulePath, 'edge.cjs');
+  assert.equal(missing.loaded, false);
+
+  fs.writeFileSync(path.join(root, 'edge.cjs'), "require('./missing-dependency.cjs');");
+  const transitive = runCase({ root, caseData: cjs, timeoutMs: 5000 });
+  assert.equal(transitive.status, 'error', JSON.stringify(transitive));
+  assert.equal(transitive.absence, undefined);
+
   fs.writeFileSync(path.join(root, 'edge.cjs'), 'module.exports = {};');
-  assert.equal(runCase({root, caseData: cjs, timeoutMs: 5000}).absence, 'symbol');
+  const missingSymbol = runCase({ root, caseData: cjs, timeoutMs: 5000 });
+  if (hasNativeTestAssert()) {
+    assert.equal(missingSymbol.absence, 'symbol', JSON.stringify(missingSymbol));
+    assert.equal(missingSymbol.loaded, true);
+  } else {
+    assert.notEqual(missingSymbol.status, 'pass', JSON.stringify(missingSymbol));
+  }
+
   fs.writeFileSync(path.join(root, 'edge.cjs'), 'module.exports.edge = () => "fixed";');
-  assert.equal(runCase({root, caseData: cjs, timeoutMs: 5000}).status, 'pass');
+  const present = runCase({ root, caseData: cjs, timeoutMs: 5000 });
+  if (hasNativeTestAssert()) {
+    assert.equal(present.status, 'pass', JSON.stringify(present));
+    assert.equal(present.modulePath, 'edge.cjs');
+    assert.equal(present.loaded, true);
+  } else {
+    assert.notEqual(present.status, 'pass', JSON.stringify(present));
+  }
 });
 
-test('verifyCase verifies a CommonJS entry with a changed dependency and records its filesystem calls', (t) => {
+test('verifyCase verifies a CommonJS entry with a changed dependency and records its filesystem calls', { skip: skipWithoutNativeAssert }, (t) => {
   const repo = new Repo();
   t.after(() => repo.cleanup());
   repo.write('package.json', JSON.stringify({ scripts: { test: 'node --test' } }));
@@ -275,12 +309,13 @@ test('verifyCase verifies a CommonJS entry with a changed dependency and records
   }));
   assert.equal(result.status, 'pass', JSON.stringify(result));
   assert.equal(result.before, 'mismatch');
+  assert.equal(result.later.modulePath, 'edge.cjs');
   assert.deepEqual(result.later.loadedFiles, ['edge.cjs', 'value.cjs']);
   assert.ok(result.later.references.some(({ path }) => path === 'data/flag'));
   assert.equal(finalStatus(repo.dir, session).status, 'verified');
 });
 
-test('Node only records string arguments that identify valid existing copy paths', (t) => {
+test('Node only records string arguments that identify valid existing copy paths', { skip: skipWithoutNativeAssert }, (t) => {
   const strings = ['data/payload.txt', 'data/missing.txt', 'text\\value', 'text\u0000value', '.git/index'];
   const root = fixture(t, {
     'edge.mjs': 'export const edge = () => "fixed";',
@@ -294,7 +329,7 @@ test('Node only records string arguments that identify valid existing copy paths
   assert.deepEqual(result.references.map(({ path }) => path), ['data/payload.txt']);
 });
 
-test('Node rejects evidence when the entry starts a child process', (t) => {
+test('Node rejects evidence when the entry starts a child process', { skip: skipWithoutNativeAssert }, (t) => {
   const root = fixture(t, {
     'edge.mjs': `import { execFileSync } from 'node:child_process';
       export function edge() {
@@ -308,7 +343,7 @@ test('Node rejects evidence when the entry starts a child process', (t) => {
   assert.match(result.reason, /child process references/);
 });
 
-test('Node uses actual object key order to match case inputs', (t) => {
+test('Node uses actual object key order to match case inputs', { skip: skipWithoutNativeAssert }, (t) => {
   const root = fixture(t, {
     'edge.mjs': 'export const edge = () => "fixed";',
     [testFile]: source('t.assert.strictEqual(api({ second: 2, first: 1 }), "fixed");'),
@@ -323,7 +358,7 @@ test('Node uses actual object key order to match case inputs', (t) => {
   assert.match(result.reason, /actual arguments/);
 });
 
-test('Node rejects TypeError from calling an exported non-function as entry evidence', (t) => {
+test('Node rejects TypeError from calling an exported non-function as entry evidence', { skip: skipWithoutNativeAssert }, (t) => {
   const root = fixture(t, {
     'edge.mjs': 'export const edge = 42;',
     [testFile]: source('t.assert.throws(() => api(""), TypeError);'),
