@@ -27,6 +27,7 @@ def copy_path(root: Path, value: str) -> Path:
     require(isinstance(value, str) and bool(value), "Invalid repository path")
     path = Path(value)
     require(not path.is_absolute() and ".." not in path.parts, "Invalid repository path")
+    root = Path(root).resolve()
     result = (root / path).resolve()
     require(result.is_relative_to(root), "Path escapes the copy")
     return result

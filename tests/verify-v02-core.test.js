@@ -4,7 +4,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
-const { Repo, skipWithoutNativeAssert } = require('./helpers');
+const { Repo, skipWithoutNativeAssert, skipWithoutLinuxSnapshots, firstSkip } = require('./helpers');
 const { requestPath } = require('../scripts/lib/ledger');
 const { begin, verifyCase, withdrawCase, finalStatus, recordIntentional } = require('../scripts/lib/verify-diff');
 const { promptHasInput } = require('../scripts/lib/case-policy');
@@ -66,7 +66,7 @@ function referenceFixture(t, setup, operation, observed, initialFiles = {}, befo
   return {repo, data};
 }
 
-test('verifyCase rejects an absent leaf whose ancestor was absent or a regular file', { skip: skipWithoutNativeAssert }, async (t) => {
+test('verifyCase rejects an absent leaf whose ancestor was absent or a regular file', { skip: firstSkip(skipWithoutLinuxSnapshots, skipWithoutNativeAssert) }, async (t) => {
   for (const [name, operation, initialFiles] of [
     ['writeFile with a missing parent', 'fs.writeFileSync("data/item", "text")', {}],
     ['mkdir with a file as parent', 'fs.mkdirSync("data/sub")', {data: 'file'}],
@@ -86,7 +86,7 @@ test('verifyCase rejects an absent leaf whose ancestor was absent or a regular f
   }
 });
 
-test('verifyCase rejects write permission changes on an unlisted operation parent', { skip: skipWithoutNativeAssert }, (t) => {
+test('verifyCase rejects write permission changes on an unlisted operation parent', { skip: firstSkip(skipWithoutLinuxSnapshots, skipWithoutNativeAssert) }, (t) => {
   const chmod = (mode) => (repo) => fs.chmodSync(path.join(repo.dir, 'data'), mode);
   const {repo, data} = referenceFixture(t, chmod(0o755), 'fs.closeSync(fs.openSync("data/item", "w"))',
     '"fixed"', {'data/marker.txt': 'keep'}, chmod(0o555));
@@ -96,7 +96,7 @@ test('verifyCase rejects write permission changes on an unlisted operation paren
   assert.equal(finalStatus(repo.dir, session).status, 'unverified');
 });
 
-test('verifyCase rejects a changed symlink ancestor even when both leaves are absent', { skip: skipWithoutNativeAssert }, (t) => {
+test('verifyCase rejects a changed symlink ancestor even when both leaves are absent', { skip: firstSkip(skipWithoutLinuxSnapshots, skipWithoutNativeAssert) }, (t) => {
   const link = (target) => (repo) => fs.symlinkSync(target, path.join(repo.dir, 'data'));
   const {repo, data} = referenceFixture(t, (repo) => {
     fs.unlinkSync(path.join(repo.dir, 'data'));
@@ -110,7 +110,7 @@ test('verifyCase rejects a changed symlink ancestor even when both leaves are ab
   assert.equal(finalStatus(repo.dir, session).status, 'unverified');
 });
 
-test('verifyCase rejects unlisted changes to existing data content, mode and presence', { skip: skipWithoutNativeAssert }, async (t) => {
+test('verifyCase rejects unlisted changes to existing data content, mode and presence', { skip: firstSkip(skipWithoutLinuxSnapshots, skipWithoutNativeAssert) }, async (t) => {
   for (const [name, operation, observed, change, initial] of [
     ['contents', 'const value = fs.readFileSync("data.txt", "utf8")', 'value',
       (repo) => repo.write('data.txt', 'fixed'), 'wrong'],
@@ -133,7 +133,7 @@ test('verifyCase rejects unlisted changes to existing data content, mode and pre
   }
 });
 
-test('verifyCase keeps an open failure after its existing unlisted reference is removed', { skip: skipWithoutNativeAssert }, (t) => {
+test('verifyCase keeps an open failure after its existing unlisted reference is removed', { skip: firstSkip(skipWithoutLinuxSnapshots, skipWithoutNativeAssert) }, (t) => {
   const {repo, data} = referenceFixture(t, () => {}, 'const present = fs.existsSync("data.txt")',
     'present ? "wrong" : "fixed"', {'data.txt': 'plain'});
   assert.deepEqual(verifyCase(repo.dir, session, data).openFailures, ['one']);
@@ -145,7 +145,7 @@ test('verifyCase keeps an open failure after its existing unlisted reference is 
   assert.equal(finalStatus(repo.dir, session).status, 'unverified');
 });
 
-test('verifyCase keeps an open failure after the inputFiles executable bit changes', { skip: skipWithoutNativeAssert }, (t) => {
+test('verifyCase keeps an open failure after the inputFiles executable bit changes', { skip: firstSkip(skipWithoutLinuxSnapshots, skipWithoutNativeAssert) }, (t) => {
   const {repo, data} = referenceFixture(t, () => {}, 'const stat = fs.statSync("data.txt")',
     '(stat.mode & 0o111) ? "fixed" : "wrong"', {'data.txt': 'plain'});
   data.inputFiles = ['data.txt'];
@@ -166,7 +166,7 @@ function runner(data, references = []) {
   };
 }
 
-test('fixed failures clear only with passing evidence on the final snapshot', (t) => {
+test('fixed failures clear only with passing evidence on the final snapshot', { skip: skipWithoutLinuxSnapshots }, (t) => {
   const {repo, data} = fixture(t);
   const options = { runner: runner(data) };
   let result = verifyCase(repo.dir, session, data, options);
@@ -181,7 +181,7 @@ test('fixed failures clear only with passing evidence on the final snapshot', (t
   assert.equal(finalStatus(repo.dir, session).status, 'stale');
 });
 
-test('references must agree across snapshots and a withdrawal prevents verification', (t) => {
+test('references must agree across snapshots and a withdrawal prevents verification', { skip: skipWithoutLinuxSnapshots }, (t) => {
   const {repo, data} = fixture(t);
   repo.write('data.txt', 'new data');
   assert.equal(verifyCase(repo.dir, session, data, { runner: runner(data, [{path:'data.txt'}]) }).status, 'error');
@@ -194,7 +194,7 @@ test('references must agree across snapshots and a withdrawal prevents verificat
   assert.equal(finalStatus(repo.dir, session).status, 'withdrawn');
 });
 
-test('case limit is shared across calls and a fresh request resets it', (t) => {
+test('case limit is shared across calls and a fresh request resets it', { skip: skipWithoutLinuxSnapshots }, (t) => {
   const {repo, data, state} = fixture(t);
   const options = { runner: runner(data) };
   for (const caseId of ['one', 'two', 'three']) verifyCase(repo.dir, session, {...data,caseId}, options);
@@ -205,7 +205,7 @@ test('case limit is shared across calls and a fresh request resets it', (t) => {
   assert.deepEqual(archived.attempts.map(({ caseId }) => caseId), ['one', 'two', 'three']);
 });
 
-test('a reproduced public regression is retried as a full suite and can be recorded as intentional', (t) => {
+test('a reproduced public regression is retried as a full suite and can be recorded as intentional', { skip: skipWithoutLinuxSnapshots }, (t) => {
   const old = { id:'public.test.mjs::baseline', file:'public.test.mjs' };
   const {repo, data} = fixture(t, [old]);
   repo.write('api.mjs', 'export const edge = () => "fixed";');
@@ -232,7 +232,7 @@ test('an explicit multi-argument example counts as non-boundary without backtick
   }
 });
 
-test('a data file loaded as CommonJS cannot be injected as an input file', { skip: skipWithoutNativeAssert }, (t) => {
+test('a data file loaded as CommonJS cannot be injected as an input file', { skip: firstSkip(skipWithoutLinuxSnapshots, skipWithoutNativeAssert) }, (t) => {
   const {repo, data} = fixture(t);
   repo.write('helper.data', 'module.exports = "fixed";');
   repo.write('api.mjs', [

@@ -4,7 +4,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
-const { Repo, VL, run, skipWithoutNativeAssert } = require('./helpers');
+const { Repo, VL, run, skipWithoutNativeAssert, skipWithoutLinuxSnapshots, firstSkip } = require('./helpers');
 const { requestPath, requestTransaction } = require('../scripts/lib/ledger');
 
 function fixture(t, mode, runner = 'node') {
@@ -30,7 +30,7 @@ const stop = (repo, active = false, agent = 'claude') => repo.hook(['stop', '--a
 const state = (repo, agent = 'claude') =>
   requestTransaction(repo.dir, agent, repo.sessionId, (current) => current).value;
 
-test('Stop enforces once per request, respects reentry, and resets at UserPromptSubmit', (t) => {
+test('Stop enforces once per request, respects reentry, and resets at UserPromptSubmit', { skip: skipWithoutLinuxSnapshots }, (t) => {
   const repo = fixture(t, 'enforce');
   assert.equal(start(repo).json?.hookSpecificOutput?.hookEventName, 'UserPromptSubmit');
   assert.equal(state(repo).prompt, '空入力の処理を修正する');
@@ -51,7 +51,7 @@ test('Stop enforces once per request, respects reentry, and resets at UserPrompt
   assert.equal(stop(repo).json?.decision, 'block');
 });
 
-test('observe, off, unsupported and missing starts all permit completion', (t) => {
+test('observe, off, unsupported and missing starts all permit completion', { skip: skipWithoutLinuxSnapshots }, (t) => {
   for (const [mode, runner] of [[undefined, 'node'], ['observe', 'node'], ['enforce','unsupported']]) {
     const repo = fixture(t, mode, runner);
     assert.equal(stop(repo).json, null);
@@ -68,7 +68,7 @@ for (const [change, update] of [
   ['deleted', (repo) => fs.unlinkSync(path.join(repo.dir, '.verify-layer.json'))],
   ['invalid JSON', (repo) => repo.write('.verify-layer.json', '{')],
 ]) {
-  test(`Stop uses the starting enforce mode when the settings are ${change}`, (t) => {
+  test(`Stop uses the starting enforce mode when the settings are ${change}`, { skip: skipWithoutLinuxSnapshots }, (t) => {
     const repo = fixture(t, 'enforce');
     assert.ok(start(repo).json);
     const id = state(repo).id;
@@ -85,7 +85,7 @@ for (const [change, update] of [
   });
 }
 
-test('an off start archives the previous request for only the same host and session', (t) => {
+test('an off start archives the previous request for only the same host and session', { skip: skipWithoutLinuxSnapshots }, (t) => {
   const repo = fixture(t, 'enforce');
   assert.ok(start(repo).json);
   assert.ok(start(repo, 'codex').json);
@@ -113,7 +113,7 @@ test('an off start archives the previous request for only the same host and sess
   assert.equal(stop(repo).json?.decision, 'block');
 });
 
-test('verify-diff CLI supplies evidence for the exact final Stop snapshot', { skip: skipWithoutNativeAssert }, (t) => {
+test('verify-diff CLI supplies evidence for the exact final Stop snapshot', { skip: firstSkip(skipWithoutLinuxSnapshots, skipWithoutNativeAssert) }, (t) => {
   const repo = fixture(t, 'enforce');
   const opened = start(repo, 'codex');
   const request = opened.json?.hookSpecificOutput?.additionalContext.match(/req_[a-z0-9_]+/)?.[0];

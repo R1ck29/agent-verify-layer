@@ -6,7 +6,17 @@ const path = require('node:path');
 const { spawnSync } = require('node:child_process');
 
 function environment(home) {
-  return { PATH: process.env.PATH, HOME: home, TMPDIR: home, LC_ALL: 'C.UTF-8' };
+  const env = {
+    PATH: process.env.PATH || process.env.Path,
+    HOME: home, TMPDIR: home, LC_ALL: 'C.UTF-8',
+  };
+  // Windows child processes need these; a PATH-only env often fails to start.
+  if (process.platform === 'win32') {
+    for (const key of ['PATHEXT', 'SYSTEMROOT', 'SYSTEMDRIVE', 'WINDIR', 'COMSPEC', 'USERPROFILE']) {
+      if (process.env[key]) env[key] = process.env[key];
+    }
+  }
+  return env;
 }
 
 function invoke(runner, action, { root, caseData, config = {}, timeoutMs = 30000, tests } = {}) {

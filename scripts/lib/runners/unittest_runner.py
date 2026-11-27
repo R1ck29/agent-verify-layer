@@ -16,12 +16,13 @@ class Collector(unittest.TestLoader):
 
     def __init__(self, root: Path, allowed: set[str] | None):
         super().__init__()
-        self.root = root
+        self.root = Path(root).resolve()
         self.allowed = allowed
         self.visited = set()
         self.discovery_target = None
 
-    def _find_test_path(self, full_path: str, pattern: str):
+    def _find_test_path(self, full_path: str, pattern: str, *args, **kwargs):
+        # Python 3.14+ passes namespace as a third argument; 3.13 and earlier do not.
         path = Path(full_path).resolve()
         if not path.is_relative_to(self.root):
             self.errors.append("Unittest discovery path escapes the copy")
@@ -35,7 +36,7 @@ class Collector(unittest.TestLoader):
         original = self.discovery_target
         self.discovery_target = (path / "__init__.py").resolve() if path.is_dir() else path
         try:
-            return super()._find_test_path(full_path, pattern)
+            return super()._find_test_path(full_path, pattern, *args, **kwargs)
         finally:
             self.discovery_target = original
 
@@ -58,6 +59,7 @@ def flatten(suite):
 
 def test_info(test: unittest.TestCase, root: Path) -> dict:
     target = getattr(test, "_testFunc", type(test))
+    root = Path(root).resolve()
     try:
         source = inspect.getsourcefile(target)
         if source:

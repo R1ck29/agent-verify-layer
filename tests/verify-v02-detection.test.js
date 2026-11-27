@@ -3,7 +3,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const path = require('node:path');
-const { Repo } = require('./helpers');
+const { Repo, skipWithoutLinuxSnapshots, firstSkip } = require('./helpers');
 const { capture, materialize } = require('../scripts/lib/snapshot');
 const { available } = require('../scripts/lib/runners/pytest');
 const { detectRunner } = require('../scripts/lib/runner-detection');
@@ -35,7 +35,7 @@ function detect(t, files, config = {}) {
   });
 }
 
-test('runner detection chooses unittest and calculates the common package root and discovery patterns', (t) => {
+test('runner detection chooses unittest and calculates the common package root and discovery patterns', { skip: skipWithoutLinuxSnapshots }, (t) => {
   const result = detect(t, {
     'pkg/__init__.py': '',
     'pkg/tests/__init__.py': '',
@@ -53,7 +53,7 @@ test('runner detection chooses unittest and calculates the common package root a
 });
 
 test('runner detection recognizes pytest-style functions and classes, even with unittest imports', {
-  skip: !hasPytest,
+  skip: firstSkip(skipWithoutLinuxSnapshots, !hasPytest && 'pytest is not available'),
 }, (t) => {
   const result = detect(t, {
     'test_a.py': doctest + classTest,
@@ -65,7 +65,7 @@ test('runner detection recognizes pytest-style functions and classes, even with 
   ]);
 });
 
-test('pytest detection includes files containing only inherited TestCase methods', { skip: !hasPytest }, (t) => {
+test('pytest detection includes files containing only inherited TestCase methods', { skip: firstSkip(skipWithoutLinuxSnapshots, !hasPytest && 'pytest is not available') }, (t) => {
   const result = detect(t, {
     'test_function.py': 'def test_example(): assert True\n',
     'helper.py': testcase,
@@ -77,7 +77,7 @@ test('pytest detection includes files containing only inherited TestCase methods
 });
 
 test('runner detection applies pytest public configuration and reports lost test identifiers', {
-  skip: !hasPytest,
+  skip: firstSkip(skipWithoutLinuxSnapshots, !hasPytest && 'pytest is not available'),
 }, (t) => {
   const files = {
     'pytest.ini': '[pytest]\npython_files = spec_*.py\npython_functions = check_*\n',
@@ -94,7 +94,7 @@ test('runner detection applies pytest public configuration and reports lost test
   assert.deepEqual(result.missing, ['test_core.py::TestSample::test_x']);
 });
 
-test('runner detection counts Python public configuration and collection errors in mixed repositories', (t) => {
+test('runner detection counts Python public configuration and collection errors in mixed repositories', { skip: skipWithoutLinuxSnapshots }, (t) => {
   const files = {
     'package.json': manifest('node --test specs/entry.js'),
     'specs/entry.js': nodeTest,
@@ -107,7 +107,7 @@ test('runner detection counts Python public configuration and collection errors 
   }
 });
 
-test('runner detection requires discovery visits to every public load_tests file', (t) => {
+test('runner detection requires discovery visits to every public load_tests file', { skip: skipWithoutLinuxSnapshots }, (t) => {
   const loadTests = 'from samples import Tests\ndef load_tests(loader, tests, pattern): return loader.loadTestsFromTestCase(Tests)\n';
   const single = { 'samples.py': testcase, 'suite_a/test_suite.py': loadTests };
   let result = detect(t, single);
@@ -128,7 +128,7 @@ test('runner detection requires discovery visits to every public load_tests file
   assert.match(result.reason, /Python.*Node/);
 });
 
-test('runner detection confirms that the npm Node test command reaches every public file', (t) => {
+test('runner detection confirms that the npm Node test command reaches every public file', { skip: skipWithoutLinuxSnapshots }, (t) => {
   let result = detect(t, {
     'package.json': JSON.stringify({ scripts: { test: 'npm run test:unit', 'test:unit': 'node --test specs/entry.js' } }),
     'specs/entry.js': nodeTest,
@@ -145,7 +145,7 @@ test('runner detection confirms that the npm Node test command reaches every pub
   assert.deepEqual(result.missing, [path.posix.join('test', 'integration', 'example.test.js')]);
 });
 
-test('runner detection rejects cross-language coverage gaps from inherited TestCase methods', (t) => {
+test('runner detection rejects cross-language coverage gaps from inherited TestCase methods', { skip: skipWithoutLinuxSnapshots }, (t) => {
   const result = detect(t, {
     'helper.py': testcase,
     'test_child.py': 'import helper\nclass Child(helper.Tests): pass\n',
