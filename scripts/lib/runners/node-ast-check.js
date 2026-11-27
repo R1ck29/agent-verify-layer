@@ -221,7 +221,7 @@ function nodeShape(source, caseData) {
 
   return {
     binding: { commonjs: binding.commonjs, module: binding.module, name: binding.name, symbol: binding.symbol },
-    context, method, range: assertion.loc,
+    context, method, plan: plan.loc.start, range: assertion.loc,
     args: entryCall.arguments.map(({ start, end }) => source.slice(start, end)),
   };
 }

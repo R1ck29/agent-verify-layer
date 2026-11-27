@@ -142,4 +142,20 @@ function fakeCodex(dir, version = '0.170.0') {
   return bin;
 }
 
-module.exports = { ROOT, VL, INSTALL, Repo, tmpDir, rmrf, isolatedEnv, run, fakeCodex };
+// t.plan / t.assert exist from Node 20.15 and 22.2. Below that, Node case files
+// that call them fail under `node --test`, so the runner must not polyfill them
+// into a false "verified" (V02-DESIGN: unmeasurable t.assert is 未検証 / unsupported).
+function hasNativeTestAssert() {
+  const [major, minor] = process.versions.node.split('.').map(Number);
+  if (major > 22) return true;
+  if (major === 22) return minor >= 2;
+  if (major === 20) return minor >= 15;
+  return false;
+}
+const skipWithoutNativeAssert = hasNativeTestAssert()
+  ? undefined
+  : 'native t.plan/t.assert required (Node 20.15+ / 22.2+)';
+
+module.exports = { ROOT, VL, INSTALL, Repo, tmpDir, rmrf, isolatedEnv, run, fakeCodex,
+  hasNativeTestAssert, skipWithoutNativeAssert };
+

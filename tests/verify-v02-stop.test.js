@@ -4,7 +4,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
-const { Repo, VL, run } = require('./helpers');
+const { Repo, VL, run, skipWithoutNativeAssert } = require('./helpers');
 const { requestPath, requestTransaction } = require('../scripts/lib/ledger');
 
 function fixture(t, mode, runner = 'node') {
@@ -113,7 +113,7 @@ test('an off start archives the previous request for only the same host and sess
   assert.equal(stop(repo).json?.decision, 'block');
 });
 
-test('verify-diff CLI supplies evidence for the exact final Stop snapshot', (t) => {
+test('verify-diff CLI supplies evidence for the exact final Stop snapshot', { skip: skipWithoutNativeAssert }, (t) => {
   const repo = fixture(t, 'enforce');
   const opened = start(repo, 'codex');
   const request = opened.json?.hookSpecificOutput?.additionalContext.match(/req_[a-z0-9_]+/)?.[0];

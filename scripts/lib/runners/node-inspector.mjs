@@ -1,12 +1,13 @@
 import { Session } from 'node:inspector';
 import { parentPort, workerData } from 'node:worker_threads';
 
-const { testUrl, shape, stateKey } = workerData;
+const { testUrl, shape, stateKey, legacyLoader } = workerData;
 const session = new Session();
 session.connectToMainThread();
 const scripts = new Map();
 const entryFrames = new Set();
 let assertionBreakpoint;
+let planBreakpoint;
 let entryBreakpoint;
 let initializing = true;
 let closed = false;
@@ -45,6 +46,17 @@ async function evaluate(frame, expression, returnByValue = false) {
 
 const stateExpression = `globalThis[${JSON.stringify(stateKey)}]`;
 
+async function onPlan(frames) {
+  const frame = testFrame(frames);
+  if (!frame || frame.location.lineNumber + 1 !== shape.plan.line) {
+    throw new Error('plan breakpoint resolved outside the requested line');
+  }
+  await command('Debugger.removeBreakpoint', { breakpointId: planBreakpoint });
+  const binding = await evaluate(frame, shape.binding.name);
+  // Older V8 can pause on an awaited assertion after its arguments have been evaluated.
+  if (binding.type === 'function' && binding.objectId) await armEntry(frame, binding);
+}
+
 async function onAssertion(frames) {
   const frame = testFrame(frames);
   if (!sameAssertion(frame)) throw new Error('assertion breakpoint resolved outside the requested range');
@@ -55,7 +67,10 @@ async function onAssertion(frames) {
     return;
   }
   if (binding.type !== 'function' || !binding.objectId) throw new Error('public entry is not a function');
+  if (!legacyLoader) await armEntry(frame, binding);
+}
 
+async function armEntry(frame, binding) {
   await evaluate(frame, `${stateExpression}.wrap(${shape.context})`);
   const breakpoint = await command('Debugger.setBreakpointOnFunctionCall', { objectId: binding.objectId });
   entryBreakpoint = breakpoint.breakpointId;
@@ -84,7 +99,8 @@ session.on('Debugger.scriptParsed', ({ params }) => scripts.set(params.scriptId,
 session.on('Debugger.paused', ({ params }) => {
   void (async () => {
     try {
-      if (params.hitBreakpoints?.includes(assertionBreakpoint)) await onAssertion(params.callFrames);
+      if (planBreakpoint && params.hitBreakpoints?.includes(planBreakpoint)) await onPlan(params.callFrames);
+      else if (params.hitBreakpoints?.includes(assertionBreakpoint)) await onAssertion(params.callFrames);
       else if (entryBreakpoint && params.hitBreakpoints?.includes(entryBreakpoint)) await onEntry(params.callFrames);
       else if (params.reason === 'exception' || params.reason === 'promiseRejection') await onException(params);
     } catch (error) {
@@ -109,6 +125,11 @@ try {
     lineNumber: shape.range.start.line - 1,
     columnNumber: shape.range.start.column,
   })).breakpointId;
+  if (legacyLoader) {
+    planBreakpoint = (await command('Debugger.setBreakpointByUrl', {
+      url: testUrl, lineNumber: shape.plan.line - 1, columnNumber: shape.plan.column,
+    })).breakpointId;
+  }
   initializing = false;
   parentPort.postMessage({ ready: true });
 } catch (error) {

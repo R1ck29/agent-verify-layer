@@ -4,8 +4,8 @@ import childProcess from 'node:child_process';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { randomBytes } from 'node:crypto';
-import { Worker, isMainThread } from 'node:worker_threads';
-import { registerHooks, syncBuiltinESMExports } from 'node:module';
+import { MessageChannel, Worker, isMainThread, receiveMessageOnPort } from 'node:worker_threads';
+import Module, { syncBuiltinESMExports } from 'node:module';
 import values from './node-values.js';
 
 const { serializeInput } = values;
@@ -42,50 +42,94 @@ async function install() {
     return result.split(path.sep).join('/') || '.';
   }
 
-  registerHooks({
-    resolve(specifier, context, nextResolve) {
-      const direct = context.parentURL === testUrl && specifier === shape.binding.module;
+  const { commonjs, module: entry } = shape.binding;
+  const requestPath = /^\.\.?\//.test(entry) ? path.resolve(path.dirname(testFile), entry) : null;
+  const requestUrl = requestPath && pathToFileURL(requestPath).href;
+  function recordMissingModule() {
+    const rel = relative(requestPath);
+    if (rel && rel !== '.') state.missingModule = rel;
+  }
+
+  function recordLoad(url, realFile) {
+    if (!url.startsWith('file:')) return;
+    const file = fileURLToPath(url);
+    const rel = relative(file);
+    if (!rel) return;
+    copyFiles.add(rel);
+    try {
+      const actual = realFile === undefined ? realpath(file) : realFile;
+      if (!actual) throw new Error('loaded module realpath unavailable');
+      const destination = relative(actual);
+      if (destination) copyFiles.add(destination);
+      if (url === state.entryUrl) state.modulePath = destination;
+    } catch {
+      state.problems.push('loaded module realpath unavailable');
+    }
+  }
+
+  if (commonjs) {
+    // Node 22 can resolve a require before the synchronous hooks see its original specifier.
+    const resolveFilename = Module._resolveFilename;
+    Module._resolveFilename = function (specifier, parent, ...args) {
+      const direct = parent?.filename === testFile && specifier === entry;
       try {
-        const result = nextResolve(specifier, context);
-        if (direct && result.url.startsWith('file:')) state.entryUrl = result.url;
-        return result;
+        const file = Reflect.apply(resolveFilename, this, [specifier, parent, ...args]);
+        if (direct && path.isAbsolute(file)) state.entryUrl = pathToFileURL(file).href;
+        return file;
       } catch (error) {
-        if (direct && error.code === (shape.binding.commonjs ? 'MODULE_NOT_FOUND' : 'ERR_MODULE_NOT_FOUND') &&
-            /^\.\.?\//.test(specifier)) {
-          const requestPath = path.resolve(path.dirname(testFile), specifier);
-          const rel = relative(requestPath);
-          const importerMatches = shape.binding.commonjs
-            ? error.requireStack?.[0] === testFile
-            : error.url === pathToFileURL(requestPath).href;
-          if (rel && rel !== '.' && importerMatches) state.missingModule = rel;
-        }
+        if (direct && error.code === 'MODULE_NOT_FOUND' && error.requireStack?.[0] === testFile) recordMissingModule();
         throw error;
       }
-    },
-    load(url, context, nextLoad) {
-      const result = nextLoad(url, context);
-      if (url.startsWith('file:')) {
-        const rel = relative(fileURLToPath(url));
-        if (rel) {
-          copyFiles.add(rel);
-          try {
-            const destination = relative(realpath(fileURLToPath(url)));
-            if (destination) copyFiles.add(destination);
-          } catch {
-            state.problems.push('loaded module realpath unavailable');
-          }
+    };
+  }
+
+  const legacyLoader = typeof Module.registerHooks !== 'function';
+  let loaderPort;
+  function collectLoads() {
+    if (!loaderPort) return;
+    let received;
+    while ((received = receiveMessageOnPort(loaderPort))) {
+      const { entryUrl, missingUrl, loadedUrl, realFile } = received.message;
+      if (entryUrl) state.entryUrl = entryUrl;
+      if (requestUrl && missingUrl === requestUrl) recordMissingModule();
+      if (loadedUrl) recordLoad(loadedUrl, realFile);
+    }
+  }
+
+  if (legacyLoader) {
+    const { port1, port2 } = new MessageChannel();
+    loaderPort = port1;
+    Module.register(new URL('./node-loader.mjs', import.meta.url), {
+      data: { port: port2, testUrl, entry: commonjs ? undefined : entry },
+      transferList: [port2],
+    });
+    const load = Module.prototype.load;
+    Module.prototype.load = function (filename) {
+      recordLoad(pathToFileURL(filename).href);
+      return Reflect.apply(load, this, [filename]);
+    };
+  } else {
+    Module.registerHooks({
+      resolve(specifier, context, nextResolve) {
+        const direct = context.parentURL === testUrl && specifier === entry;
+        try {
+          const result = nextResolve(specifier, context);
+          if (direct && result.url.startsWith('file:')) state.entryUrl = result.url;
+          return result;
+        } catch (error) {
+          if (direct && (commonjs
+            ? error.code === 'MODULE_NOT_FOUND' && error.requireStack?.[0] === testFile
+            : error.code === 'ERR_MODULE_NOT_FOUND' && error.url === requestUrl)) recordMissingModule();
+          throw error;
         }
-        if (url === state.entryUrl && rel) {
-          try {
-            state.modulePath = relative(realpath(fileURLToPath(url)));
-          } catch {
-            state.problems.push('public module realpath unavailable');
-          }
-        }
-      }
-      return result;
-    },
-  });
+      },
+      load(url, context, nextLoad) {
+        const result = nextLoad(url, context);
+        recordLoad(url);
+        return result;
+      },
+    });
+  }
 
   // The nearest attributable caller decides: module loading inside Node is not a copy reference,
   // while copy code (including module top-level code that Node's loader runs) is.
@@ -94,7 +138,7 @@ async function install() {
     if (typeof stack !== 'string') return false;
     for (const line of stack.split('\n').slice(2)) {
       if (line.includes('node:internal/modules/')) return false;
-      if (line.includes(`${root}/`) || line.includes(pathToFileURL(root).href + '/')) return true;
+      if (line.includes(`${root}${path.sep}`) || line.includes(pathToFileURL(root).href + '/')) return true;
     }
     return false;
   }
@@ -117,7 +161,10 @@ async function install() {
     const rel = relative(file);
     if (rel === null || rel === relative(testFile)) return;
     const { metadataOnly, ...reference } = attributes;
-    if (metadataOnly && copyFiles.has(rel)) reference.metadataOnly = true;
+    if (metadataOnly) {
+      collectLoads();
+      if (copyFiles.has(rel)) reference.metadataOnly = true;
+    }
     state.references.push({ path: rel, ...reference });
   }
 
@@ -188,8 +235,8 @@ async function install() {
   const { method } = shape;
   function wrap(context) {
     const assertions = context.assert;
-    const delegate = assertions[method];
-    const descriptor = Object.getOwnPropertyDescriptor(assertions, method);
+    const delegate = assertions?.[method];
+    const descriptor = assertions && Object.getOwnPropertyDescriptor(assertions, method);
     if (!descriptor || !descriptor.writable || typeof delegate !== 'function') {
       throw new Error('Node test context assertion cannot be measured');
     }
@@ -262,12 +309,15 @@ async function install() {
       state.linkError = error.message;
     }
   });
-  process.on('exit', () => writeFile(output, JSON.stringify({
-    ...state, loadedFiles: [...copyFiles].filter((file) => file !== relative(testFile)),
-  }), { mode: 0o600 }));
+  process.on('exit', () => {
+    collectLoads();
+    writeFile(output, JSON.stringify({
+      ...state, loadedFiles: [...copyFiles].filter((file) => file !== relative(testFile)),
+    }), { mode: 0o600 });
+  });
 
   const worker = new Worker(new URL('./node-inspector.mjs', import.meta.url), {
-    execArgv: [], workerData: { testUrl, shape, stateKey },
+    execArgv: [], workerData: { testUrl, shape, stateKey, legacyLoader },
   });
   await new Promise((resolve, reject) => {
     worker.on('message', (message) => {
