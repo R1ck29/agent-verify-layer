@@ -65,7 +65,7 @@ function run(root, cwd, nodeArgs, timeoutMs, temp, capture) {
   if (capture) env.VL_NODE_CAPTURE = capture;
   const child = spawnSync(process.execPath, [
     '--require', transport, ...(capture ? ['--import', preload] : []), '--test',
-    '--test-concurrency=1', '--test-reporter=' + reporter, ...nodeArgs,
+    '--test-concurrency=1', '--test-reporter=' + pathToFileURL(reporter).href, ...nodeArgs,
   ], {
     cwd, env, encoding: 'utf8', stdio: ['ignore', 'ignore', 'pipe'],
     timeout: timeoutMs ?? 15_000, maxBuffer: 1024 * 1024, killSignal: 'SIGKILL',
