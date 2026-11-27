@@ -156,6 +156,26 @@ const skipWithoutNativeAssert = hasNativeTestAssert()
   ? undefined
   : 'native t.plan/t.assert required (Node 20.15+ / 22.2+)';
 
+// v0.2 request snapshots are Linux-only (see scripts/lib/snapshot.js).
+const skipWithoutLinuxSnapshots = process.platform === 'linux'
+  ? undefined
+  : 'Verify v0.2 snapshots require Linux';
+
+function firstSkip(...reasons) {
+  return reasons.find((reason) => typeof reason === 'string') || undefined;
+}
+
+function envPath(env = process.env) {
+  return env.PATH || env.Path || '';
+}
+
+function withPrependedPath(env, dir) {
+  const next = { ...env, PATH: dir + path.delimiter + envPath(env) };
+  if (process.platform === 'win32') delete next.Path;
+  return next;
+}
+
 module.exports = { ROOT, VL, INSTALL, Repo, tmpDir, rmrf, isolatedEnv, run, fakeCodex,
-  hasNativeTestAssert, skipWithoutNativeAssert };
+  hasNativeTestAssert, skipWithoutNativeAssert, skipWithoutLinuxSnapshots, firstSkip,
+  envPath, withPrependedPath };
 

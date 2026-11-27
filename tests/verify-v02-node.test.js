@@ -5,7 +5,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
-const { Repo, hasNativeTestAssert, skipWithoutNativeAssert } = require('./helpers');
+const { Repo, hasNativeTestAssert, skipWithoutNativeAssert, skipWithoutLinuxSnapshots, firstSkip } = require('./helpers');
 const { parseSource, checkNodeCase } = require('../scripts/lib/runners/node-ast-check');
 const { checkNodeProtection } = require('../scripts/lib/runners/node-guard');
 const { runCase, runSuite } = require('../scripts/lib/runners/node');
@@ -269,7 +269,7 @@ test('Node distinguishes a missing direct module or symbol from an unrelated dep
   }
 });
 
-test('verifyCase verifies a CommonJS entry with a changed dependency and records its filesystem calls', { skip: skipWithoutNativeAssert }, (t) => {
+test('verifyCase verifies a CommonJS entry with a changed dependency and records its filesystem calls', { skip: firstSkip(skipWithoutLinuxSnapshots, skipWithoutNativeAssert) }, (t) => {
   const repo = new Repo();
   t.after(() => repo.cleanup());
   repo.write('package.json', JSON.stringify({ scripts: { test: 'node --test' } }));

@@ -4,7 +4,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
-const { INSTALL, Repo, VL, run, fakeCodex } = require('./helpers');
+const { INSTALL, Repo, VL, run, fakeCodex, withPrependedPath } = require('./helpers');
 const { splitCommand } = require('../scripts/lib/shellquote');
 
 const foreignStop = { hooks: [{type: 'command', command: 'other-stop'}] };
@@ -81,7 +81,7 @@ test('doctor reports v0.2 tool availability and separates host hook wiring', (t)
   fs.writeFileSync(path.join(repo.home, win ? 'claude.cmd' : 'claude'),
     win ? '@echo 2.1.295' : '#!/bin/sh\necho 2.1.295\n', { mode: 0o755 });
   fs.mkdirSync(repo.env.CODEX_HOME);
-  const env = { ...repo.env, PATH: repo.home + path.delimiter + repo.env.PATH, VL_CODEX_BIN: fakeCodex(repo.home) };
+  const env = { ...withPrependedPath(repo.env, repo.home), VL_CODEX_BIN: fakeCodex(repo.home) };
   for (const agent of ['claude', 'codex']) {
     const result = install(repo, '--agent', agent, '--v02', '--apply');
     assert.equal(result.status, 0, result.stderr || result.stdout);

@@ -44,10 +44,15 @@ function tempRun(root, body) {
 function run(root, cwd, nodeArgs, timeoutMs, temp, capture) {
   const report = path.join(temp, 'report.jsonl');
   const env = {
-    PATH: process.env.PATH, LANG: process.env.LANG, TZ: process.env.TZ,
+    PATH: process.env.PATH || process.env.Path, LANG: process.env.LANG, TZ: process.env.TZ,
     HOME: temp, XDG_CONFIG_HOME: temp, TMPDIR: temp,
     VL_NODE_REPORT: report,
   };
+  if (process.platform === 'win32') {
+    for (const key of ['PATHEXT', 'SYSTEMROOT', 'SYSTEMDRIVE', 'WINDIR', 'COMSPEC', 'USERPROFILE']) {
+      if (process.env[key]) env[key] = process.env[key];
+    }
+  }
   if (capture) env.VL_NODE_CAPTURE = capture;
   const child = spawnSync(process.execPath, [
     '--require', transport, ...(capture ? ['--import', preload] : []), '--test',
