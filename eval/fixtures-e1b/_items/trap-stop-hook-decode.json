@@ -1,0 +1,11 @@
+[
+  {
+    "id": "hook-input-failure-scope",
+    "paths": ["**/*.py"],
+    "pattern": "sys\\.stdin|json\\.loads?\\(",
+    "check": "hook が標準入力を読むとき、読み取りから解析までの失敗を、特定の例外 1 種類だけで受けていないか。入力が使えない場合の既定の動作（入力なしとして続行するか、止めるか）を決め、その段階で出うる例外を同じ扱いにする",
+    "why": "想定した失敗だけを拾う hook は、想定外の入力で hook の外へ例外を出し、止めてはいけない処理や判定まで巻き込む",
+    "incident": "sample-harness a100008: Stop hook が JSON の構文エラーだけを拾っていて、読み込み時の別の例外で hook ごと落ちた",
+    "owner": "harness-maintainers"
+  }
+]

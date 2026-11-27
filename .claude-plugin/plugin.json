@@ -1,0 +1,10 @@
+{
+  "name": "verify-layer",
+  "version": "0.2.0",
+  "description": "検証レイヤー（観察モード）: verify / code-review の実行と成功したコミットをローカルの台帳に記録し、HEAD 側のチェックリストを diff に照合する。作業は止めない。",
+  "author": {
+    "name": "Riku Suzuki"
+  },
+  "repository": "https://github.com/R1ck29/agent-verify-layer",
+  "keywords": ["verification", "hooks", "ledger", "observe"]
+}

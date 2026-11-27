@@ -1,0 +1,12 @@
+# P2: 層あり。導入手順と同じ経路 B（INSTALL_FOR_CLAUDE.md 第 4 節）= scripts/install.js で settings.json に hook を入れ、
+# Rules（2 行）と観察モードの設定を置く。{config_dir} は一時ホームの .claude（install.js は CLAUDE_CONFIG_DIR から読む）。
+# hook は、この checkout の scripts/vl.js を絶対パスで呼ぶ。
+id: claude-verify-layer
+agent: claude_code
+model: sonnet
+billing: subscription
+inherit_env: [CLAUDE_CODE_OAUTH_TOKEN]
+install:
+  - run: 'sh {profile_dir}/common/seed-git.sh {workdir}'
+  - run: 'node {profile_dir}/../../scripts/install.js --apply --rules --mode observe'
+hash_paths: [../../scripts, ../../hooks, ../../rules]

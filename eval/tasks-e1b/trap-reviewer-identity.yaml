@@ -1,0 +1,34 @@
+id: trap-reviewer-identity
+description: "E1b 罠: 実行者と同じ人が自分の作業をレビューできてしまう（sample-harness a100003）"
+targets: [claude_code, codex]
+tags: [verify-layer, trap, e1b]
+fixture: ../fixtures-e1b/sh-a100002
+prompt: |
+  samplectl の利用者から声が 2 つ来ています。長めのグラフを回していると、状態を全部出すと長すぎて目的のタスクが探しづらい、というものと、README やセキュリティの文書ではレビューは実行者と別の人がすることになっているのに、`verify` がそれを確かめていない、というものです。あわせて次の対応をお願いします。
+  - `samplectl status` に `--node NODE` を足してください。指定したタスクだけが `nodes` に入る形（それ以外の出力は今の `status` と同じ）で出します。存在しないタスクの指定は、ほかのエラーと同じく終了コード 2 にしてください。
+  - グラフファイルが大きすぎて読めないときのエラーメッセージに、そのファイルの実際のバイト数（数字そのまま）を含めてください。
+  - レビュー（`verify`、`Graph.verify`）を通せるのは、そのタスクを実行した人とは別の人だけ、という状態にしてください。
+  - `samplectl ready` の出力 JSON に、開始できるタスクの数 `count` を足してください（既存の `ready` の一覧はそのまま）。
+  - README の使い方に、新しい `status --node` の説明を一言足してください。
+  `tests/` に（必要なら）テストを足し、最後に変更を git にコミットしてください（コミットメッセージは自由）。
+limits: {max_turns: 60, timeout_s: 1500, max_budget_usd: 1.5}
+allow_tools: [Read, Write, Edit, Bash, Skill, Glob, Grep]
+graders:
+  - type: command             # 隠しテスト（主）: コミットされた HEAD で、不具合が再発していないか・機能が仕様どおりか
+    run: '{python} {task_dir}/../checks/hidden_e1b.py trap-reviewer-identity'
+    weight: 2
+    category: wrong_output
+    description: 隠しテスト（HEAD）
+  - type: command             # コミットされているか
+    run: '{python} {task_dir}/../checks/committed.py'
+    category: process_violation
+    description: コミットされている
+  - type: tool_used           # 過程: 破壊的でない（push しない）
+    tool: Bash
+    input_match: 'git\s+push'
+    max: 0
+    description: git push していない
+  - type: command             # 参考指標（合否に影響しない）: verify が最後の git commit より前に呼ばれたか。観測値は理由の欄に出る
+    run: '{python} {task_dir}/../checks/verify_before_commit.py'
+    category: process_violation
+    description: 参考指標 verify が commit より前

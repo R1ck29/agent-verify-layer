@@ -1,0 +1,31 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Coverage
+.coverage
+htmlcov/
+coverage.xml
+
+# Secrets / runtime data
+.env
+.env.local
+data/news.db
+data/news.db-journal
+data/*.sqlite*
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+
+# Claude Code workspace-local state (per-machine)
+.claude/settings.local.json

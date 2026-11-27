@@ -1,0 +1,97 @@
+[project]
+name = "llm-news"
+version = "0.1.0"
+description = "Daily LLM news digest from blogs, arXiv, and X"
+requires-python = ">=3.12"
+dependencies = [
+    "anthropic>=0.40.0",
+    "httpx>=0.27.0",
+    "selectolax>=0.3.21",
+    "feedparser>=6.0.11",
+    "arxiv>=2.1.3",
+    "structlog>=24.4.0",
+    "tenacity>=9.0.0",
+    "pyyaml>=6.0.2",
+    "click>=8.1.7",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.3.0",
+    "pytest-cov>=5.0.0",
+    "pytest-vcr>=1.0.2",
+    "vcrpy>=6.0.2",
+    "respx>=0.21.1",
+    "hypothesis>=6.115.0",
+    "freezegun>=1.5.1",
+    "ruff>=0.7.0",
+    "mypy>=1.13.0",
+    "types-PyYAML>=6.0.12",
+]
+procode = [
+    # Pinned exactly (spec §3 supply-chain posture: GH Actions/Docker are
+    # SHA-pinned; this optional extra gets an == pin + lockfile hashes).
+    "claude-agent-sdk==0.2.82",
+]
+
+[project.scripts]
+llm-news = "llm_news.cli:cli"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/llm_news"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+markers = [
+    "live: integration tests that hit real external APIs (excluded from CI)",
+]
+addopts = "-ra --strict-markers"
+
+[tool.coverage.run]
+source = ["src/llm_news"]
+branch = true
+
+[tool.coverage.report]
+fail_under = 80
+show_missing = true
+skip_covered = false
+exclude_also = [
+    "\\.\\.\\.",
+    "if TYPE_CHECKING:",
+    "raise NotImplementedError",
+    "@overload",
+    "@(abc\\.)?abstractmethod",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP", "N", "RUF"]
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+
+[[tool.mypy.overrides]]
+module = "tests.*"
+disallow_untyped_defs = false
+disallow_untyped_calls = false
+
+# Third-party libs without bundled type stubs. They're narrowly used inside
+# the Source adapters; the public surface this module exposes is fully typed.
+[[tool.mypy.overrides]]
+module = ["arxiv", "feedparser"]
+ignore_missing_imports = true
+
+# Optional `procode` extra — not installed in CI / the production cron path,
+# and ships no type stubs. Narrowly used inside the ClaudeCode adapters
+# behind the tool-locked _procode_sdk boundary (spec §5.A/§5.F).
+[[tool.mypy.overrides]]
+module = ["claude_agent_sdk", "claude_agent_sdk.*"]
+ignore_missing_imports = true

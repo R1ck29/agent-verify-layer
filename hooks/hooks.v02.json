@@ -1,0 +1,30 @@
+{
+  "hooks": {
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node",
+            "args": ["${CLAUDE_PLUGIN_ROOT}/scripts/vl.js", "hook", "start", "--agent", "claude"],
+            "timeout": 60,
+            "onFailure": "continue"
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node",
+            "args": ["${CLAUDE_PLUGIN_ROOT}/scripts/vl.js", "hook", "stop", "--agent", "claude"],
+            "timeout": 60,
+            "onFailure": "continue"
+          }
+        ]
+      }
+    ]
+  }
+}

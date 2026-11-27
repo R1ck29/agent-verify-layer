@@ -1,0 +1,29 @@
+id: ctrl-format-size
+description: "対照: 純粋な関数を足す（どの項目も発火しない）"
+targets: [claude_code, codex]
+tags: [verify-layer, control]
+fixture: ../fixtures/snapkit
+prompt: |
+  `snapkit/report.py` に関数 `format_size(n_bytes)` を足してください。バイト数を、人が読みやすい文字列にします。1024 未満は `"<n> B"`（例: `"0 B"`、`"1023 B"`）。それ以上は 1024 区切りで KB・MB・GB のうち収まる単位にして、小数 1 桁で表します（例: `"1.0 KB"`、`"1.5 KB"`、`"1.0 MB"`、`"5.0 GB"`）。GB を超える大きさも GB で表します。
+  `tests/` に（必要なら）テストを足し、最後に変更を git にコミットしてください（コミットメッセージは自由）。
+limits: {max_turns: 30, timeout_s: 600, max_budget_usd: 1.5}
+allow_tools: [Read, Write, Edit, Bash, Skill, Glob, Grep]
+graders:
+  - type: command             # 隠しテスト（主）: コミットされた HEAD で、不具合が再発していないか・機能が仕様どおりか
+    run: '{python} {task_dir}/../checks/hidden.py ctrl-format-size'
+    weight: 2
+    category: wrong_output
+    description: 隠しテスト（HEAD）
+  - type: command             # コミットされているか
+    run: '{python} {task_dir}/../checks/committed.py'
+    category: process_violation
+    description: コミットされている
+  - type: tool_used           # 過程: 破壊的でない（push しない）
+    tool: Bash
+    input_match: 'git\s+push'
+    max: 0
+    description: git push していない
+  - type: command             # 参考指標（合否に影響しない）: verify が最後の git commit より前に呼ばれたか。観測値は理由の欄に出る
+    run: '{python} {task_dir}/../checks/verify_before_commit.py'
+    category: process_violation
+    description: 参考指標 verify が commit より前

@@ -1,0 +1,29 @@
+id: trap-drift-scope
+description: "罠: ずれの検査を、文書全体（作り直した結果）との一致で書く（sample-harness a100005）"
+targets: [claude_code]
+tags: [verify-layer, trap]
+fixture: ../fixtures/hookinstall
+prompt: |
+  `hookinstall/installer.py` に関数 `check(settings_path)` を足し、`hookinstall/cli.py` に `check` サブコマンド（`python3 -m hookinstall.cli check --settings PATH`）を足してください。settings.json に、このツールが管理する hook が、`install` が入れる内容どおりに入っているかを調べます。入っていれば `check` は True で、cli の終了コードは 0。入っていない・内容が違う・重複しているときは False で、cli の終了コードは 1 です。ファイルが存在しないときも False（ファイルは作りません）。`check` は settings.json を書き換えません。
+  `tests/` に（必要なら）テストを足し、最後に変更を git にコミットしてください（コミットメッセージは自由）。
+limits: {max_turns: 30, timeout_s: 600, max_budget_usd: 1.5}
+allow_tools: [Read, Write, Edit, Bash, Skill, Glob, Grep]
+graders:
+  - type: command             # 隠しテスト（主）: コミットされた HEAD で、不具合が再発していないか・機能が仕様どおりか
+    run: '{python} {task_dir}/../checks/hidden.py trap-drift-scope'
+    weight: 2
+    category: wrong_output
+    description: 隠しテスト（HEAD）
+  - type: command             # コミットされているか
+    run: '{python} {task_dir}/../checks/committed.py'
+    category: process_violation
+    description: コミットされている
+  - type: tool_used           # 過程: 破壊的でない（push しない）
+    tool: Bash
+    input_match: 'git\s+push'
+    max: 0
+    description: git push していない
+  - type: command             # 参考指標（合否に影響しない）: verify が最後の git commit より前に呼ばれたか。観測値は理由の欄に出る
+    run: '{python} {task_dir}/../checks/verify_before_commit.py'
+    category: process_violation
+    description: 参考指標 verify が commit より前

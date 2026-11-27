@@ -1,0 +1,27 @@
+{
+  "repo": "llm-news",
+  "base": "a10000caaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "fix": "a10000eaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "tasks": [
+    "trap-text-of"
+  ],
+  "changed": [
+    ".gitignore",
+    "CLAUDE.md",
+    "src/llm_news/adapters/llm/_schema.py",
+    "src/llm_news/adapters/llm/claude_code_summarizer.py",
+    "src/llm_news/adapters/llm/claude_code_tagger.py",
+    "src/llm_news/adapters/renderer/markdown_renderer.py",
+    "tests/unit/__init__.py",
+    "tests/unit/test_claude_code_summarizer.py",
+    "tests/unit/test_claude_code_tagger.py",
+    "tests/unit/test_markdown_renderer.py",
+    "tests/unit/test_md.py",
+    "tests/unit/test_schema.py"
+  ],
+  "added": [
+    ".agents/skills/verify/SKILL.md",
+    ".claude/skills/verify/SKILL.md",
+    ".claude/verification/checklist.json"
+  ]
+}

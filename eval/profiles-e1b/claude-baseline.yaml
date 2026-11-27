@@ -1,0 +1,10 @@
+# E1b 用（E1 の profiles/ と同じ。P1 の CLAUDE.md だけが E1b のチェックリストから作ったもの）。
+# P0: 層なし。fixture の .claude/verification/checklist.json は HEAD にあるが、何も読ませない。
+# 認証はサブスクリプション。トークンの値はここに書かない（外側のシェルで export する）。
+id: claude-baseline
+agent: claude_code
+model: sonnet
+billing: subscription
+inherit_env: [CLAUDE_CODE_OAUTH_TOKEN]
+install:
+  - run: 'sh {profile_dir}/../profiles/common/seed-git.sh {workdir}'     # fixture を 1 コミットの git リポジトリにする（全プロファイル共通）

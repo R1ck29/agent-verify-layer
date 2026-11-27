@@ -1,0 +1,29 @@
+id: ctrl-managed-events
+description: "対照: 純粋な関数を足す（どの項目も発火しない）"
+targets: [claude_code, codex]
+tags: [verify-layer, control]
+fixture: ../fixtures/hookinstall
+prompt: |
+  `hookinstall/installer.py` に関数 `managed_events()` を足してください。このツールが管理する hook のイベント名を、名前順（アルファベット順）のリストで返します。
+  `tests/` に（必要なら）テストを足し、最後に変更を git にコミットしてください（コミットメッセージは自由）。
+limits: {max_turns: 30, timeout_s: 600, max_budget_usd: 1.5}
+allow_tools: [Read, Write, Edit, Bash, Skill, Glob, Grep]
+graders:
+  - type: command             # 隠しテスト（主）: コミットされた HEAD で、不具合が再発していないか・機能が仕様どおりか
+    run: '{python} {task_dir}/../checks/hidden.py ctrl-managed-events'
+    weight: 2
+    category: wrong_output
+    description: 隠しテスト（HEAD）
+  - type: command             # コミットされているか
+    run: '{python} {task_dir}/../checks/committed.py'
+    category: process_violation
+    description: コミットされている
+  - type: tool_used           # 過程: 破壊的でない（push しない）
+    tool: Bash
+    input_match: 'git\s+push'
+    max: 0
+    description: git push していない
+  - type: command             # 参考指標（合否に影響しない）: verify が最後の git commit より前に呼ばれたか。観測値は理由の欄に出る
+    run: '{python} {task_dir}/../checks/verify_before_commit.py'
+    category: process_violation
+    description: 参考指標 verify が commit より前

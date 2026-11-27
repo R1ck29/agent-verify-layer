@@ -1,0 +1,31 @@
+[project]
+name = "graph-engineering-agent-harness"
+version = "0.1.0"
+description = "A vendor-neutral task-state harness for structured human and agent workflows"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+
+[project.scripts]
+samplectl = "sample_harness.cli:main"
+
+[project.optional-dependencies]
+# Static checks only; the harness itself runs on the standard library. Pinned
+# exactly so a new Black or mypy release cannot fail CI on an unrelated change.
+# Bump deliberately, in its own commit.
+dev = ["black==26.5.1", "mypy==2.3.1"]
+
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+packages = ["sample_harness"]
+
+[tool.black]
+# Pin the grammar to the minimum supported release so formatting does not
+# depend on the interpreter that happens to run Black.
+target-version = ["py310"]
+
+[tool.mypy]
+python_version = "3.10"
+strict = true

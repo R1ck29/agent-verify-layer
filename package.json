@@ -1,0 +1,10 @@
+{
+  "name": "agent-verify-layer",
+  "version": "0.2.0",
+  "private": true,
+  "description": "Local verification for coding agents, with observation and optional differential verification at Stop.",
+  "engines": { "node": ">=18" },
+  "scripts": {
+    "test": "node --test"
+  }
+}

@@ -1,0 +1,15 @@
+__pycache__/
+*.py[cod]
+.mypy_cache/
+.pytest_cache/
+.code-review-graph/
+.coverage
+/.test-workspaces/
+/task-graph*.json
+/task-graph*.json.lock
+evals/results/*.json
+!evals/results/.gitkeep
+.DS_Store
+*.egg-info/
+build/
+dist/

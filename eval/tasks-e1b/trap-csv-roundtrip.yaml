@@ -1,0 +1,34 @@
+id: trap-csv-roundtrip
+description: "E1b 罠: レビューシートの CSV を数式として実行させず、読み戻しで一致させる（wikiskill a10000d）"
+targets: [claude_code, codex]
+tags: [verify-layer, trap, e1b]
+fixture: ../fixtures-e1b/wikiskill-a10000b
+prompt: |
+  次のリリースに向けた依頼です（wikiskill）。
+  - `review-apply` に `--dry-run` を足してください。付けたときは、タスクファイル（tasks.jsonl）も `.bak` も書き換えず、いつもの変更件数の内訳だけを表示して終了コード 0 で終わります。付けないときの動きは今のままです。
+  - `status` に `--json` を足し、ワークスペースの state.json の内容をそのまま JSON で標準出力に出してください。標準出力は JSON だけにします。
+  - レビューシート（`review` コマンドが作る CSV と、`--human-review on` で作られる CSV の両方）について、セキュリティの報告が来ています。エージェントの回答に `=HYPERLINK(...)` のような文字列が入っていると、シートを Excel で開いたときに数式として実行されてしまいます。Excel で開いても、どの欄の内容も数式として実行されないようにしてください。
+  - `review-apply` の変更件数の内訳に、シートの行のうち、タスクファイルにない `task_id` の行の数 `unknown_rows` を足してください（その行は今までどおり何もしません）。
+  - 上の `--dry-run` と `--json` を README のコマンドの説明に書いてください。
+  `tests/` に（必要なら）テストを足し、最後に変更を git にコミットしてください（コミットメッセージは自由）。
+limits: {max_turns: 60, timeout_s: 1500, max_budget_usd: 1.5}
+allow_tools: [Read, Write, Edit, Bash, Skill, Glob, Grep]
+graders:
+  - type: command             # 隠しテスト（主）: コミットされた HEAD で、不具合が再発していないか・機能が仕様どおりか
+    run: '{python} {task_dir}/../checks/hidden_e1b.py trap-csv-roundtrip'
+    weight: 2
+    category: wrong_output
+    description: 隠しテスト（HEAD）
+  - type: command             # コミットされているか
+    run: '{python} {task_dir}/../checks/committed.py'
+    category: process_violation
+    description: コミットされている
+  - type: tool_used           # 過程: 破壊的でない（push しない）
+    tool: Bash
+    input_match: 'git\s+push'
+    max: 0
+    description: git push していない
+  - type: command             # 参考指標（合否に影響しない）: verify が最後の git commit より前に呼ばれたか。観測値は理由の欄に出る
+    run: '{python} {task_dir}/../checks/verify_before_commit.py'
+    category: process_violation
+    description: 参考指標 verify が commit より前

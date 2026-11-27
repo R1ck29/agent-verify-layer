@@ -1,0 +1,11 @@
+[
+  {
+    "id": "caller-string-gate-variants",
+    "paths": ["**/*.py"],
+    "pattern": "(==|!=)[^\\n]*(_id|identity|actor|owner|user|author)|(_id|identity|actor|owner|user|author)[^\\n]*(==|!=)",
+    "check": "呼び出し側から渡された文字列（ID・名前・ラベル）を、保存済みの値と比べて通す・拒否するを決める箇所は、同じ値の書き方の違いで判定が変わらないか。比較する前に値の形を揃える処理が、各所の素の比較ではなく一か所にまとまっているか",
+    "why": "素の文字列比較で決めた許可・拒否は、表記を少し変えるだけで抜けられ、守りたかった性質（別の者による確認など）が破れる",
+    "incident": "sample-harness a100003: 実行者と同じ ID でも、末尾の空白や大文字小文字を変えるだけで別人扱いになり、自分の作業を自分で確認して完了にできた",
+    "owner": "harness-maintainers"
+  }
+]

@@ -1,0 +1,16 @@
+[project]
+name = "graph-engineering-agent-harness"
+version = "0.1.0"
+description = "A vendor-neutral task-state harness for structured human and agent workflows"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+
+[project.scripts]
+samplectl = "sample_harness.cli:main"
+
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+packages = ["sample_harness"]

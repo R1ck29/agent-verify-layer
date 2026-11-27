@@ -1,0 +1,15 @@
+# E1b の Codex 側（P2）: 層あり。導入手順と同じ経路 = INSTALL_FOR_CLAUDE.md 第 9 節:
+#  install.js --agent codex --apply --agents-md --mode observe（$CODEX_HOME/hooks.json に PostToolUse ^Bash$ の 1 本と AGENTS.md の 2 行）
+#  .agents/skills/verify は fixture に既にある（全プロファイル共通。Claude 側と同じ扱い）ので --repo-skill は使わない
+# hook の信頼は AHE が --dangerously-bypass-hook-trust で再現（普段は一度信頼すれば動く）。
+id: codex-verify-layer
+agent: codex
+model: gpt-6.2-sol
+billing: subscription
+copy_credentials: true
+install:
+  - run: 'sh {profile_dir}/../profiles/common/seed-git.sh {workdir}'
+  - run: 'node {profile_dir}/../../scripts/install.js --agent codex --apply --agents-md --mode observe'
+hash_paths: [../../scripts, ../../hooks, ../../codex]
+# workspace-write では .git が読み取り専用でコミットできない（実測）。試行は一時ディレクトリなので全権で回す
+codex_sandbox: danger-full-access

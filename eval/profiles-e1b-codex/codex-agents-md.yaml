@@ -1,0 +1,13 @@
+# E1b の Codex 側（P1）: 層なし。Claude 側 P1 と同じチェックリスト全文を、常時読み込まれる利用者全体の AGENTS.md に書く。
+id: codex-agents-md
+agent: codex
+model: gpt-6.2-sol
+billing: subscription
+copy_credentials: true
+install:
+  - run: 'sh {profile_dir}/../profiles/common/seed-git.sh {workdir}'
+  - copy: ../profiles-e1b/static-rules/CLAUDE.md
+    to: "{config_dir}/AGENTS.md"
+hash_paths: [../profiles-e1b/static-rules/CLAUDE.md]
+# workspace-write では .git が読み取り専用でコミットできない（実測）。試行は一時ディレクトリなので全権で回す
+codex_sandbox: danger-full-access
