@@ -1,6 +1,7 @@
 """Execute a selected Python runner from outside its isolated repository copy."""
 
 import json
+import os
 from pathlib import Path
 import sys
 
@@ -17,7 +18,8 @@ def main() -> None:
 
         name = {"pytest": "pytest_plugin", "unittest": "unittest_runner"}[request["runner"]]
         runner = importlib.import_module(name)
-        root = Path.cwd()
+        root = Path.cwd().resolve()
+        os.chdir(root)
         config = request["config"]
         roots = [root]
         for value in config.get("srcRoots", ["src"]):

@@ -12,6 +12,19 @@ const reporter = path.join(__dirname, 'node-reporter.mjs');
 const transport = path.join(__dirname, 'node-transport.cjs');
 const preload = pathToFileURL(path.join(__dirname, 'node-preload.mjs')).href;
 
+function windowsProcessEnv() {
+  const env = {};
+  for (const key of [
+    'PATHEXT', 'SYSTEMROOT', 'SYSTEMDRIVE', 'WINDIR', 'COMSPEC',
+    'USERPROFILE', 'HOMEDRIVE', 'HOMEPATH', 'APPDATA', 'LOCALAPPDATA',
+    'ProgramData', 'ProgramFiles', 'ProgramW6432', 'OS',
+    'NUMBER_OF_PROCESSORS', 'PROCESSOR_ARCHITECTURE',
+  ]) {
+    if (process.env[key]) env[key] = process.env[key];
+  }
+  return env;
+}
+
 function within(root, file) {
   if (!file || typeof file !== 'string') return null;
   const rel = path.relative(root, path.resolve(root, file));
@@ -45,14 +58,10 @@ function run(root, cwd, nodeArgs, timeoutMs, temp, capture) {
   const report = path.join(temp, 'report.jsonl');
   const env = {
     PATH: process.env.PATH || process.env.Path, LANG: process.env.LANG, TZ: process.env.TZ,
-    HOME: temp, XDG_CONFIG_HOME: temp, TMPDIR: temp,
+    HOME: temp, XDG_CONFIG_HOME: temp, TMPDIR: temp, TEMP: temp, TMP: temp,
     VL_NODE_REPORT: report,
+    ...(process.platform === 'win32' ? windowsProcessEnv() : {}),
   };
-  if (process.platform === 'win32') {
-    for (const key of ['PATHEXT', 'SYSTEMROOT', 'SYSTEMDRIVE', 'WINDIR', 'COMSPEC', 'USERPROFILE']) {
-      if (process.env[key]) env[key] = process.env[key];
-    }
-  }
   if (capture) env.VL_NODE_CAPTURE = capture;
   const child = spawnSync(process.execPath, [
     '--require', transport, ...(capture ? ['--import', preload] : []), '--test',
@@ -60,9 +69,15 @@ function run(root, cwd, nodeArgs, timeoutMs, temp, capture) {
   ], {
     cwd, env, encoding: 'utf8', stdio: ['ignore', 'ignore', 'pipe'],
     timeout: timeoutMs ?? 15_000, maxBuffer: 1024 * 1024, killSignal: 'SIGKILL',
+    windowsHide: true,
   });
   if (child.error || child.signal || ![0, 1].includes(child.status)) {
-    throw new Error(child.error?.code === 'ETIMEDOUT' ? 'Node runner timed out' : 'Node runner failed to start or exited abnormally');
+    if (child.error?.code === 'ETIMEDOUT') throw new Error('Node runner timed out');
+    const detail = [child.error && (child.error.code || child.error.message), child.signal, child.status,
+      (child.stderr || '').trim()].filter((part) => part !== undefined && part !== null && part !== '').join(' ');
+    throw new Error(detail
+      ? `Node runner failed to start or exited abnormally (${detail})`
+      : 'Node runner failed to start or exited abnormally');
   }
   let events;
   try {
