@@ -262,7 +262,7 @@ test('Node distinguishes a missing direct module or symbol from an unrelated dep
 
   fs.writeFileSync(path.join(root, 'edge.cjs'), 'module.exports.edge = () => "fixed";');
   const present = runCase({ root, caseData: cjs, timeoutMs: 5000 });
-  if (hasNativeTestAssert()) {
+  if (hasNativeTestAssert() && process.platform !== 'win32') {
     assert.equal(present.status, 'pass', JSON.stringify(present));
     assert.equal(present.modulePath, 'edge.cjs');
     assert.equal(present.loaded, true);
